@@ -98,7 +98,7 @@ class TraktService {
     for (final raw in list) {
       final map = raw as Map<String, dynamic>;
       final type = map['type'] as String?;
-      if (type != expectedType) continue;
+      if (type == null || type != expectedType) continue;
       final data = map[type] as Map<String, dynamic>?;
       if (data == null) continue;
 
@@ -119,7 +119,7 @@ class TraktService {
     for (final raw in list) {
       final map = raw as Map<String, dynamic>;
       final type = map['type'] as String?;
-      if (type != expectedType) continue;
+      if (type == null || type != expectedType) continue;
       final data = map[type] as Map<String, dynamic>?;
       if (data != null) return _toMetadata(data, type);
     }
