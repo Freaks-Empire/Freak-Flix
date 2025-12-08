@@ -14,29 +14,47 @@ class MediaCard extends StatelessWidget {
       ),
       child: SizedBox(
         width: 140,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AspectRatio(
-              aspectRatio: 2 / 3,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: item.posterUrl != null
-                    ? Image.network(item.posterUrl!, fit: BoxFit.cover)
-                    : Container(color: Colors.grey.shade800, child: const Icon(Icons.movie)),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(item.title ?? item.fileName, maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text('${item.year ?? '--'}', style: Theme.of(context).textTheme.bodySmall),
-            if (item.episode != null)
-              Chip(
-                label: Text('Ep ${item.episode}'),
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                padding: EdgeInsets.zero,
-              ),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final posterHeight = (constraints.maxHeight - 48).clamp(120.0, 200.0);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: posterHeight,
+                  child: AspectRatio(
+                    aspectRatio: 2 / 3,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: item.posterUrl != null
+                          ? Image.network(item.posterUrl!, fit: BoxFit.cover)
+                          : Container(color: Colors.grey.shade800, child: const Icon(Icons.movie)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(item.title ?? item.fileName, maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text('${item.year ?? '--'}', style: Theme.of(context).textTheme.bodySmall),
+                if (item.episode != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: SizedBox(
+                      height: 18,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Chip(
+                          label: Text('Ep ${item.episode}'),
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
       ),
     );
