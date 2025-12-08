@@ -6,11 +6,13 @@ import '../models/media_item.dart';
 // (copy the Client ID, no secret needed for public metadata reads).
 const _traktClientId = 'REPLACE_WITH_TRAKT_CLIENT_ID';
 
+bool get _hasTraktKey => _traktClientId != 'REPLACE_WITH_TRAKT_CLIENT_ID' && _traktClientId.isNotEmpty;
+
 class TraktService {
   final Map<String, Map<String, dynamic>> _cache = {};
 
   Future<MediaItem> enrichWithTrakt(MediaItem item) async {
-    if (_traktClientId == 'REPLACE_WITH_TRAKT_CLIENT_ID') return item;
+    if (!_hasTraktKey) return item;
 
     final query = _buildSearchQuery(item);
     if (query.isEmpty) return item;

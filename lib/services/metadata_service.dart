@@ -25,7 +25,7 @@ class MetadataService {
     // If user prefers AniList, keep AniList result even for non-anime types.
     if (preferAniList) return aniCandidate;
 
-    // Otherwise fall back to Trakt (movies/TV/anime detection via genres).
+    // Otherwise fall back to Trakt (movies/TV/anime detection via genres) if key exists.
     return _trakt.enrichWithTrakt(item);
   }
 }
