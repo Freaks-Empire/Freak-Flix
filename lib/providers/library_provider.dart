@@ -234,11 +234,11 @@ MediaItem _parseFile(FileSystemEntity f) {
       .trim();
   if (title.isEmpty) title = fileName;
 
-  final type = animeHint
-      ? MediaType.anime
-      : seMatch != null
-          ? MediaType.tv
-          : MediaType.movie;
+    final type = seMatch != null
+      ? MediaType.tv
+      : animeHint
+        ? MediaType.anime
+        : MediaType.movie;
 
   return MediaItem(
     id: id,
