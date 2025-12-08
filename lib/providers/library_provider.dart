@@ -299,12 +299,8 @@ bool _inferAnimeFromPath(MediaItem item) {
 
 String _seriesKey(MediaItem item) {
   if (item.showKey != null && item.showKey!.isNotEmpty) return item.showKey!;
-
-  // Derive series key from parsed filename to keep all episodes of a show together.
-  final parsed = FilenameParser.parse(item.fileName);
-  final seriesTitle = parsed.seriesTitle.isNotEmpty ? parsed.seriesTitle : (item.title ?? '');
-  final year = item.year ?? parsed.year;
-  return _seriesKeyRaw(seriesTitle, year);
+  // Group by folder so all episodes in the same directory share a key.
+  return item.folderPath.toLowerCase();
 }
 
 String _seriesKeyRaw(String title, int? year) {
@@ -353,10 +349,8 @@ List<MediaItem> _groupShows(Iterable<MediaItem> source) {
 List<TvShowGroup> _groupShowsToGroups(Iterable<MediaItem> source) {
   final map = <String, List<MediaItem>>{};
   for (final item in source) {
-    // Prefer explicit showKey; otherwise fallback to normalized parsed title.
-    final parsed = FilenameParser.parse(item.fileName);
-    final seriesTitle = parsed.seriesTitle.isNotEmpty ? parsed.seriesTitle : (item.title ?? '');
-    final key = (item.showKey ?? seriesTitle.toLowerCase()).trim();
+    // One group per folder (or explicit showKey if present).
+    final key = (item.showKey ?? item.folderPath.toLowerCase()).trim();
     map.putIfAbsent(key, () => []);
     map[key]!.add(item);
   }
