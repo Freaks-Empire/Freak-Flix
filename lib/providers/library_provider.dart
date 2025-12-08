@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/media_item.dart';
 import '../services/metadata_service.dart';
 import '../services/graph_auth_service.dart';
-import '../services/onedrive_library_service.dart';
 import 'settings_provider.dart';
 import '../utils/filename_parser.dart';
 
