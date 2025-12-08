@@ -257,7 +257,8 @@ MediaItem _parseFile(FileSystemEntity f) {
       ? MediaType.tv
       : MediaType.movie;
 
-  final showKey = _seriesKeyRaw(parsed.seriesTitle, parsed.year);
+  // Use folder as the stable show key so all episodes in the same folder group together.
+  final showKey = folder.toLowerCase();
 
   return MediaItem(
     id: id,
@@ -349,8 +350,10 @@ List<MediaItem> _groupShows(Iterable<MediaItem> source) {
 List<TvShowGroup> _groupShowsToGroups(Iterable<MediaItem> source) {
   final map = <String, List<MediaItem>>{};
   for (final item in source) {
-    // One group per folder (or explicit showKey if present).
-    final key = (item.showKey ?? item.folderPath.toLowerCase()).trim();
+    // One group per showKey; fallback to folder path.
+    final key = (item.showKey != null && item.showKey!.isNotEmpty)
+        ? item.showKey!
+        : item.folderPath.toLowerCase();
     map.putIfAbsent(key, () => []);
     map[key]!.add(item);
   }
