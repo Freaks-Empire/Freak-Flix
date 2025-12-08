@@ -1,16 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/library_provider.dart';
-import '../widgets/media_grid.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/media_card.dart';
 
 class AnimeScreen extends StatelessWidget {
   const AnimeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final shows = context.watch<LibraryProvider>().anime;
+    final shows = context.watch<LibraryProvider>().groupedAnimeShows;
     if (shows.isEmpty) return const EmptyState(message: 'No anime found.');
-    return MediaGrid(items: shows);
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(12),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 5,
+        childAspectRatio: 2 / 3,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+      ),
+      itemCount: shows.length,
+      itemBuilder: (_, i) {
+        final show = shows[i];
+        final display = show.firstEpisode.copyWith(
+          title: show.title,
+          posterUrl: show.posterUrl ?? show.firstEpisode.posterUrl,
+          backdropUrl: show.backdropUrl ?? show.firstEpisode.backdropUrl,
+          year: show.year ?? show.firstEpisode.year,
+          episode: null,
+        );
+        return MediaCard(item: display, badge: '${show.episodeCount} eps');
+      },
+    );
   }
 }

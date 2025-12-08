@@ -4,7 +4,8 @@ import '../screens/details_screen.dart';
 
 class MediaCard extends StatelessWidget {
   final MediaItem item;
-  const MediaCard({super.key, required this.item});
+  final String? badge;
+  const MediaCard({super.key, required this.item, this.badge});
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +56,8 @@ class MediaCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (item.episode != null)
+                final chipLabel = badge ?? (item.episode != null ? 'Ep ${item.episode}' : null);
+                if (chipLabel != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: SizedBox(
@@ -63,7 +65,7 @@ class MediaCard extends StatelessWidget {
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Chip(
-                          label: Text('Ep ${item.episode}'),
+                          label: Text(chipLabel),
                           visualDensity: VisualDensity.compact,
                           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           padding: EdgeInsets.zero,

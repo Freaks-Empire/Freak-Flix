@@ -164,6 +164,11 @@ class LibraryProvider extends ChangeNotifier {
 
   List<MediaItem> get anime => _groupShows(items.where((i) => i.type == MediaType.tv && i.isAnime));
 
+  List<TvShowGroup> get groupedTvShows => _groupShowsToGroups(items.where((i) => i.type == MediaType.tv));
+
+  List<TvShowGroup> get groupedAnimeShows =>
+      _groupShowsToGroups(items.where((i) => i.type == MediaType.tv && i.isAnime));
+
   List<MediaItem> get continueWatching =>
       items.where((i) => i.lastPositionSeconds > 0 && !i.isWatched).toList();
 
@@ -338,4 +343,39 @@ List<MediaItem> _groupShows(Iterable<MediaItem> source) {
     );
   }
   return map.values.toList();
+}
+
+List<TvShowGroup> _groupShowsToGroups(Iterable<MediaItem> source) {
+  final map = <String, List<MediaItem>>{};
+  for (final item in source) {
+    final key = _seriesKey(item);
+    map.putIfAbsent(key, () => []);
+    map[key]!.add(item);
+  }
+
+  return map.entries.map((entry) {
+    final episodes = entry.value;
+    episodes.sort((a, b) {
+      final sa = a.season ?? 0;
+      final sb = b.season ?? 0;
+      final ea = a.episode ?? 0;
+      final eb = b.episode ?? 0;
+      return sa != sb ? sa.compareTo(sb) : ea.compareTo(eb);
+    });
+    final first = episodes.first;
+    final title = first.title ?? first.fileName;
+    final poster = episodes.firstWhere((e) => e.posterUrl != null, orElse: () => first).posterUrl;
+    final backdrop = episodes.firstWhere((e) => e.backdropUrl != null, orElse: () => first).backdropUrl;
+    final year = episodes.firstWhere((e) => e.year != null, orElse: () => first).year;
+    final isAnime = episodes.any((e) => e.isAnime);
+    return TvShowGroup(
+      title: title ?? 'Unknown',
+      isAnime: isAnime,
+      showKey: entry.key,
+      episodes: episodes,
+      posterUrl: poster,
+      backdropUrl: backdrop,
+      year: year,
+    );
+  }).toList();
 }

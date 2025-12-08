@@ -22,6 +22,29 @@ class EpisodeItem {
       );
 }
 
+class TvShowGroup {
+  final String title;
+  final bool isAnime;
+  final String? posterUrl;
+  final String? backdropUrl;
+  final int? year;
+  final String showKey;
+  final List<MediaItem> episodes;
+
+  const TvShowGroup({
+    required this.title,
+    required this.isAnime,
+    required this.showKey,
+    required this.episodes,
+    this.posterUrl,
+    this.backdropUrl,
+    this.year,
+  });
+
+  MediaItem get firstEpisode => episodes.first;
+  int get episodeCount => episodes.length;
+}
+
 MediaType mediaTypeFromString(String? value) {
   switch (value?.toLowerCase()) {
     case 'movie':
