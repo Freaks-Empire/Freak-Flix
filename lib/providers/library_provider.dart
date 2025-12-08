@@ -24,6 +24,19 @@ class LibraryProvider extends ChangeNotifier {
     final raw = prefs.getString(_prefsKey);
     if (raw == null) return;
     items = MediaItem.listFromJson(raw);
+
+    // Reclassify any previously scanned items using updated rules (e.g., anime folders).
+    bool updated = false;
+    for (var i = 0; i < items.length; i++) {
+      final inferred = _inferTypeFromPath(items[i]);
+      if (inferred != items[i].type) {
+        items[i] = items[i].copyWith(type: inferred);
+        updated = true;
+      }
+    }
+    if (updated) {
+      await saveLibrary();
+    }
     notifyListeners();
   }
 
@@ -237,10 +250,10 @@ MediaItem _parseFile(FileSystemEntity f) {
     // If the path contains an "anime" hint, treat it as anime even when episodes are present.
     // Otherwise use SxxExx to detect TV, falling back to movie.
     final type = animeHint
-        ? MediaType.anime
-        : seMatch != null
-            ? MediaType.tv
-            : MediaType.movie;
+      ? MediaType.anime
+      : seMatch != null
+        ? MediaType.tv
+        : MediaType.movie;
 
   return MediaItem(
     id: id,
@@ -255,4 +268,12 @@ MediaItem _parseFile(FileSystemEntity f) {
     season: season,
     episode: episode,
   );
+}
+
+MediaType _inferTypeFromPath(MediaItem item) {
+  final path = item.filePath.toLowerCase();
+  final hasAnimeHint = path.contains('anime');
+  if (hasAnimeHint) return MediaType.anime;
+  if (item.season != null || item.episode != null) return MediaType.tv;
+  return MediaType.movie;
 }
