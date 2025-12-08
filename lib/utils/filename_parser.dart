@@ -23,65 +23,64 @@ class FilenameParser {
     // strip extension
     final nameNoExt = fileName.replaceAll(RegExp(r'\.[^.]+$'), '');
 
-    // strip [tags] and (tags)
+    // remove fansub tags [..] and (..)
     var withoutTags = nameNoExt
         .replaceAll(RegExp(r'\[[^\]]*\]'), ' ')
         .replaceAll(RegExp(r'\([^\)]*\)'), ' ');
 
-    // Detect SxxEyy first
+    int? season;
+    int? episode;
+
+    // --- 1) Sonarr-style "S01E01" and cut off AFTER it ---
     final seMatch =
         RegExp(r'[Ss](\d{1,2})[Ee](\d{1,3})').firstMatch(withoutTags);
-    int? season = seMatch != null ? int.tryParse(seMatch.group(1)!) : null;
-    int? episode = seMatch != null ? int.tryParse(seMatch.group(2)!) : null;
+    if (seMatch != null) {
+      season = int.tryParse(seMatch.group(1)!);
+      episode = int.tryParse(seMatch.group(2)!);
 
-    // Loose episode like "- 06" or "Ep06"
-    if (episode == null) {
+      // keep only the part BEFORE SxxEyy -> this is the series name
+      withoutTags = withoutTags.substring(0, seMatch.start);
+    } else {
+      // --- 2) Fallback: loose "Ep 01" / "- 01" patterns ---
       final loose = RegExp(
         r'(?:^|[\s._-])(?:ep(?:isode)?\s*)?(\d{1,3})(?!\d)',
       ).firstMatch(withoutTags);
-
       if (loose != null) {
         episode = int.tryParse(loose.group(1)!);
-        // remove the whole matched chunk (e.g. " - 06") from the base title
+        season ??= 1;
+        // remove the matched chunk so it doesn't pollute the title
         withoutTags = withoutTags.replaceFirst(loose.group(0)!, ' ');
       }
     }
 
-    // Default season to 1 if we have an episode but no season.
-    if (episode != null && season == null) season = 1;
+    if (episode != null && season == null) {
+      season = 1;
+    }
 
-    // Year extraction (best effort)
+    // --- 3) Year extraction ---
     int? year;
     final yearMatch = RegExp(r'(19|20)\d{2}').firstMatch(withoutTags);
     if (yearMatch != null) {
       year = int.tryParse(yearMatch.group(0)!);
-      // also remove the year from the title
       withoutTags = withoutTags.replaceFirst(yearMatch.group(0)!, ' ');
     }
 
-    // Remove episode/season markers, resolutions, codecs, and excess punctuation from title.
+    // --- 4) Clean up title: remove junk / punctuation ---
     var cleaned = withoutTags
-        // S01E06 style
-        .replaceAll(RegExp(r'[Ss]\d{1,2}[Ee]\d{1,3}'), ' ')
-        // "Ep 06" / "Episode 06"
-        .replaceAll(RegExp(r'\b[Ee][Pp]?(?:isode)?\s*\d{1,3}\b'), ' ')
-        // any leftover loose ep numbers
-        .replaceAll(
-            RegExp(r'(?:^|[\s._-])(?:ep(?:isode)?\s*)?\d{1,3}(?!\d)'), ' ')
         // resolutions
         .replaceAll(
             RegExp(r'\b(480|720|1080|2160)[pi]\b', caseSensitive: false), ' ')
-        // source/quality
+        // source / quality
         .replaceAll(
             RegExp(r'\b(bluray|bd|webrip|web-dl|hdrip|remux|dvdrip)\b',
                 caseSensitive: false),
             ' ')
-        // codecs/audio
+        // codecs / audio
         .replaceAll(
             RegExp(r'\b(x264|x265|hevc|avc|aac|flac|ddp?\d?)\b',
                 caseSensitive: false),
             ' ')
-        // punctuation
+        // separators
         .replaceAll(RegExp(r'[._-]'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
