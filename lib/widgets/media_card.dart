@@ -16,26 +16,45 @@ class MediaCard extends StatelessWidget {
         width: 140,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final posterHeight = (constraints.maxHeight - 48).clamp(120.0, 200.0);
+            // Reserve vertical space for text/chip to avoid overflow in tight grids.
+            final reserved = 60.0; // title + year + chip spacing
+            final posterHeight = (constraints.maxHeight - reserved).clamp(110.0, 190.0);
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: MainAxisSize.max,
               children: [
-                SizedBox(
-                  height: posterHeight,
-                  child: AspectRatio(
-                    aspectRatio: 2 / 3,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: item.posterUrl != null
-                          ? Image.network(item.posterUrl!, fit: BoxFit.cover)
-                          : Container(color: Colors.grey.shade800, child: const Icon(Icons.movie)),
+                Expanded(
+                  child: SizedBox(
+                    height: posterHeight,
+                    child: AspectRatio(
+                      aspectRatio: 2 / 3,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: item.posterUrl != null
+                            ? Image.network(item.posterUrl!, fit: BoxFit.cover)
+                            : Container(color: Colors.grey.shade800, child: const Icon(Icons.movie)),
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(item.title ?? item.fileName, maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text('${item.year ?? '--'}', style: Theme.of(context).textTheme.bodySmall),
+                SizedBox(
+                  height: 18,
+                  child: Text(
+                    item.title ?? item.fileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                SizedBox(
+                  height: 16,
+                  child: Text(
+                    '${item.year ?? '--'}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
                 if (item.episode != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
