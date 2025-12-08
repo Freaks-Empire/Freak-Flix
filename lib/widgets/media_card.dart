@@ -20,6 +20,7 @@ class MediaCard extends StatelessWidget {
             // Reserve vertical space for text/chip to avoid overflow in tight grids.
             final reserved = 60.0; // title + year + chip spacing
             final posterHeight = (constraints.maxHeight - reserved).clamp(110.0, 190.0);
+            final chipLabel = badge ?? (item.episode != null ? 'Ep ${item.episode}' : null);
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.max,
@@ -56,7 +57,6 @@ class MediaCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                final chipLabel = badge ?? (item.episode != null ? 'Ep ${item.episode}' : null);
                 if (chipLabel != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
