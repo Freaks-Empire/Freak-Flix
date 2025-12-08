@@ -224,12 +224,14 @@ MediaItem _parseFile(FileSystemEntity f) {
   final fileName = p.basename(filePath);
   final folder = p.dirname(filePath);
   final id = filePath.hashCode.toString();
-  final animeHint = filePath.toLowerCase().contains('anime');
+  final lowerPath = filePath.toLowerCase();
+  final animeHint = lowerPath.contains('anime');
   String? title;
   int? year;
   int? season;
   int? episode;
   final nameNoExt = p.basenameWithoutExtension(fileName);
+  final folderName = p.basename(folder).toLowerCase();
 
   final yearMatch = RegExp(r'[.\s\[(](19|20)\d{2}[)\].\s]').firstMatch('$nameNoExt ');
   if (yearMatch != null) {
@@ -240,20 +242,43 @@ MediaItem _parseFile(FileSystemEntity f) {
     season = int.tryParse(seMatch.group(1)!);
     episode = int.tryParse(seMatch.group(2)!);
   }
-  title = nameNoExt
-      .replaceAll(RegExp(r'\.(19|20)\d{2}.*'), '')
+
+  // Try folder-based season detection (e.g., "Season 1") if season is still null.
+  if (season == null) {
+    final seasonFolderMatch = RegExp(r'season[ _-]?(\d{1,2})').firstMatch(folderName);
+    if (seasonFolderMatch != null) {
+      season = int.tryParse(seasonFolderMatch.group(1)!);
+    }
+  }
+
+  // If no SxxEyy match, look for standalone episode numbers like "01" or "ep 03".
+  if (episode == null) {
+    final epLooseMatch =
+        RegExp(r'(?:^|[\s._-])(?:ep(?:isode)?\s*)?(\d{1,3})(?!\d)').firstMatch(nameNoExt);
+    if (epLooseMatch != null) {
+      episode = int.tryParse(epLooseMatch.group(1)!);
+    }
+  }
+
+  // Clean up title: drop season/episode markers, dots/underscores, repeated spaces.
+  var cleanedTitle = nameNoExt
+      .replaceAll(RegExp(r'\b[Ss]\d{1,2}[Ee]\d{1,3}\b'), ' ')
+      .replaceAll(RegExp(r'\b[Ee][Pp]?(?:isode)?\s*\d{1,3}\b'), ' ')
+      .replaceAll(RegExp(r'^\d{1,3}\s*-\s*'), ' ')
+      .replaceAll(RegExp(r'\.(19|20)\d{2}.*'), ' ')
       .replaceAll(RegExp(r'[._]'), ' ')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
-  if (title.isEmpty) title = fileName;
+  if (cleanedTitle.isEmpty) cleanedTitle = fileName;
+  title = cleanedTitle;
 
-    // If the path contains an "anime" hint, treat it as anime even when episodes are present.
-    // Otherwise use SxxExx to detect TV, falling back to movie.
-    final type = animeHint
+  // Classify: anime hint wins; otherwise TV if we found season/episode cues; else movie.
+  final hasTvPattern = seMatch != null || episode != null || season != null;
+  final type = animeHint
       ? MediaType.anime
-      : seMatch != null
-        ? MediaType.tv
-        : MediaType.movie;
+      : hasTvPattern
+          ? MediaType.tv
+          : MediaType.movie;
 
   return MediaItem(
     id: id,
@@ -274,6 +299,17 @@ MediaType _inferTypeFromPath(MediaItem item) {
   final path = item.filePath.toLowerCase();
   final hasAnimeHint = path.contains('anime');
   if (hasAnimeHint) return MediaType.anime;
-  if (item.season != null || item.episode != null) return MediaType.tv;
+
+  final fileName = p.basenameWithoutExtension(item.fileName).toLowerCase();
+  final folderName = p.basename(item.folderPath).toLowerCase();
+  final hasSeasonInFolder = RegExp(r'season[ _-]?\d{1,2}').hasMatch(folderName);
+  final hasTvPattern =
+      RegExp(r'[Ss]\d{1,2}[Ee]\d{1,3}').hasMatch(fileName) ||
+      RegExp(r'(?:^|[\s._-])(?:ep(?:isode)?\s*)?\d{1,3}(?!\d)').hasMatch(fileName) ||
+      hasSeasonInFolder ||
+      item.season != null ||
+      item.episode != null;
+
+  if (hasTvPattern) return MediaType.tv;
   return MediaType.movie;
 }
