@@ -219,6 +219,7 @@ class TraktService {
     final genres = (meta['genres'] as List<dynamic>? ?? []).cast<String>();
     final poster = meta['poster'] as String?;
     final backdrop = meta['backdrop'] as String?;
+    final traktId = meta['trakt'] as int?;
 
     return item.copyWith(
       title: item.title ?? meta['title'] as String?,
@@ -232,6 +233,7 @@ class TraktService {
       tmdbId: meta['tmdb'] as int? ?? item.tmdbId,
       posterUrl: item.posterUrl ?? poster,
       backdropUrl: item.backdropUrl ?? backdrop,
+      showKey: item.showKey ?? (traktId != null ? 'trakt:$traktId' : null),
     );
   }
 

@@ -159,24 +159,10 @@ class LibraryProvider extends ChangeNotifier {
 
   List<MediaItem> get movies => items.where((i) => i.type == MediaType.movie).toList();
 
-  // Group TV/anime by series key so each show appears once.
-  List<MediaItem> get tv {
-    final seen = <String, MediaItem>{};
-    for (final item in items.where((i) => i.type == MediaType.tv)) {
-      final key = _seriesKey(item);
-      seen.putIfAbsent(key, () => item);
-    }
-    return seen.values.toList();
-  }
+  // Group TV/anime by showKey and aggregate episodes under one show card.
+  List<MediaItem> get tv => _groupShows(items.where((i) => i.type == MediaType.tv));
 
-  List<MediaItem> get anime {
-    final seen = <String, MediaItem>{};
-    for (final item in items.where((i) => i.type == MediaType.tv && i.isAnime)) {
-      final key = _seriesKey(item);
-      seen.putIfAbsent(key, () => item);
-    }
-    return seen.values.toList();
-  }
+  List<MediaItem> get anime => _groupShows(items.where((i) => i.type == MediaType.tv && i.isAnime));
 
   List<MediaItem> get continueWatching =>
       items.where((i) => i.lastPositionSeconds > 0 && !i.isWatched).toList();
@@ -266,6 +252,8 @@ MediaItem _parseFile(FileSystemEntity f) {
       ? MediaType.tv
       : MediaType.movie;
 
+  final showKey = _seriesKeyRaw(parsed.seriesTitle, parsed.year);
+
   return MediaItem(
     id: id,
     filePath: filePath,
@@ -279,6 +267,7 @@ MediaItem _parseFile(FileSystemEntity f) {
     season: parsed.season,
     episode: parsed.episode,
     isAnime: animeHint,
+    showKey: showKey,
   );
 }
 
@@ -304,7 +293,49 @@ bool _inferAnimeFromPath(MediaItem item) {
 }
 
 String _seriesKey(MediaItem item) {
-  final base = (item.title ?? '').toLowerCase().trim();
-  final year = item.year?.toString() ?? '';
-  return '$base-$year';
+  if (item.showKey != null && item.showKey!.isNotEmpty) return item.showKey!;
+  return _seriesKeyRaw(item.title ?? '', item.year);
+}
+
+String _seriesKeyRaw(String title, int? year) {
+  final base = title.toLowerCase().trim();
+  final yr = year?.toString() ?? '';
+  return '$base-$yr';
+}
+
+List<MediaItem> _groupShows(Iterable<MediaItem> source) {
+  final map = <String, MediaItem>{};
+  for (final item in source) {
+    final key = _seriesKey(item);
+    final episodeEntry = EpisodeItem(
+      season: item.season ?? 1,
+      episode: item.episode,
+      filePath: item.filePath,
+    );
+
+    if (!map.containsKey(key)) {
+      map[key] = item.copyWith(
+        showKey: item.showKey ?? key,
+        episodes: [episodeEntry],
+      );
+      continue;
+    }
+
+    final existing = map[key]!;
+    final updatedEpisodes = [...existing.episodes, episodeEntry];
+    map[key] = existing.copyWith(
+      title: existing.title?.isNotEmpty == true ? existing.title : item.title,
+      posterUrl: existing.posterUrl ?? item.posterUrl,
+      backdropUrl: existing.backdropUrl ?? item.backdropUrl,
+      overview: existing.overview ?? item.overview,
+      rating: existing.rating ?? item.rating,
+      runtimeMinutes: existing.runtimeMinutes ?? item.runtimeMinutes,
+      genres: existing.genres.isNotEmpty ? existing.genres : item.genres,
+      isAnime: existing.isAnime || item.isAnime,
+      tmdbId: existing.tmdbId ?? item.tmdbId,
+      showKey: existing.showKey ?? key,
+      episodes: updatedEpisodes,
+    );
+  }
+  return map.values.toList();
 }

@@ -2,6 +2,26 @@ import 'dart:convert';
 
 enum MediaType { movie, tv, unknown }
 
+class EpisodeItem {
+  final int? season;
+  final int? episode;
+  final String filePath;
+
+  const EpisodeItem({this.season, this.episode, required this.filePath});
+
+  Map<String, dynamic> toJson() => {
+        'season': season,
+        'episode': episode,
+        'filePath': filePath,
+      };
+
+  factory EpisodeItem.fromJson(Map<String, dynamic> json) => EpisodeItem(
+        season: json['season'] as int?,
+        episode: json['episode'] as int?,
+        filePath: json['filePath'] as String,
+      );
+}
+
 MediaType mediaTypeFromString(String? value) {
   switch (value?.toLowerCase()) {
     case 'movie':
@@ -50,6 +70,8 @@ class MediaItem {
 
   bool isAnime;
   int? tmdbId;
+  String? showKey;
+  List<EpisodeItem> episodes;
 
   bool isWatched;
   int lastPositionSeconds;
@@ -75,6 +97,8 @@ class MediaItem {
     this.genres = const [],
     this.isAnime = false,
     this.tmdbId,
+    this.showKey,
+    this.episodes = const [],
     this.isWatched = false,
     this.lastPositionSeconds = 0,
     this.totalDurationSeconds,
@@ -94,6 +118,8 @@ class MediaItem {
     List<String>? genres,
     bool? isAnime,
     int? tmdbId,
+    String? showKey,
+    List<EpisodeItem>? episodes,
     bool? isWatched,
     int? lastPositionSeconds,
     int? totalDurationSeconds,
@@ -118,6 +144,8 @@ class MediaItem {
       genres: genres ?? this.genres,
       isAnime: isAnime ?? this.isAnime,
       tmdbId: tmdbId ?? this.tmdbId,
+      showKey: showKey ?? this.showKey,
+      episodes: episodes ?? this.episodes,
       isWatched: isWatched ?? this.isWatched,
       lastPositionSeconds: lastPositionSeconds ?? this.lastPositionSeconds,
       totalDurationSeconds: totalDurationSeconds ?? this.totalDurationSeconds,
@@ -144,6 +172,8 @@ class MediaItem {
         'genres': genres,
         'isAnime': isAnime,
         'tmdbId': tmdbId,
+        'showKey': showKey,
+        'episodes': episodes.map((e) => e.toJson()).toList(),
         'isWatched': isWatched,
         'lastPositionSeconds': lastPositionSeconds,
         'totalDurationSeconds': totalDurationSeconds,
@@ -170,6 +200,10 @@ class MediaItem {
       genres: (json['genres'] as List<dynamic>?)?.cast<String>() ?? [],
       isAnime: json['isAnime'] as bool? ?? false,
       tmdbId: json['tmdbId'] as int?,
+      showKey: json['showKey'] as String?,
+      episodes: (json['episodes'] as List<dynamic>? ?? [])
+          .map((e) => EpisodeItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
       isWatched: json['isWatched'] as bool? ?? false,
       lastPositionSeconds: json['lastPositionSeconds'] as int? ?? 0,
       totalDurationSeconds: json['totalDurationSeconds'] as int?,

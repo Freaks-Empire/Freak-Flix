@@ -20,6 +20,7 @@ class MetadataService {
       season: item.season ?? parsed.season ?? (parsed.episode != null ? 1 : null),
       episode: item.episode ?? parsed.episode,
       type: _inferType(item, parsed),
+      showKey: item.showKey ?? _seriesKey(parsed.seriesTitle, item.year ?? parsed.year, null),
     );
     final preferAniList = settings.preferAniListForAnime;
 
@@ -65,7 +66,9 @@ class MetadataService {
         }
       }
       if (meta == null) return _ensureTypeForTvHints(aniCandidate);
-      final enriched = _trakt.applyMetadata(aniCandidate, meta);
+      final enriched = _trakt.applyMetadata(aniCandidate, meta).copyWith(
+        showKey: _seriesKey(searchTitle, aniCandidate.year, meta['trakt'] as int?),
+      );
       print('[metadata] Applied show: ${enriched.title} traktId=${meta['trakt']} isAnime=${enriched.isAnime}');
       return _ensureTypeForTvHints(enriched.copyWith(
         season: enriched.season ?? working.season,
@@ -112,7 +115,8 @@ class MetadataService {
     return original.type == MediaType.unknown ? MediaType.movie : original.type;
   }
 
-  String _seriesKey(String title, int? year) {
+  String _seriesKey(String title, int? year, [int? traktId]) {
+    if (traktId != null) return 'trakt:$traktId';
     final base = title.toLowerCase().trim();
     final yr = year?.toString() ?? '';
     return '$base-$yr';

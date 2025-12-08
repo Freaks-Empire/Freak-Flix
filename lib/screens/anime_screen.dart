@@ -9,8 +9,8 @@ class AnimeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = context.watch<LibraryProvider>().anime;
-    if (items.isEmpty) return const EmptyState(message: 'No anime found.');
-    return MediaGrid(items: items);
+    final shows = context.watch<LibraryProvider>().anime;
+    if (shows.isEmpty) return const EmptyState(message: 'No anime found.');
+    return MediaGrid(items: shows);
   }
 }

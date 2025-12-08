@@ -9,8 +9,8 @@ class TvScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = context.watch<LibraryProvider>().tv;
-    if (items.isEmpty) return const EmptyState(message: 'No TV shows found.');
-    return MediaGrid(items: items);
+    final shows = context.watch<LibraryProvider>().tv;
+    if (shows.isEmpty) return const EmptyState(message: 'No TV shows found.');
+    return MediaGrid(items: shows);
   }
 }
