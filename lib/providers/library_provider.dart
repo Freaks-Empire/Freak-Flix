@@ -234,11 +234,13 @@ MediaItem _parseFile(FileSystemEntity f) {
       .trim();
   if (title.isEmpty) title = fileName;
 
-    final type = seMatch != null
-      ? MediaType.tv
-      : animeHint
+    // If the path contains an "anime" hint, treat it as anime even when episodes are present.
+    // Otherwise use SxxExx to detect TV, falling back to movie.
+    final type = animeHint
         ? MediaType.anime
-        : MediaType.movie;
+        : seMatch != null
+            ? MediaType.tv
+            : MediaType.movie;
 
   return MediaItem(
     id: id,
