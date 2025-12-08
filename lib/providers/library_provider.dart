@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/media_item.dart';
 import '../services/metadata_service.dart';
 import 'settings_provider.dart';
+import '../utils/filename_parser.dart';
 
 class LibraryProvider extends ChangeNotifier {
   static const _prefsKey = 'library_v1';
@@ -25,18 +26,26 @@ class LibraryProvider extends ChangeNotifier {
     if (raw == null) return;
     items = MediaItem.listFromJson(raw);
 
-    // Reclassify any previously scanned items using updated rules (e.g., anime folders).
+    // Reclassify with updated rules (anime flag + tv/movie only).
     bool updated = false;
     for (var i = 0; i < items.length; i++) {
-      final inferred = _inferTypeFromPath(items[i]);
-      if (inferred != items[i].type) {
-        items[i] = items[i].copyWith(type: inferred);
+      final parsed = FilenameParser.parse(items[i].fileName);
+      final inferredType = _inferTypeFromPath(items[i]);
+      final inferredAnime = _inferAnimeFromPath(items[i]);
+      final updatedItem = items[i].copyWith(
+        title: parsed.seriesTitle.isNotEmpty ? parsed.seriesTitle : items[i].title,
+        season: items[i].season ?? parsed.season ?? (parsed.episode != null ? 1 : null),
+        episode: items[i].episode ?? parsed.episode,
+        type: inferredType,
+        isAnime: inferredAnime,
+        year: items[i].year ?? parsed.year,
+      );
+      if (updatedItem != items[i]) {
+        items[i] = updatedItem;
         updated = true;
       }
     }
-    if (updated) {
-      await saveLibrary();
-    }
+    if (updated) await saveLibrary();
     notifyListeners();
   }
 
@@ -149,8 +158,25 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   List<MediaItem> get movies => items.where((i) => i.type == MediaType.movie).toList();
-  List<MediaItem> get tv => items.where((i) => i.type == MediaType.tv).toList();
-  List<MediaItem> get anime => items.where((i) => i.type == MediaType.anime).toList();
+
+  // Group TV/anime by series key so each show appears once.
+  List<MediaItem> get tv {
+    final seen = <String, MediaItem>{};
+    for (final item in items.where((i) => i.type == MediaType.tv)) {
+      final key = _seriesKey(item);
+      seen.putIfAbsent(key, () => item);
+    }
+    return seen.values.toList();
+  }
+
+  List<MediaItem> get anime {
+    final seen = <String, MediaItem>{};
+    for (final item in items.where((i) => i.type == MediaType.tv && i.isAnime)) {
+      final key = _seriesKey(item);
+      seen.putIfAbsent(key, () => item);
+    }
+    return seen.values.toList();
+  }
 
   List<MediaItem> get continueWatching =>
       items.where((i) => i.lastPositionSeconds > 0 && !i.isWatched).toList();
@@ -234,59 +260,11 @@ MediaItem _parseFile(FileSystemEntity f) {
   final id = filePath.hashCode.toString();
   final lowerPath = filePath.toLowerCase();
   final animeHint = lowerPath.contains('anime');
-  String? title;
-  int? year;
-  int? season;
-  int? episode;
-  final nameNoExt = p.basenameWithoutExtension(fileName);
-  final folderName = p.basename(folder).toLowerCase();
 
-  final yearMatch = RegExp(r'[.\s\[(](19|20)\d{2}[)\].\s]').firstMatch('$nameNoExt ');
-  if (yearMatch != null) {
-    year = int.tryParse(yearMatch.group(0)!.replaceAll(RegExp(r'\D'), ''));
-  }
-  final seMatch = RegExp(r'[Ss](\d{1,2})[Ee](\d{1,3})').firstMatch(nameNoExt);
-  if (seMatch != null) {
-    season = int.tryParse(seMatch.group(1)!);
-    episode = int.tryParse(seMatch.group(2)!);
-  }
-
-  // Try folder-based season detection (e.g., "Season 1") if season is still null.
-  if (season == null) {
-    final seasonFolderMatch = RegExp(r'season[ _-]?(\d{1,2})').firstMatch(folderName);
-    if (seasonFolderMatch != null) {
-      season = int.tryParse(seasonFolderMatch.group(1)!);
-    }
-  }
-
-  // If no SxxEyy match, look for standalone episode numbers like "01" or "ep 03".
-  if (episode == null) {
-    final epLooseMatch =
-        RegExp(r'(?:^|[\s._-])(?:ep(?:isode)?\s*)?(\d{1,3})(?!\d)').firstMatch(nameNoExt);
-    if (epLooseMatch != null) {
-      episode = int.tryParse(epLooseMatch.group(1)!);
-    }
-  }
-
-  // Clean up title: drop season/episode markers, dots/underscores, repeated spaces.
-  var cleanedTitle = nameNoExt
-      .replaceAll(RegExp(r'\b[Ss]\d{1,2}[Ee]\d{1,3}\b'), ' ')
-      .replaceAll(RegExp(r'\b[Ee][Pp]?(?:isode)?\s*\d{1,3}\b'), ' ')
-      .replaceAll(RegExp(r'^\d{1,3}\s*-\s*'), ' ')
-      .replaceAll(RegExp(r'\.(19|20)\d{2}.*'), ' ')
-      .replaceAll(RegExp(r'[._]'), ' ')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim();
-  if (cleanedTitle.isEmpty) cleanedTitle = fileName;
-  title = cleanedTitle;
-
-  // Classify: anime hint wins; otherwise TV if we found season/episode cues; else movie.
-  final hasTvPattern = seMatch != null || episode != null || season != null;
-  final type = animeHint
-      ? MediaType.anime
-      : hasTvPattern
-          ? MediaType.tv
-          : MediaType.movie;
+  final parsed = FilenameParser.parse(fileName);
+  final type = (parsed.season != null || parsed.episode != null || animeHint)
+      ? MediaType.tv
+      : MediaType.movie;
 
   return MediaItem(
     id: id,
@@ -295,18 +273,17 @@ MediaItem _parseFile(FileSystemEntity f) {
     folderPath: folder,
     sizeBytes: stat.size,
     lastModified: stat.modified,
-    title: title,
-    year: year,
+    title: parsed.seriesTitle,
+    year: parsed.year,
     type: type,
-    season: season,
-    episode: episode,
+    season: parsed.season,
+    episode: parsed.episode,
+    isAnime: animeHint,
   );
 }
 
 MediaType _inferTypeFromPath(MediaItem item) {
   final path = item.filePath.toLowerCase();
-  final hasAnimeHint = path.contains('anime');
-  if (hasAnimeHint) return MediaType.anime;
 
   final fileName = p.basenameWithoutExtension(item.fileName).toLowerCase();
   final folderName = p.basename(item.folderPath).toLowerCase();
@@ -320,4 +297,14 @@ MediaType _inferTypeFromPath(MediaItem item) {
 
   if (hasTvPattern) return MediaType.tv;
   return MediaType.movie;
+}
+
+bool _inferAnimeFromPath(MediaItem item) {
+  return item.isAnime || item.filePath.toLowerCase().contains('anime');
+}
+
+String _seriesKey(MediaItem item) {
+  final base = (item.title ?? '').toLowerCase().trim();
+  final year = item.year?.toString() ?? '';
+  return '$base-$year';
 }

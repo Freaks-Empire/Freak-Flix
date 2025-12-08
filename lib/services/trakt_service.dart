@@ -10,63 +10,38 @@ bool get _hasTraktKey => _traktClientId != 'REPLACE_WITH_TRAKT_CLIENT_ID' && _tr
 
 class TraktService {
   final Map<String, Map<String, dynamic>> _cache = {};
+  final Map<int, Map<String, dynamic>> _showDetailsCache = {};
+
+  bool get hasKey => _hasTraktKey;
+
+  Future<Map<String, dynamic>?> searchShow(String title, {int? year}) async {
+    return _search(title, type: 'show', year: year);
+  }
+
+  Future<Map<String, dynamic>?> searchMovie(String title, {int? year}) async {
+    return _search(title, type: 'movie', year: year);
+  }
 
   Future<MediaItem> enrichWithTrakt(MediaItem item) async {
     if (!_hasTraktKey) return item;
 
     final query = _buildSearchQuery(item);
     if (query.isEmpty) return item;
-    final cacheKey = '${query.toLowerCase()}-${item.year ?? ''}-${item.type.name}';
-    if (_cache.containsKey(cacheKey)) {
-      return _apply(item, _cache[cacheKey]!);
-    }
 
-    final uri = Uri.https('api.trakt.tv', '/search/movie,show', {
-      'query': query,
-      if (item.year != null) 'year': item.year.toString(),
-      'extended': 'full',
-    });
-
-    try {
-      final headers = <String, String>{
-        'trakt-api-version': '2',
-        'trakt-api-key': _traktClientId,
-        'Content-Type': 'application/json',
-      };
-      final res = await http.get(uri, headers: headers);
-      if (res.statusCode != 200) return item;
-      final list = jsonDecode(res.body) as List<dynamic>;
-      if (list.isEmpty) return item;
-
-      final preferredType = (item.type == MediaType.tv || item.type == MediaType.anime)
-          ? 'show'
-          : item.type == MediaType.movie
-              ? 'movie'
-              : null;
-
-      Map<String, dynamic>? pick;
-      for (final raw in list) {
-        final type = raw['type'] as String?;
-        if (preferredType != null && type == preferredType) {
-          pick = raw as Map<String, dynamic>;
-          break;
-        }
-      }
-      pick ??= list.first as Map<String, dynamic>;
-
-      final data = (pick['movie'] as Map<String, dynamic>?) ??
-          (pick['show'] as Map<String, dynamic>?) ??
-          <String, dynamic>{};
-      if (data.isEmpty) return item;
-      _cache[cacheKey] = data;
-      return _apply(item, data, pick['type'] as String?);
-    } catch (_) {
-      return item;
-    }
+    final bool prefersShow = _looksLikeEpisode(item);
+    final meta = prefersShow
+        ? await searchShow(query, year: item.year)
+        : await searchMovie(query, year: item.year);
+    if (meta == null) return item;
+    return applyMetadata(item, meta);
   }
 
   String _buildSearchQuery(MediaItem item) {
-    final raw = (item.title ?? item.fileName).replaceAll(RegExp(r'[\[\]\(\)]'), ' ');
+    return _cleanQuery(item.title ?? item.fileName);
+  }
+
+  String _cleanQuery(String input) {
+    final raw = input.replaceAll(RegExp(r'[\[\]\(\)]'), ' ');
     final cleaned = raw
         .replaceAll(RegExp(r'\b[Ss]\d{1,2}[Ee]\d{1,3}\b'), ' ')
         .replaceAll(RegExp(r'\b[Ss]eason\s*\d{1,2}\b'), ' ')
@@ -82,32 +57,186 @@ class TraktService {
     return cleaned;
   }
 
-  MediaItem _apply(MediaItem item, Map<String, dynamic> data, [String? typeHint]) {
-    final title = data['title'] as String? ?? item.title;
-    final year = data['year'] as int? ?? item.year;
-    final overview = data['overview'] as String? ?? item.overview;
-    final genres = (data['genres'] as List<dynamic>? ?? []).cast<String>();
-    final rating = (data['rating'] as num?)?.toDouble();
-    final runtime = data['runtime'] as int?;
+  Future<Map<String, dynamic>?> _search(String title, {required String type, int? year}) async {
+    if (!_hasTraktKey) return null;
+    final query = _cleanQuery(title);
+    if (query.isEmpty) return null;
 
+    final cacheKey = '$type-${query.toLowerCase()}-${year ?? ''}';
+    if (_cache.containsKey(cacheKey)) return _cache[cacheKey];
+
+    final uri = Uri.https('api.trakt.tv', '/search/$type', {
+      'query': query,
+      if (year != null) 'year': year.toString(),
+      'extended': 'full',
+    });
+
+    try {
+      final headers = <String, String>{
+        'trakt-api-version': '2',
+        'trakt-api-key': _traktClientId,
+        'Content-Type': 'application/json',
+      };
+      final res = await http.get(uri, headers: headers);
+      if (res.statusCode != 200) return null;
+      final list = jsonDecode(res.body) as List<dynamic>;
+      if (list.isEmpty) return null;
+
+      final best = _pickBest(list, expectedType: type, expectedYear: year);
+      if (best == null) return null;
+      _cache[cacheKey] = best;
+      return best;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Map<String, dynamic>? _pickBest(List<dynamic> list, {required String expectedType, int? expectedYear}) {
+    Map<String, dynamic>? best;
+    double bestScore = -1;
+
+    for (final raw in list) {
+      final map = raw as Map<String, dynamic>;
+      final type = map['type'] as String?;
+      if (type != expectedType) continue;
+      final data = map[type] as Map<String, dynamic>?;
+      if (data == null) continue;
+
+      final score = (map['score'] as num?)?.toDouble() ?? 0.0;
+      final yearMatch = expectedYear != null && data['year'] == expectedYear;
+      if (yearMatch) return _toMetadata(data, type);
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = _toMetadata(data, type);
+      } else if (best == null) {
+        best = _toMetadata(data, type);
+      }
+    }
+
+    if (best != null) return best;
+
+    for (final raw in list) {
+      final map = raw as Map<String, dynamic>;
+      final type = map['type'] as String?;
+      if (type != expectedType) continue;
+      final data = map[type] as Map<String, dynamic>?;
+      if (data != null) return _toMetadata(data, type);
+    }
+    return null;
+  }
+
+  Map<String, dynamic> _toMetadata(Map<String, dynamic> data, String type) {
+    final ids = (data['ids'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+    final countryRaw = data['country'] ?? data['origin_country'];
+    final originCountries = countryRaw is List
+        ? countryRaw.map((e) => e.toString()).toList()
+        : countryRaw is String
+            ? [countryRaw]
+            : <String>[];
+    return {
+      'type': type,
+      'title': data['title'],
+      'year': data['year'],
+      'overview': data['overview'],
+      'genres': (data['genres'] as List<dynamic>? ?? []).cast<String>(),
+      'rating': (data['rating'] as num?)?.toDouble(),
+      'runtime': data['runtime'],
+      'tmdb': ids['tmdb'],
+      'trakt': ids['trakt'],
+      'slug': ids['slug'],
+      'original_language': data['language'],
+      'origin_country': originCountries,
+    };
+  }
+
+  Future<Map<String, dynamic>?> getShowDetails(int traktId) async {
+    if (_showDetailsCache.containsKey(traktId)) return _showDetailsCache[traktId];
+    if (!_hasTraktKey) return null;
+
+    final uri = Uri.https('api.trakt.tv', '/shows/$traktId', {'extended': 'full,images'});
+    try {
+      final headers = <String, String>{
+        'trakt-api-version': '2',
+        'trakt-api-key': _traktClientId,
+        'Content-Type': 'application/json',
+      };
+      final res = await http.get(uri, headers: headers);
+      if (res.statusCode != 200) return null;
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final ids = (data['ids'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+      final images = data['images'] as Map<String, dynamic>?;
+      final posters = images?['poster'] as Map<String, dynamic>?;
+      final backdrops = images?['fanart'] as Map<String, dynamic>?;
+      final result = {
+        'type': 'show',
+        'title': data['title'],
+        'year': data['year'],
+        'overview': data['overview'],
+        'genres': (data['genres'] as List<dynamic>? ?? []).cast<String>(),
+        'rating': (data['rating'] as num?)?.toDouble(),
+        'runtime': data['runtime'],
+        'tmdb': ids['tmdb'],
+        'trakt': ids['trakt'],
+        'slug': ids['slug'],
+        'original_language': data['language'],
+        'origin_country': (data['country'] is List)
+            ? (data['country'] as List).map((e) => e.toString()).toList()
+            : data['country'] is String
+                ? [data['country']]
+                : <String>[],
+        'poster': posters?['full'] ?? posters?['medium'] ?? posters?['thumb'],
+        'backdrop': backdrops?['full'] ?? backdrops?['medium'] ?? backdrops?['thumb'],
+      };
+      _showDetailsCache[traktId] = result;
+      return result;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool isAnime(Map<String, dynamic> meta) {
+    final genres = (meta['genres'] as List<dynamic>? ?? []).map((e) => e.toString().toLowerCase()).toList();
+    final hasAnimeGenre = genres.any((g) => g == 'anime' || g == 'animation');
+    final language = (meta['original_language'] as String?)?.toLowerCase();
+    final countries = (meta['origin_country'] as List<dynamic>? ?? []).map((e) => e.toString().toLowerCase()).toList();
+    final hasJapan = countries.contains('jp') || countries.contains('jpn') || countries.contains('japan');
+    return hasAnimeGenre || language == 'ja' || hasJapan;
+  }
+
+  MediaItem applyMetadata(MediaItem item, Map<String, dynamic> meta) {
+    final metaType = meta['type'] as String?;
+    final isAnimeMeta = isAnime(meta);
     MediaType mappedType;
-    if (typeHint == 'movie') {
+    if (metaType == 'movie') {
       mappedType = MediaType.movie;
-    } else if (typeHint == 'show') {
-      mappedType = genres.any((g) => g.toLowerCase() == 'anime') ? MediaType.anime : MediaType.tv;
+    } else if (metaType == 'show') {
+      mappedType = MediaType.tv;
     } else {
       mappedType = item.type;
     }
 
+    final genres = (meta['genres'] as List<dynamic>? ?? []).cast<String>();
+    final poster = meta['poster'] as String?;
+    final backdrop = meta['backdrop'] as String?;
+
     return item.copyWith(
-      title: item.title ?? title,
-      year: year,
-      type: item.type == MediaType.unknown ? mappedType : (mappedType == MediaType.anime ? mappedType : item.type),
-      overview: overview,
-      rating: rating,
-      runtimeMinutes: runtime,
+      title: item.title ?? meta['title'] as String?,
+      year: meta['year'] as int? ?? item.year,
+      type: item.type == MediaType.unknown ? mappedType : item.type,
+      overview: meta['overview'] as String? ?? item.overview,
+      rating: meta['rating'] as double? ?? item.rating,
+      runtimeMinutes: meta['runtime'] as int? ?? item.runtimeMinutes,
       genres: item.genres.isNotEmpty ? item.genres : genres,
-      // Trakt does not deliver posters/backdrops directly without TMDB; leave as-is.
+      isAnime: item.isAnime || isAnimeMeta,
+      tmdbId: meta['tmdb'] as int? ?? item.tmdbId,
+      posterUrl: item.posterUrl ?? poster,
+      backdropUrl: item.backdropUrl ?? backdrop,
     );
   }
-}
+
+  bool _looksLikeEpisode(MediaItem item) {
+    if (item.type == MediaType.tv || item.isAnime) return true;
+    if (item.season != null || item.episode != null) return true;
+    return RegExp(r'[Ss]\d{1,2}[Ee]\d{1,3}').hasMatch(item.fileName);
+  }

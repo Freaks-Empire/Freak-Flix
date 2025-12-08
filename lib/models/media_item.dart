@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-enum MediaType { movie, tv, anime, unknown }
+enum MediaType { movie, tv, unknown }
 
 MediaType mediaTypeFromString(String? value) {
   switch (value?.toLowerCase()) {
@@ -10,7 +10,7 @@ MediaType mediaTypeFromString(String? value) {
     case 'series':
       return MediaType.tv;
     case 'anime':
-      return MediaType.anime;
+      return MediaType.tv;
     default:
       return MediaType.unknown;
   }
@@ -22,8 +22,6 @@ String mediaTypeToString(MediaType type) {
       return 'movie';
     case MediaType.tv:
       return 'tv';
-    case MediaType.anime:
-      return 'anime';
     case MediaType.unknown:
       return 'unknown';
   }
@@ -50,6 +48,9 @@ class MediaItem {
   int? runtimeMinutes;
   List<String> genres;
 
+  bool isAnime;
+  int? tmdbId;
+
   bool isWatched;
   int lastPositionSeconds;
   int? totalDurationSeconds;
@@ -72,6 +73,8 @@ class MediaItem {
     this.rating,
     this.runtimeMinutes,
     this.genres = const [],
+    this.isAnime = false,
+    this.tmdbId,
     this.isWatched = false,
     this.lastPositionSeconds = 0,
     this.totalDurationSeconds,
@@ -89,6 +92,8 @@ class MediaItem {
     double? rating,
     int? runtimeMinutes,
     List<String>? genres,
+    bool? isAnime,
+    int? tmdbId,
     bool? isWatched,
     int? lastPositionSeconds,
     int? totalDurationSeconds,
@@ -111,6 +116,8 @@ class MediaItem {
       rating: rating ?? this.rating,
       runtimeMinutes: runtimeMinutes ?? this.runtimeMinutes,
       genres: genres ?? this.genres,
+      isAnime: isAnime ?? this.isAnime,
+      tmdbId: tmdbId ?? this.tmdbId,
       isWatched: isWatched ?? this.isWatched,
       lastPositionSeconds: lastPositionSeconds ?? this.lastPositionSeconds,
       totalDurationSeconds: totalDurationSeconds ?? this.totalDurationSeconds,
@@ -135,6 +142,8 @@ class MediaItem {
         'rating': rating,
         'runtimeMinutes': runtimeMinutes,
         'genres': genres,
+        'isAnime': isAnime,
+        'tmdbId': tmdbId,
         'isWatched': isWatched,
         'lastPositionSeconds': lastPositionSeconds,
         'totalDurationSeconds': totalDurationSeconds,
@@ -159,6 +168,8 @@ class MediaItem {
       rating: (json['rating'] as num?)?.toDouble(),
       runtimeMinutes: json['runtimeMinutes'] as int?,
       genres: (json['genres'] as List<dynamic>?)?.cast<String>() ?? [],
+      isAnime: json['isAnime'] as bool? ?? false,
+      tmdbId: json['tmdbId'] as int?,
       isWatched: json['isWatched'] as bool? ?? false,
       lastPositionSeconds: json['lastPositionSeconds'] as int? ?? 0,
       totalDurationSeconds: json['totalDurationSeconds'] as int?,

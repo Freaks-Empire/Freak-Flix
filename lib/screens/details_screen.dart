@@ -60,10 +60,19 @@ class _DetailsScreenState extends State<DetailsScreen> {
                   DropdownMenuItem(value: MediaType.unknown, child: Text('Auto')),
                   DropdownMenuItem(value: MediaType.movie, child: Text('Movie')),
                   DropdownMenuItem(value: MediaType.tv, child: Text('TV')),
-                  DropdownMenuItem(value: MediaType.anime, child: Text('Anime')),
                 ],
               ),
             ],
+          ),
+          SwitchListTile(
+            value: _current.isAnime,
+            title: const Text('Anime'),
+            onChanged: (val) {
+              final nextType = val && _current.type == MediaType.unknown ? MediaType.tv : _current.type;
+              final updated = _current.copyWith(isAnime: val, type: nextType);
+              setState(() => _current = updated);
+              library.updateItem(updated);
+            },
           ),
           const SizedBox(height: 16),
           Wrap(

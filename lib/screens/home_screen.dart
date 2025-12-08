@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/media_item.dart';
+import 'package:freak_flix/models/media_item.dart';
 import '../providers/library_provider.dart';
 import '../widgets/hero_banner.dart';
 import '../widgets/media_carousel_row.dart';

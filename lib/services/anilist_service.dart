@@ -83,17 +83,20 @@ class AniListService {
     final genres = (media['genres'] as List<dynamic>? ?? []).cast<String>();
     final score = (media['averageScore'] as num?)?.toDouble();
     final runtime = media['duration'] as int?;
+    final format = (media['format'] as String?)?.toUpperCase();
+    final isMovieFormat = format == 'MOVIE';
     return item.copyWith(
       title: item.title ?? title,
       year: item.year ?? year,
-      type: MediaType.anime,
-      episode: item.episode ?? episodes,
+      type: isMovieFormat ? MediaType.movie : MediaType.tv,
+      episode: isMovieFormat ? item.episode : (item.episode ?? episodes),
       posterUrl: media['coverImage']?['large'] as String?,
       backdropUrl: media['bannerImage'] as String?,
       overview: item.overview ?? media['description'] as String?,
       rating: score != null ? score / 10.0 : null,
       runtimeMinutes: runtime,
       genres: item.genres.isNotEmpty ? item.genres : genres,
+      isAnime: true,
     );
   }
 }
