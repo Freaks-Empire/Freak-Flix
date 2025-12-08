@@ -16,12 +16,21 @@ class HomeScreen extends StatelessWidget {
     if (library.items.isEmpty) {
       return const EmptyState(message: 'No media yet. Go to Settings to scan a folder.');
     }
-    final heroItem = library.items.first;
+    final heroItem = _pickHero(library);
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(child: HeroBanner(item: heroItem)),
         SliverToBoxAdapter(
           child: MediaCarouselRow(title: 'Continue Watching', items: library.continueWatching),
+        ),
+        SliverToBoxAdapter(
+          child: MediaCarouselRow(title: 'TV', items: library.tv),
+        ),
+        SliverToBoxAdapter(
+          child: MediaCarouselRow(title: 'Movies', items: library.movies),
+        ),
+        SliverToBoxAdapter(
+          child: MediaCarouselRow(title: 'Anime', items: library.anime),
         ),
         SliverToBoxAdapter(
           child: MediaCarouselRow(title: 'Recently Added', items: library.recentlyAdded),
@@ -32,4 +41,11 @@ class HomeScreen extends StatelessWidget {
       ],
     );
   }
+}
+
+MediaItem _pickHero(LibraryProvider library) {
+  if (library.continueWatching.isNotEmpty) return library.continueWatching.first;
+  if (library.topRated.isNotEmpty) return library.topRated.first;
+  if (library.recentlyAdded.isNotEmpty) return library.recentlyAdded.first;
+  return library.items.first;
 }
