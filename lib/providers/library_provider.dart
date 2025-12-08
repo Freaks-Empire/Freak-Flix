@@ -6,7 +6,6 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/media_item.dart';
 import '../services/metadata_service.dart';
-import '../services/graph_auth_service.dart';
 import 'settings_provider.dart';
 import '../utils/filename_parser.dart';
 
@@ -148,39 +147,6 @@ class LibraryProvider extends ChangeNotifier {
     items = [];
     await saveLibrary();
     notifyListeners();
-  }
-
-  Future<void> syncFromOneDrive({
-    required GraphAuthService auth,
-    required String folderPath,
-    MetadataService? metadata,
-  }) async {
-    error = null;
-    isLoading = true;
-    scanningStatus = 'Signing in to OneDrive...';
-    notifyListeners();
-
-    try {
-      final token = await auth.getOrLoginWithDeviceCode();
-      final oneDrive = OneDriveLibraryService(token);
-
-      scanningStatus = 'Listing items from $folderPath...';
-      notifyListeners();
-
-      final newItems = await oneDrive.loadFolder(folderPath);
-
-      scanningStatus = 'Merging library...';
-      notifyListeners();
-
-      await _ingestItems(newItems, metadata);
-    } catch (e) {
-      error = 'OneDrive error: $e';
-    } finally {
-      isLoading = false;
-      scanningStatus = '';
-      notifyListeners();
-      await saveLibrary();
-    }
   }
 
   Future<void> updateItem(MediaItem updated) async {
