@@ -18,11 +18,12 @@ class MetadataService {
       return _ani.enrichWithAniList(item);
     }
 
-    // If user prefers AniList for anime-like content, try AniList first; if it classifies as anime, keep it.
-    if (preferAniList) {
-      final enriched = await _ani.enrichWithAniList(item);
-      if (enriched.type == MediaType.anime) return enriched;
-    }
+    // Always attempt AniList first to auto-detect anime by name/title.
+    final aniCandidate = await _ani.enrichWithAniList(item);
+    if (aniCandidate.type == MediaType.anime) return aniCandidate;
+
+    // If user prefers AniList, keep AniList result even for non-anime types.
+    if (preferAniList) return aniCandidate;
 
     // Otherwise fall back to OMDb (movies/TV). OMDb key is required for this path.
     return _omdb.enrichWithOmdb(item);
