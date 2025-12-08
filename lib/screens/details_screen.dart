@@ -25,7 +25,33 @@ class _DetailsScreenState extends State<DetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final playback = context.read<PlaybackProvider>();
-    final library = context.read<LibraryProvider>();
+    final library = context.watch<LibraryProvider>();
+
+    // Build an episode list from the library using the same showKey/folder grouping.
+    List<MediaItem> episodes = library.items
+        .where((m) => m.type == MediaType.tv)
+        .where((m) {
+          final key = m.showKey;
+          if (key != null && key.isNotEmpty && _current.showKey != null) {
+            return key == _current.showKey;
+          }
+          return m.folderPath.toLowerCase() == _current.folderPath.toLowerCase();
+        })
+        .toList();
+
+    if (episodes.isEmpty) {
+      episodes = [_current];
+    } else {
+      episodes.sort((a, b) {
+        final sa = a.season ?? 0;
+        final sb = b.season ?? 0;
+        final ea = a.episode ?? 0;
+        final eb = b.episode ?? 0;
+        return sa != sb ? sa.compareTo(sb) : ea.compareTo(eb);
+      });
+    }
+
+    final hasEpisodes = episodes.length > 1;
     return Scaffold(
       appBar: AppBar(title: Text(_current.title ?? _current.fileName)),
       body: ListView(
@@ -42,6 +68,41 @@ class _DetailsScreenState extends State<DetailsScreen> {
           if (_current.genres.isNotEmpty) Text(_current.genres.join(', ')),
           const SizedBox(height: 12),
           Text(_current.overview ?? 'No overview available.'),
+          if (hasEpisodes) ...[
+            const SizedBox(height: 16),
+            Text('Episodes (${episodes.length})', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 44,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: episodes.length,
+                itemBuilder: (context, index) {
+                  final ep = episodes[index];
+                  final label = 'S${(ep.season ?? 1).toString().padLeft(2, '0')}E${(ep.episode ?? (index + 1)).toString().padLeft(2, '0')}';
+                  final isSelected = ep.id == _current.id;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
+                      ),
+                      onPressed: () {
+                        setState(() => _current = ep);
+                        playback.start(ep);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => VideoPlayerScreen(filePath: ep.filePath),
+                          ),
+                        );
+                      },
+                      child: Text(label),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           Row(
             children: [
