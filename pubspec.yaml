@@ -1,0 +1,29 @@
+name: localflix
+description: "LocalFlix: local-only Netflix-style media library"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.1.2         # state management
+  file_picker: ^8.1.2      # folder/file picker (desktop + mobile)
+  path: ^1.9.0             # path helpers
+  http: ^1.2.2             # OMDb + AniList calls
+  shared_preferences: ^2.3.3 # local persistence & caching
+  collection: ^1.18.0
+  flutter_mpv:             # MPV-based playback (git since not on pub.dev)
+    git:
+      url: https://github.com/xuelongqy/flutter_mpv.git
+      ref: master
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

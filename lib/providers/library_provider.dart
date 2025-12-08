@@ -1,0 +1,174 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/media_item.dart';
+import '../services/metadata_service.dart';
+import 'settings_provider.dart';
+
+class LibraryProvider extends ChangeNotifier {
+  static const _prefsKey = 'library_v1';
+
+  final SettingsProvider settings;
+  List<MediaItem> items = [];
+  bool isLoading = false;
+  String? error;
+
+  LibraryProvider(this.settings);
+
+  Future<void> loadLibrary() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_prefsKey);
+    if (raw == null) return;
+    items = MediaItem.listFromJson(raw);
+    notifyListeners();
+  }
+
+  Future<void> saveLibrary() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsKey, MediaItem.listToJson(items));
+  }
+
+  bool _isVideo(String path) {
+    const exts = ['.mp4', '.mkv', '.avi', '.mov', '.webm'];
+    final ext = p.extension(path).toLowerCase();
+    return exts.contains(ext);
+  }
+
+  // Simple filename parser for title, year, season/episode.
+  MediaItem _parseFile(FileSystemEntity f) {
+    final stat = f.statSync();
+    final filePath = f.path;
+    final fileName = p.basename(filePath);
+    final folder = p.dirname(filePath);
+    final id = filePath.hashCode.toString();
+    final animeHint = filePath.toLowerCase().contains('anime');
+    String? title;
+    int? year;
+    int? season;
+    int? episode;
+    final nameNoExt = p.basenameWithoutExtension(fileName);
+
+    final yearMatch = RegExp(r'[.\s\[(](19|20)\d{2}[)\].\s]').firstMatch('$nameNoExt ');
+    if (yearMatch != null) {
+      year = int.tryParse(yearMatch.group(0)!.replaceAll(RegExp(r'\D'), ''));
+    }
+    final seMatch = RegExp(r'[Ss](\d{1,2})[Ee](\d{1,3})').firstMatch(nameNoExt);
+    if (seMatch != null) {
+      season = int.tryParse(seMatch.group(1)!);
+      episode = int.tryParse(seMatch.group(2)!);
+    }
+    title = nameNoExt
+        .replaceAll(RegExp(r'\.(19|20)\d{2}.*'), '')
+        .replaceAll(RegExp(r'[._]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (title.isEmpty) title = fileName;
+
+    final type = animeHint
+        ? MediaType.anime
+        : seMatch != null
+            ? MediaType.tv
+            : MediaType.movie;
+
+    return MediaItem(
+      id: id,
+      filePath: filePath,
+      fileName: fileName,
+      folderPath: folder,
+      sizeBytes: stat.size,
+      lastModified: stat.modified,
+      title: title,
+      year: year,
+      type: type,
+      season: season,
+      episode: episode,
+    );
+  }
+
+  Future<void> pickAndScan({MetadataService? metadata}) async {
+    error = null;
+    isLoading = true;
+    notifyListeners();
+    try {
+      if (Platform.isAndroid || Platform.isIOS) {
+        final result = await FilePicker.platform.pickFiles(
+          allowMultiple: true,
+          type: FileType.custom,
+          allowedExtensions: ['mp4', 'mkv', 'avi', 'mov', 'webm'],
+        );
+        if (result == null) {
+          isLoading = false;
+          notifyListeners();
+          return;
+        }
+        final files = result.paths.whereType<String>().map(File.new).toList();
+        await _ingestFiles(files, metadata);
+      } else {
+        final path = await FilePicker.platform.getDirectoryPath();
+        if (path == null) {
+          isLoading = false;
+          notifyListeners();
+          return;
+        }
+        settings.setLastFolder(path);
+        final dir = Directory(path);
+        final files = dir
+            .listSync(recursive: true, followLinks: false)
+            .whereType<File>()
+            .where((f) => _isVideo(f.path))
+            .toList();
+        await _ingestFiles(files, metadata);
+      }
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      isLoading = false;
+      notifyListeners();
+      await saveLibrary();
+    }
+  }
+
+  Future<void> _ingestFiles(List<File> files, MetadataService? metadata) async {
+    final map = {for (var i in items) i.filePath: i};
+    for (final f in files) {
+      if (!_isVideo(f.path)) continue;
+      final parsed = _parseFile(f);
+      map[parsed.filePath] = parsed;
+    }
+    items = map.values.toList()..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+    notifyListeners();
+
+    if (settings.autoFetchAfterScan && metadata != null) {
+      for (int i = 0; i < items.length; i++) {
+        final enriched = await metadata.enrich(items[i]);
+        items[i] = enriched;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> clear() async {
+    items = [];
+    await saveLibrary();
+    notifyListeners();
+  }
+
+  List<MediaItem> get movies => items.where((i) => i.type == MediaType.movie).toList();
+  List<MediaItem> get tv => items.where((i) => i.type == MediaType.tv).toList();
+  List<MediaItem> get anime => items.where((i) => i.type == MediaType.anime).toList();
+
+  List<MediaItem> get continueWatching =>
+      items.where((i) => i.lastPositionSeconds > 0 && !i.isWatched).toList();
+
+  List<MediaItem> get recentlyAdded {
+    final sorted = [...items]..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+    return sorted.take(20).toList();
+  }
+
+  List<MediaItem> get topRated {
+    final sorted = [...items]..sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
+    return sorted.take(20).toList();
+  }
+}

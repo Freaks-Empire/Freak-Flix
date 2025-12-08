@@ -1,0 +1,67 @@
+import 'package:flutter/material.dart';
+import '../models/media_item.dart';
+import '../screens/details_screen.dart';
+
+class HeroBanner extends StatelessWidget {
+  final MediaItem item;
+  const HeroBanner({super.key, required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => DetailsScreen(item: item)),
+      ),
+      child: Stack(
+        children: [
+          AspectRatio(
+            aspectRatio: 16 / 6,
+            child: item.backdropUrl != null
+                ? Image.network(item.backdropUrl!, fit: BoxFit.cover)
+                : Container(color: Colors.grey.shade900),
+          ),
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.black87, Colors.transparent],
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 16,
+            bottom: 16,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.title ?? item.fileName,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.white)),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: 480,
+                  child: Text(
+                    item.overview ?? 'No overview yet. Tap to view details.',
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => DetailsScreen(item: item)),
+                  ),
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Play'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
