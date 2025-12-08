@@ -7,7 +7,10 @@ class AniListService {
   final Map<String, Map<String, dynamic>> _cache = {};
 
   Future<MediaItem> enrichWithAniList(MediaItem item) async {
-    final key = _normalizedKey(item);
+    final search = _buildSearchString(item);
+    if (search.isEmpty) return item;
+
+    final key = search.toLowerCase();
     if (_cache.containsKey(key)) {
       return _apply(item, _cache[key]!);
     }
@@ -31,7 +34,7 @@ class AniListService {
       }
     ''';
 
-    final variables = {'search': item.title ?? item.fileName};
+    final variables = {'search': search};
     try {
       final res = await http.post(
         Uri.parse(url),
@@ -49,7 +52,27 @@ class AniListService {
     }
   }
 
-  String _normalizedKey(MediaItem item) => (item.title ?? item.fileName).toLowerCase();
+  String _buildSearchString(MediaItem item) {
+    final raw = (item.title ?? item.fileName).replaceAll(RegExp(r'[\[\]\(\)]'), ' ');
+
+    // Strip common noise: SxxEyy, "Season 1", resolutions, source tags, encodes, discs.
+    final cleaned = raw
+        .replaceAll(RegExp(r'\b[Ss]\d{1,2}[Ee]\d{1,3}\b'), ' ')
+        .replaceAll(RegExp(r'\b[Ss]eason\s*\d{1,2}\b'), ' ')
+        .replaceAll(RegExp(r'\b[Ee][Pp]?(?:isode)?\s*\d{1,3}\b'), ' ')
+        .replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ')
+        .replaceAll(RegExp(r'\b(480|720|1080|2160)[pi]\b', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'\b(bluray|bd|webrip|web-dl|hdrip|remux|dvdrip)\b', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'\b(x264|x265|hevc|avc|aac|flac|ddp?\d?)\b', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'\b(multi|dual audio|subbed|dubbed)\b', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'[._-]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    // Leave only letters, numbers, and spaces to improve AniList search matching.
+    final alphaNum = cleaned.replaceAll(RegExp(r'[^A-Za-z0-9 ]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    return alphaNum;
+  }
 
   MediaItem _apply(MediaItem item, Map<String, dynamic> media) {
     final title = (media['title'] as Map<String, dynamic>?)?['english'] as String? ??
