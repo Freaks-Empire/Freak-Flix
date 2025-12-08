@@ -3,8 +3,11 @@ import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/library_provider.dart';
 import '../services/metadata_service.dart';
+import '../services/graph_auth_service.dart';
+import 'onedrive_browser_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
+  static final GraphAuthService _graphAuth = GraphAuthService();
   const SettingsScreen({super.key});
 
   @override
@@ -41,6 +44,17 @@ class SettingsScreen extends StatelessWidget {
         ElevatedButton(
           onPressed: () => library.clear(),
           child: const Text('Clear Library'),
+        ),
+        const SizedBox(height: 12),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => OneDriveBrowserScreen(auth: _graphAuth),
+              ),
+            );
+          },
+          child: const Text('Browse OneDrive (stream)'),
         ),
         const Divider(height: 32),
         Text('Preferences', style: Theme.of(context).textTheme.titleLarge),
