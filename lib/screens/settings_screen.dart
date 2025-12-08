@@ -29,6 +29,14 @@ class SettingsScreen extends StatelessWidget {
               Expanded(child: Text('Last: ${settings.lastScannedFolder}')),
           ],
         ),
+        if (library.isLoading && library.scanningStatus.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Text(
+              library.scanningStatus,
+              style: TextStyle(color: Theme.of(context).colorScheme.primary),
+            ),
+          ),
         const SizedBox(height: 8),
         ElevatedButton(
           onPressed: () => library.clear(),

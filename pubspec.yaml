@@ -15,10 +15,9 @@ dependencies:
   http: ^1.2.2             # OMDb + AniList calls
   shared_preferences: ^2.3.3 # local persistence & caching
   collection: ^1.18.0
-  flutter_mpv:             # MPV-based playback (git since not on pub.dev)
-    git:
-      url: https://github.com/xuelongqy/flutter_mpv.git
-      ref: master
+  media_kit: ^1.1.10
+  media_kit_video: ^1.2.4
+  media_kit_libs_windows_video: ^1.0.0
 
 dev_dependencies:
   flutter_test:

@@ -18,8 +18,11 @@ import 'providers/playback_provider.dart';
 import 'providers/settings_provider.dart';
 import 'services/metadata_service.dart';
 
+import 'package:media_kit/media_kit.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
   final settingsProvider = SettingsProvider();
   await settingsProvider.load();
   final libraryProvider = LibraryProvider(settingsProvider);
