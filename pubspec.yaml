@@ -1,5 +1,5 @@
-name: localflix
-description: "LocalFlix: local-only Netflix-style media library"
+name: freak_flix
+description: "Freak-Flix: local-only Netflix-style media library"
 publish_to: "none"
 version: 1.0.0+1
 
@@ -12,7 +12,7 @@ dependencies:
   provider: ^6.1.2         # state management
   file_picker: ^8.1.2      # folder/file picker (desktop + mobile)
   path: ^1.9.0             # path helpers
-  http: ^1.2.2             # OMDb + AniList calls
+  http: ^1.2.2             # Trakt + AniList calls
   shared_preferences: ^2.3.3 # local persistence & caching
   collection: ^1.18.0
   media_kit: ^1.1.10

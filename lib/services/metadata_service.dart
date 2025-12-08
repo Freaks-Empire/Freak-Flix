@@ -1,11 +1,11 @@
 import '../models/media_item.dart';
 import '../providers/settings_provider.dart';
 import 'anilist_service.dart';
-import 'omdb_service.dart';
+import 'trakt_service.dart';
 
 class MetadataService {
-  final OmdbService _omdb = OmdbService();
   final AniListService _ani = AniListService();
+  final TraktService _trakt = TraktService();
   final SettingsProvider settings;
 
   MetadataService(this.settings);
@@ -25,7 +25,7 @@ class MetadataService {
     // If user prefers AniList, keep AniList result even for non-anime types.
     if (preferAniList) return aniCandidate;
 
-    // Otherwise fall back to OMDb (movies/TV). OMDb key is required for this path.
-    return _omdb.enrichWithOmdb(item);
+    // Otherwise fall back to Trakt (movies/TV/anime detection via genres).
+    return _trakt.enrichWithTrakt(item);
   }
 }

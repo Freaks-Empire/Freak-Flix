@@ -9,14 +9,14 @@ import 'screens/anime_screen.dart';
 import 'screens/settings_screen.dart';
 import 'widgets/nav_bar.dart';
 
-class LocalFlixApp extends StatefulWidget {
-  const LocalFlixApp({super.key});
+class FreakFlixApp extends StatefulWidget {
+  const FreakFlixApp({super.key});
 
   @override
-  State<LocalFlixApp> createState() => _LocalFlixAppState();
+  State<FreakFlixApp> createState() => _FreakFlixAppState();
 }
 
-class _LocalFlixAppState extends State<LocalFlixApp> {
+class _FreakFlixAppState extends State<FreakFlixApp> {
   int _index = 0;
   final _pages = const [
     HomeScreen(),
@@ -32,7 +32,7 @@ class _LocalFlixAppState extends State<LocalFlixApp> {
     final library = context.watch<LibraryProvider>();
     final dark = settings.isDarkMode;
     return MaterialApp(
-      title: 'LocalFlix',
+      title: 'Freak-Flix',
       debugShowCheckedModeBanner: false,
       themeMode: dark ? ThemeMode.dark : ThemeMode.light,
       theme: ThemeData(

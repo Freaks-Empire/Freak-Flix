@@ -19,8 +19,11 @@ class NavBar extends StatelessWidget {
       onDestinationSelected: onTap,
       labelType: NavigationRailLabelType.all,
       leading: const Padding(
-        padding: EdgeInsets.all(8.0),
-        child: FlutterLogo(size: 32),
+        padding: EdgeInsets.all(12.0),
+        child: Text(
+          'Freak Flix',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
       ),
       destinations: [
         for (final item in items)

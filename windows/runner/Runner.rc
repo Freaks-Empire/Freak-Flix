@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "localflix" "\0"
+               VALUE "FileDescription", "Freak-Flix" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "localflix" "\0"
+                VALUE "InternalName", "Freak-Flix" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2025 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "localflix.exe" "\0"
-            VALUE "ProductName", "localflix" "\0"
+                VALUE "OriginalFilename", "Freak-Flix.exe" "\0"
+                VALUE "ProductName", "Freak-Flix" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

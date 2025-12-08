@@ -1,8 +1,8 @@
-// LocalFlix quick start:
+// Freak-Flix quick start:
 // 1) flutter pub get
 // 2) Desktop: flutter run -d windows|macos|linux (enable desktop support in SDK)
 //    Android: flutter run -d android (emulator or device)
-// 3) Configure OMDb API key in lib/services/omdb_service.dart (const _omdbApiKey)
+// 3) Configure Trakt Client ID in lib/services/trakt_service.dart (const _traktClientId)
 // 4) AniList uses the public endpoint; adjust query in lib/services/anilist_service.dart
 // 5) Add new providers in lib/services/metadata_service.dart if you integrate more sources.
 //
@@ -38,7 +38,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => playbackProvider),
         Provider<MetadataService>.value(value: metadataService),
       ],
-      child: const LocalFlixApp(),
+      child: const FreakFlixApp(),
     ),
   );
 }

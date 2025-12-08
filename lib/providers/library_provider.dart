@@ -140,6 +140,22 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateItem(MediaItem updated) async {
+    final index = items.indexWhere((i) => i.id == updated.id);
+    if (index == -1) return;
+    items[index] = updated;
+    notifyListeners();
+    await saveLibrary();
+  }
+
+  void updateItem(MediaItem updated) {
+    final idx = items.indexWhere((i) => i.id == updated.id);
+    if (idx == -1) return;
+    items[idx] = updated;
+    notifyListeners();
+    saveLibrary();
+  }
+
   List<MediaItem> get movies => items.where((i) => i.type == MediaType.movie).toList();
   List<MediaItem> get tv => items.where((i) => i.type == MediaType.tv).toList();
   List<MediaItem> get anime => items.where((i) => i.type == MediaType.anime).toList();
