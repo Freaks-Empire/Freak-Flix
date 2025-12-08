@@ -242,3 +242,4 @@ class TraktService {
     if (item.season != null || item.episode != null) return true;
     return RegExp(r'[Ss]\d{1,2}[Ee]\d{1,3}').hasMatch(item.fileName);
   }
+}
