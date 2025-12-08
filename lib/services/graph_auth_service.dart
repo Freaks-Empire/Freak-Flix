@@ -6,8 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Handles Microsoft Graph authentication using the device code flow.
 class GraphAuthService {
-  /// Replace with your tenant or leave as 'organizations'/'consumers' depending on account type.
-  static const String _tenant = 'organizations';
+  /// Tenant set to 'common' to support both personal (MSA) and work/school accounts.
+  static const String _tenant = 'common';
 
   /// TODO: replace with your real Azure AD application (client) ID.
   static const String _clientId = 'YOUR_CLIENT_ID_HERE';
