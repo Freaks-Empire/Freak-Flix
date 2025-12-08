@@ -159,14 +159,18 @@ class LibraryProvider extends ChangeNotifier {
 
   List<MediaItem> get movies => items.where((i) => i.type == MediaType.movie).toList();
 
-  // Group TV/anime by showKey and aggregate episodes under one show card.
-  List<MediaItem> get tv => _groupShows(items.where((i) => i.type == MediaType.tv));
+    // Group TV/anime by showKey and aggregate episodes under one show card.
+    // TV tab excludes anime; Anime tab shows only anime.
+    List<MediaItem> get tv =>
+      _groupShows(items.where((i) => i.type == MediaType.tv && !i.isAnime));
 
-  List<MediaItem> get anime => _groupShows(items.where((i) => i.type == MediaType.tv && i.isAnime));
+    List<MediaItem> get anime =>
+      _groupShows(items.where((i) => i.type == MediaType.tv && i.isAnime));
 
-  List<TvShowGroup> get groupedTvShows => _groupShowsToGroups(items.where((i) => i.type == MediaType.tv));
+    List<TvShowGroup> get groupedTvShows =>
+      _groupShowsToGroups(items.where((i) => i.type == MediaType.tv && !i.isAnime));
 
-  List<TvShowGroup> get groupedAnimeShows =>
+    List<TvShowGroup> get groupedAnimeShows =>
       _groupShowsToGroups(items.where((i) => i.type == MediaType.tv && i.isAnime));
 
   List<MediaItem> get continueWatching =>
