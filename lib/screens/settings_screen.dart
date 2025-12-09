@@ -1,14 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/settings_provider.dart';
 import '../providers/library_provider.dart';
-import '../services/metadata_service.dart';
+import '../providers/settings_provider.dart';
 import '../services/graph_auth_service.dart';
-import 'onedrive_browser_screen.dart';
+import '../services/metadata_service.dart';
 
-class SettingsScreen extends StatelessWidget {
-  static final GraphAuthService _graphAuth = GraphAuthService();
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final GraphAuthService _graphAuth = GraphAuthService();
+  bool _oneDriveLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _graphAuth.loadFromPrefs().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,16 +59,60 @@ class SettingsScreen extends StatelessWidget {
           onPressed: () => library.clear(),
           child: const Text('Clear Library'),
         ),
-        const SizedBox(height: 12),
-        ElevatedButton(
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => OneDriveBrowserScreen(auth: _graphAuth),
-              ),
-            );
-          },
-          child: const Text('Browse OneDrive (stream)'),
+        const SizedBox(height: 24),
+        Text('Cloud accounts', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        Card(
+          child: ListTile(
+            title: const Text('OneDrive account'),
+            subtitle: Text(
+              _graphAuth.isConnected
+                  ? 'Connected as ${_graphAuth.currentUser?.userPrincipalName ?? 'Unknown user'}'
+                  : 'Not connected',
+            ),
+            trailing: _oneDriveLoading
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : TextButton(
+                    onPressed: () async {
+                      setState(() => _oneDriveLoading = true);
+                      try {
+                        if (!_graphAuth.isConnected) {
+                          final user = await _graphAuth.connectWithDeviceCode();
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  'Connected to OneDrive as ${user.userPrincipalName}'),
+                            ),
+                          );
+                        } else {
+                          await _graphAuth.disconnect();
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Disconnected from OneDrive'),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('OneDrive error: $e')),
+                        );
+                      } finally {
+                        if (mounted) {
+                          setState(() => _oneDriveLoading = false);
+                        }
+                      }
+                    },
+                    child:
+                        Text(_graphAuth.isConnected ? 'Disconnect' : 'Connect'),
+                  ),
+          ),
         ),
         const Divider(height: 32),
         Text('Preferences', style: Theme.of(context).textTheme.titleLarge),
