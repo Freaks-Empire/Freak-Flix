@@ -20,13 +20,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final GraphAuthService _graphAuth = GraphAuthService();
   bool _oneDriveLoading = false;
   LibraryType _pendingType = LibraryType.movies;
+  late final TextEditingController _tmdbController;
+  bool _initializedTmdb = false;
 
   @override
   void initState() {
     super.initState();
+    _tmdbController = TextEditingController();
     _graphAuth.loadFromPrefs().then((_) {
       if (mounted) setState(() {});
     });
+  }
+
+  @override
+  void dispose() {
+    _tmdbController.dispose();
+    super.dispose();
   }
 
   @override
@@ -34,6 +43,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final settings = context.watch<SettingsProvider>();
     final library = context.watch<LibraryProvider>();
     final metadata = Provider.of<MetadataService>(context, listen: false);
+
+    if (!_initializedTmdb) {
+      _tmdbController.text = settings.tmdbApiKey;
+      _initializedTmdb = true;
+    }
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -174,6 +188,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const Divider(height: 32),
         Text('Preferences', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        Text('Metadata', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _tmdbController,
+          decoration: const InputDecoration(
+            labelText: 'TMDB API key',
+            hintText: 'Paste your TMDB v3 API key',
+            helperText: 'Create a free account at themoviedb.org → Settings → API → v3 key.',
+            border: OutlineInputBorder(),
+          ),
+          onChanged: (value) => settings.setTmdbApiKey(value),
+          onSubmitted: (value) => settings.setTmdbApiKey(value),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'This product uses the TMDB API but is not endorsed or certified by TMDB.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
         SwitchListTile(
           title: const Text('Prefer AniList for anime'),
           value: settings.preferAniListForAnime,

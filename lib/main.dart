@@ -11,6 +11,8 @@
 // - Playback now uses flutter_mpv (MPV); for advanced engines replace MpvController via FFI later.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
 import 'app.dart';
 import 'providers/library_provider.dart';
@@ -18,10 +20,9 @@ import 'providers/playback_provider.dart';
 import 'providers/settings_provider.dart';
 import 'services/metadata_service.dart';
 
-import 'package:media_kit/media_kit.dart';
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: '.env');
   MediaKit.ensureInitialized();
   final settingsProvider = SettingsProvider();
   await settingsProvider.load();

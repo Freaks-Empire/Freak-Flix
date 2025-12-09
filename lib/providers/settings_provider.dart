@@ -9,6 +9,7 @@ class SettingsProvider extends ChangeNotifier {
   bool preferAniListForAnime = true;
   bool autoFetchAfterScan = true;
   String? lastScannedFolder;
+  String tmdbApiKey = '';
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -19,6 +20,7 @@ class SettingsProvider extends ChangeNotifier {
     preferAniListForAnime = data['preferAniListForAnime'] as bool? ?? true;
     autoFetchAfterScan = data['autoFetchAfterScan'] as bool? ?? true;
     lastScannedFolder = data['lastScannedFolder'] as String?;
+    tmdbApiKey = data['tmdbApiKey'] as String? ?? '';
     notifyListeners();
   }
 
@@ -31,6 +33,7 @@ class SettingsProvider extends ChangeNotifier {
         'preferAniListForAnime': preferAniListForAnime,
         'autoFetchAfterScan': autoFetchAfterScan,
         'lastScannedFolder': lastScannedFolder,
+        'tmdbApiKey': tmdbApiKey,
       }),
     );
   }
@@ -55,6 +58,12 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> setLastFolder(String? path) async {
     lastScannedFolder = path;
+    await save();
+    notifyListeners();
+  }
+
+  Future<void> setTmdbApiKey(String? value) async {
+    tmdbApiKey = (value?.trim().isEmpty ?? true) ? '' : value!.trim();
     await save();
     notifyListeners();
   }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -43,11 +44,15 @@ class GraphAccount {
 }
 
 class GraphAuthService {
-  // Values injected via --dart-define (see CI workflow). Tenant defaults to 'common'.
-  static const _tenant =
-      String.fromEnvironment('GRAPH_TENANT_ID', defaultValue: 'common');
-  static const _clientId =
-      String.fromEnvironment('GRAPH_CLIENT_ID', defaultValue: '');
+  // Prefer .env values; fall back to --dart-define for CI/CLI usage.
+  static String get _tenant =>
+    dotenv.env['AZURE_TENANT_ID'] ??
+    String.fromEnvironment('GRAPH_TENANT_ID', defaultValue: 'common');
+  static String get _clientId =>
+    dotenv.env['AZURE_CLIENT_ID'] ??
+    String.fromEnvironment('GRAPH_CLIENT_ID', defaultValue: '');
+  static String get _redirectUri =>
+    dotenv.env['AZURE_REDIRECT_URI'] ?? 'freakflix://auth';
 
   static const _scopes = [
     'User.Read',
