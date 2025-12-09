@@ -4,6 +4,7 @@ import '../providers/library_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/graph_auth_service.dart';
 import '../services/metadata_service.dart';
+import 'onedrive_folder_picker.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -114,6 +115,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
           ),
         ),
+        if (_graphAuth.isConnected) ...[
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: _oneDriveLoading
+                ? null
+                : () async {
+                    setState(() => _oneDriveLoading = true);
+                    try {
+                      final selection = await Navigator.of(context)
+                          .push<OneDriveFolderSelection>(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              OneDriveFolderPicker(auth: _graphAuth),
+                        ),
+                      );
+                      if (selection != null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content: Text(
+                                  'Selected OneDrive folder ${selection.path}')),
+                        );
+                        await library.scanOneDriveFolder(
+                          auth: _graphAuth,
+                          folderId: selection.id,
+                          folderPath: selection.path,
+                          metadata: metadata,
+                        );
+                      }
+                    } catch (e) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('OneDrive error: $e')),
+                      );
+                    } finally {
+                      if (mounted) setState(() => _oneDriveLoading = false);
+                    }
+                  },
+            child: const Text('Choose OneDrive folder'),
+          ),
+        ],
         const Divider(height: 32),
         Text('Preferences', style: Theme.of(context).textTheme.titleLarge),
         SwitchListTile(

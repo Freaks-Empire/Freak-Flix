@@ -91,6 +91,9 @@ class MediaItem {
   int? runtimeMinutes;
   List<String> genres;
 
+  // Optional streaming URL for remote items (e.g., OneDrive).
+  String? streamUrl;
+
   bool isAnime;
   int? tmdbId;
   String? showKey;
@@ -125,6 +128,7 @@ class MediaItem {
     this.isWatched = false,
     this.lastPositionSeconds = 0,
     this.totalDurationSeconds,
+    this.streamUrl,
   });
 
   MediaItem copyWith({
@@ -146,6 +150,7 @@ class MediaItem {
     bool? isWatched,
     int? lastPositionSeconds,
     int? totalDurationSeconds,
+    String? streamUrl,
   }) {
     return MediaItem(
       id: id,
@@ -172,6 +177,7 @@ class MediaItem {
       isWatched: isWatched ?? this.isWatched,
       lastPositionSeconds: lastPositionSeconds ?? this.lastPositionSeconds,
       totalDurationSeconds: totalDurationSeconds ?? this.totalDurationSeconds,
+      streamUrl: streamUrl ?? this.streamUrl,
     );
   }
 
@@ -200,6 +206,7 @@ class MediaItem {
         'isWatched': isWatched,
         'lastPositionSeconds': lastPositionSeconds,
         'totalDurationSeconds': totalDurationSeconds,
+        'streamUrl': streamUrl,
       };
 
   factory MediaItem.fromJson(Map<String, dynamic> json) {
@@ -230,13 +237,17 @@ class MediaItem {
       isWatched: json['isWatched'] as bool? ?? false,
       lastPositionSeconds: json['lastPositionSeconds'] as int? ?? 0,
       totalDurationSeconds: json['totalDurationSeconds'] as int?,
+      streamUrl: json['streamUrl'] as String?,
     );
   }
 
   static List<MediaItem> listFromJson(String raw) {
     final decoded = jsonDecode(raw) as List<dynamic>;
-    return decoded.map((e) => MediaItem.fromJson(e as Map<String, dynamic>)).toList();
+    return decoded
+        .map((e) => MediaItem.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
-  static String listToJson(List<MediaItem> items) => jsonEncode(items.map((e) => e.toJson()).toList());
+  static String listToJson(List<MediaItem> items) =>
+      jsonEncode(items.map((e) => e.toJson()).toList());
 }

@@ -28,16 +28,14 @@ class _DetailsScreenState extends State<DetailsScreen> {
     final library = context.watch<LibraryProvider>();
 
     // Build an episode list from the library using the same showKey/folder grouping.
-    List<MediaItem> episodes = library.items
-        .where((m) => m.type == MediaType.tv)
-        .where((m) {
-          final key = m.showKey;
-          if (key != null && key.isNotEmpty && _current.showKey != null) {
-            return key == _current.showKey;
-          }
-          return m.folderPath.toLowerCase() == _current.folderPath.toLowerCase();
-        })
-        .toList();
+    List<MediaItem> episodes =
+        library.items.where((m) => m.type == MediaType.tv).where((m) {
+      final key = m.showKey;
+      if (key != null && key.isNotEmpty && _current.showKey != null) {
+        return key == _current.showKey;
+      }
+      return m.folderPath.toLowerCase() == _current.folderPath.toLowerCase();
+    }).toList();
 
     if (episodes.isEmpty) {
       episodes = [_current];
@@ -63,14 +61,17 @@ class _DetailsScreenState extends State<DetailsScreen> {
               child: Image.network(_current.backdropUrl!, fit: BoxFit.cover),
             ),
           const SizedBox(height: 12),
-          Text(_current.title ?? _current.fileName, style: Theme.of(context).textTheme.headlineSmall),
-          Text('${_current.year ?? ''} • ${_current.runtimeMinutes ?? '--'} min • ${_current.rating ?? '--'}/10'),
+          Text(_current.title ?? _current.fileName,
+              style: Theme.of(context).textTheme.headlineSmall),
+          Text(
+              '${_current.year ?? ''} • ${_current.runtimeMinutes ?? '--'} min • ${_current.rating ?? '--'}/10'),
           if (_current.genres.isNotEmpty) Text(_current.genres.join(', ')),
           const SizedBox(height: 12),
           Text(_current.overview ?? 'No overview available.'),
           if (hasEpisodes) ...[
             const SizedBox(height: 16),
-            Text('Episodes (${episodes.length})', style: Theme.of(context).textTheme.titleMedium),
+            Text('Episodes (${episodes.length})',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             SizedBox(
               height: 44,
@@ -79,20 +80,27 @@ class _DetailsScreenState extends State<DetailsScreen> {
                 itemCount: episodes.length,
                 itemBuilder: (context, index) {
                   final ep = episodes[index];
-                  final label = 'S${(ep.season ?? 1).toString().padLeft(2, '0')}E${(ep.episode ?? (index + 1)).toString().padLeft(2, '0')}';
+                  final label =
+                      'S${(ep.season ?? 1).toString().padLeft(2, '0')}E${(ep.episode ?? (index + 1)).toString().padLeft(2, '0')}';
                   final isSelected = ep.id == _current.id;
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
-                        backgroundColor: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
+                        backgroundColor: isSelected
+                            ? Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withOpacity(0.1)
+                            : null,
                       ),
                       onPressed: () {
                         setState(() => _current = ep);
                         playback.start(ep);
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => VideoPlayerScreen(filePath: ep.filePath),
+                            builder: (_) => VideoPlayerScreen(
+                                filePath: ep.streamUrl ?? ep.filePath),
                           ),
                         );
                       },
@@ -118,8 +126,10 @@ class _DetailsScreenState extends State<DetailsScreen> {
                   library.updateItem(_current);
                 },
                 items: const [
-                  DropdownMenuItem(value: MediaType.unknown, child: Text('Auto')),
-                  DropdownMenuItem(value: MediaType.movie, child: Text('Movie')),
+                  DropdownMenuItem(
+                      value: MediaType.unknown, child: Text('Auto')),
+                  DropdownMenuItem(
+                      value: MediaType.movie, child: Text('Movie')),
                   DropdownMenuItem(value: MediaType.tv, child: Text('TV')),
                 ],
               ),
@@ -129,7 +139,9 @@ class _DetailsScreenState extends State<DetailsScreen> {
             value: _current.isAnime,
             title: const Text('Anime'),
             onChanged: (val) {
-              final nextType = val && _current.type == MediaType.unknown ? MediaType.tv : _current.type;
+              final nextType = val && _current.type == MediaType.unknown
+                  ? MediaType.tv
+                  : _current.type;
               final updated = _current.copyWith(isAnime: val, type: nextType);
               setState(() => _current = updated);
               library.updateItem(updated);
@@ -143,7 +155,10 @@ class _DetailsScreenState extends State<DetailsScreen> {
                 onPressed: () {
                   playback.start(_current);
                   Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => VideoPlayerScreen(filePath: _current.filePath)),
+                    MaterialPageRoute(
+                      builder: (_) => VideoPlayerScreen(
+                          filePath: _current.streamUrl ?? _current.filePath),
+                    ),
                   );
                 },
                 icon: const Icon(Icons.play_arrow),
@@ -151,13 +166,14 @@ class _DetailsScreenState extends State<DetailsScreen> {
               ),
               OutlinedButton(
                 onPressed: () {
-                  final updated =
-                      _current.copyWith(isWatched: !_current.isWatched, lastPositionSeconds: 0);
+                  final updated = _current.copyWith(
+                      isWatched: !_current.isWatched, lastPositionSeconds: 0);
                   setState(() => _current = updated);
                   library.updateItem(updated);
                   Navigator.of(context).pop();
                 },
-                child: Text(_current.isWatched ? 'Mark Unwatched' : 'Mark Watched'),
+                child: Text(
+                    _current.isWatched ? 'Mark Unwatched' : 'Mark Watched'),
               ),
             ],
           ),

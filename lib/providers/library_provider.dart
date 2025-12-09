@@ -1,10 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/media_item.dart';
+import '../services/graph_auth_service.dart';
 import '../services/metadata_service.dart';
 import 'settings_provider.dart';
 import '../utils/filename_parser.dart';
@@ -33,8 +36,11 @@ class LibraryProvider extends ChangeNotifier {
       final inferredType = _inferTypeFromPath(items[i]);
       final inferredAnime = _inferAnimeFromPath(items[i]);
       final updatedItem = items[i].copyWith(
-        title: parsed.seriesTitle.isNotEmpty ? parsed.seriesTitle : items[i].title,
-        season: items[i].season ?? parsed.season ?? (parsed.episode != null ? 1 : null),
+        title:
+            parsed.seriesTitle.isNotEmpty ? parsed.seriesTitle : items[i].title,
+        season: items[i].season ??
+            parsed.season ??
+            (parsed.episode != null ? 1 : null),
         episode: items[i].episode ?? parsed.episode,
         type: inferredType,
         isAnime: inferredAnime,
@@ -83,11 +89,12 @@ class LibraryProvider extends ChangeNotifier {
           return;
         }
         settings.setLastFolder(path);
-        
+
         // Spawn isolate for streaming background scanning
         final port = ReceivePort();
-        await Isolate.spawn(_scanDirectoryInIsolate, _ScanRequest(port.sendPort, path));
-        
+        await Isolate.spawn(
+            _scanDirectoryInIsolate, _ScanRequest(port.sendPort, path));
+
         final scannedItems = <MediaItem>[];
         await for (final message in port) {
           if (message is String) {
@@ -99,7 +106,7 @@ class LibraryProvider extends ChangeNotifier {
             break; // Done
           }
         }
-        
+
         scanningStatus = 'Finalizing...';
         notifyListeners();
         await _ingestItems(scannedItems, metadata);
@@ -117,19 +124,21 @@ class LibraryProvider extends ChangeNotifier {
   Future<void> _ingestFiles(List<File> files, MetadataService? metadata) async {
     final newItems = <MediaItem>[];
     for (final f in files) {
-       if (_isVideo(f.path)) {
-         newItems.add(_parseFile(f));
-       }
+      if (_isVideo(f.path)) {
+        newItems.add(_parseFile(f));
+      }
     }
     await _ingestItems(newItems, metadata);
   }
 
-  Future<void> _ingestItems(List<MediaItem> newItems, MetadataService? metadata) async {
+  Future<void> _ingestItems(
+      List<MediaItem> newItems, MetadataService? metadata) async {
     final map = {for (var i in items) i.filePath: i};
     for (final item in newItems) {
       map[item.filePath] = item;
     }
-    items = map.values.toList()..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+    items = map.values.toList()
+      ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
     notifyListeners();
 
     if (settings.autoFetchAfterScan && metadata != null) {
@@ -157,33 +166,144 @@ class LibraryProvider extends ChangeNotifier {
     await saveLibrary();
   }
 
-  List<MediaItem> get movies => items.where((i) => i.type == MediaType.movie).toList();
+  List<MediaItem> get movies =>
+      items.where((i) => i.type == MediaType.movie).toList();
 
-    // Group TV/anime by showKey and aggregate episodes under one show card.
-    // TV tab excludes anime; Anime tab shows only anime.
-    List<MediaItem> get tv =>
+  // Group TV/anime by showKey and aggregate episodes under one show card.
+  // TV tab excludes anime; Anime tab shows only anime.
+  List<MediaItem> get tv =>
       _groupShows(items.where((i) => i.type == MediaType.tv && !i.isAnime));
 
-    List<MediaItem> get anime =>
+  List<MediaItem> get anime =>
       _groupShows(items.where((i) => i.type == MediaType.tv && i.isAnime));
 
-    List<TvShowGroup> get groupedTvShows =>
-      _groupShowsToGroups(items.where((i) => i.type == MediaType.tv && !i.isAnime));
+  List<TvShowGroup> get groupedTvShows => _groupShowsToGroups(
+      items.where((i) => i.type == MediaType.tv && !i.isAnime));
 
-    List<TvShowGroup> get groupedAnimeShows =>
-      _groupShowsToGroups(items.where((i) => i.type == MediaType.tv && i.isAnime));
+  List<TvShowGroup> get groupedAnimeShows => _groupShowsToGroups(
+      items.where((i) => i.type == MediaType.tv && i.isAnime));
 
   List<MediaItem> get continueWatching =>
       items.where((i) => i.lastPositionSeconds > 0 && !i.isWatched).toList();
 
   List<MediaItem> get recentlyAdded {
-    final sorted = [...items]..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+    final sorted = [...items]
+      ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
     return sorted.take(20).toList();
   }
 
   List<MediaItem> get topRated {
-    final sorted = [...items]..sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
+    final sorted = [...items]
+      ..sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
     return sorted.take(20).toList();
+  }
+
+  Future<void> scanOneDriveFolder({
+    required GraphAuthService auth,
+    required String folderId,
+    required String folderPath,
+    MetadataService? metadata,
+  }) async {
+    error = null;
+    isLoading = true;
+    scanningStatus = 'Scanning OneDrive folder...';
+    notifyListeners();
+
+    try {
+      final token = await auth.getOrLoginWithDeviceCode();
+      final normalizedPath = folderPath.isEmpty ? '/' : folderPath;
+      final collected = <MediaItem>[];
+      await _walkOneDriveFolder(token, folderId, normalizedPath, collected);
+
+      scanningStatus = 'Found ${collected.length} videos. Ingesting...';
+      notifyListeners();
+      await _ingestItems(collected, metadata);
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      isLoading = false;
+      scanningStatus = '';
+      notifyListeners();
+      await saveLibrary();
+    }
+  }
+}
+
+Future<void> _walkOneDriveFolder(
+  String token,
+  String folderId,
+  String currentPath,
+  List<MediaItem> out,
+) async {
+  final url = Uri.parse(
+      'https://graph.microsoft.com/v1.0/me/drive/items/$folderId/children');
+  await _walkOneDrivePage(token, url, currentPath, out);
+}
+
+Future<void> _walkOneDrivePage(
+  String token,
+  Uri url,
+  String currentPath,
+  List<MediaItem> out,
+) async {
+  final res = await http.get(url, headers: {'Authorization': 'Bearer $token'});
+  if (res.statusCode != 200) {
+    throw Exception('Graph error: ${res.statusCode} ${res.body}');
+  }
+
+  final body = jsonDecode(res.body) as Map<String, dynamic>;
+  final values = body['value'] as List<dynamic>? ?? <dynamic>[];
+
+  for (final raw in values) {
+    final m = raw as Map<String, dynamic>;
+    final isFolder = m['folder'] != null;
+    final name = m['name'] as String? ?? '';
+    final id = m['id'] as String? ?? '';
+    final nextPath = currentPath == '/' ? '/$name' : '$currentPath/$name';
+
+    if (isFolder) {
+      await _walkOneDriveFolder(token, id, nextPath, out);
+      continue;
+    }
+
+    if (!_isVideo(name)) continue;
+
+    final downloadUrl = m['@microsoft.graph.downloadUrl'] as String?;
+    if (downloadUrl == null) continue;
+
+    final lastModifiedRaw = m['lastModifiedDateTime'] as String?;
+    final lastModified =
+        DateTime.tryParse(lastModifiedRaw ?? '') ?? DateTime.now();
+    final size = (m['size'] as num?)?.toInt() ?? 0;
+    final parsed = FilenameParser.parse(name);
+    final animeHint = nextPath.toLowerCase().contains('anime');
+    final type = (parsed.season != null || parsed.episode != null || animeHint)
+        ? MediaType.tv
+        : MediaType.movie;
+    final showKey =
+        currentPath.toLowerCase().isEmpty ? null : currentPath.toLowerCase();
+
+    out.add(MediaItem(
+      id: 'onedrive_$id',
+      filePath: 'onedrive:$nextPath',
+      streamUrl: downloadUrl,
+      fileName: name,
+      folderPath: currentPath,
+      sizeBytes: size,
+      lastModified: lastModified,
+      title: parsed.seriesTitle,
+      year: parsed.year,
+      type: type,
+      season: parsed.season,
+      episode: parsed.episode,
+      isAnime: animeHint,
+      showKey: showKey,
+    ));
+  }
+
+  final nextLink = body['@odata.nextLink'] as String?;
+  if (nextLink != null) {
+    await _walkOneDrivePage(token, Uri.parse(nextLink), currentPath, out);
   }
 }
 
@@ -206,25 +326,25 @@ void _scanDirectoryInIsolate(_ScanRequest request) {
 
   try {
     request.sendPort.send('Scanning: ${request.path}...');
-    
+
     // Recursive listing can be blocking for huge dirs, but we are in an isolate.
     // However, to provide updates, we might want to manually recurse or just update periodically if possible.
     // listSync is simplest but doesn't allow mid-stream updates easily unless we iterate the iterable.
     // Let's iterate the iterable from listSync (which computes all at once usually) or use list() stream?
-    // listSync returns a List so it blocks until done. 
+    // listSync returns a List so it blocks until done.
     // Better to use Directory.list (Stream) or manual recursion for feedback.
     // For simplicity + feedback, let's use listSync but on subdirectories if we wanted granularity.
     // Actually, iterate listSync results? No, listSync blocks until the array is ready.
     // We should use Directory.listSync(recursive: true) which blocks. To show progress *during* search
     // we need manual recursion or non-recursive listSync.
-    
+
     // Let's use recursive: true for performance, but we can only report "Found X items" *after* listSync returns?
     // No, that defeats the purpose if listSync takes 30s.
     // Let's use generic manual recursion for better feedback.
-    
+
     final entities = dir.listSync(recursive: true, followLinks: false);
     request.sendPort.send('Found ${entities.length} files. Parsing...');
-    
+
     for (final f in entities) {
       if (f is File && _isVideo(f.path)) {
         items.add(_parseFile(f));
@@ -237,7 +357,7 @@ void _scanDirectoryInIsolate(_ScanRequest request) {
   } catch (e) {
     // Ignore access errors
   }
-  
+
   request.sendPort.send(items);
 }
 
@@ -287,9 +407,9 @@ MediaType _inferTypeFromPath(MediaItem item) {
   final fileName = p.basenameWithoutExtension(item.fileName).toLowerCase();
   final folderName = p.basename(item.folderPath).toLowerCase();
   final hasSeasonInFolder = RegExp(r'season[ _-]?\d{1,2}').hasMatch(folderName);
-  final hasTvPattern =
-      RegExp(r'[Ss]\d{1,2}[Ee]\d{1,3}').hasMatch(fileName) ||
-      RegExp(r'(?:^|[\s._-])(?:ep(?:isode)?\s*)?\d{1,3}(?!\d)').hasMatch(fileName) ||
+  final hasTvPattern = RegExp(r'[Ss]\d{1,2}[Ee]\d{1,3}').hasMatch(fileName) ||
+      RegExp(r'(?:^|[\s._-])(?:ep(?:isode)?\s*)?\d{1,3}(?!\d)')
+          .hasMatch(fileName) ||
       hasSeasonInFolder ||
       item.season != null ||
       item.episode != null;
@@ -373,10 +493,18 @@ List<TvShowGroup> _groupShowsToGroups(Iterable<MediaItem> source) {
     });
     final first = episodes.first;
     final parsedFirst = FilenameParser.parse(first.fileName);
-    final title = parsedFirst.seriesTitle.isNotEmpty ? parsedFirst.seriesTitle : first.title ?? first.fileName;
-    final poster = episodes.firstWhere((e) => e.posterUrl != null, orElse: () => first).posterUrl;
-    final backdrop = episodes.firstWhere((e) => e.backdropUrl != null, orElse: () => first).backdropUrl;
-    final year = episodes.firstWhere((e) => e.year != null, orElse: () => first).year ?? parsedFirst.year;
+    final title = parsedFirst.seriesTitle.isNotEmpty
+        ? parsedFirst.seriesTitle
+        : first.title ?? first.fileName;
+    final poster = episodes
+        .firstWhere((e) => e.posterUrl != null, orElse: () => first)
+        .posterUrl;
+    final backdrop = episodes
+        .firstWhere((e) => e.backdropUrl != null, orElse: () => first)
+        .backdropUrl;
+    final year =
+        episodes.firstWhere((e) => e.year != null, orElse: () => first).year ??
+            parsedFirst.year;
     final isAnime = episodes.any((e) => e.isAnime);
     return TvShowGroup(
       title: title ?? 'Unknown',

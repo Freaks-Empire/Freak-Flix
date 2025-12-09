@@ -146,4 +146,14 @@ class GraphAuthService {
       userPrincipalName: upn,
     );
   }
+
+  /// Returns an access token, performing device-code login if needed.
+  Future<String> getOrLoginWithDeviceCode() async {
+    if (_accessToken != null) return _accessToken!;
+    await connectWithDeviceCode();
+    if (_accessToken == null) {
+      throw Exception('Failed to obtain Microsoft Graph access token');
+    }
+    return _accessToken!;
+  }
 }
