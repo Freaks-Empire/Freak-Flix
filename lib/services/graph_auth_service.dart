@@ -13,11 +13,11 @@ class GraphUser {
 }
 
 class GraphAuthService {
-  // Use 'common' so both personal and org accounts work.
-  static const _tenant = 'common';
-
-  // TODO: put your real Application (client) ID here
-  static const _clientId = 'YOUR_CLIENT_ID_HERE';
+  // Values injected via --dart-define (see CI workflow). Tenant defaults to 'common'.
+  static const _tenant =
+      String.fromEnvironment('GRAPH_TENANT_ID', defaultValue: 'common');
+  static const _clientId =
+      String.fromEnvironment('GRAPH_CLIENT_ID', defaultValue: '');
 
   static const _scopes = [
     'User.Read',
@@ -66,6 +66,10 @@ class GraphAuthService {
 
   /// Connects the account using device-code flow and returns user info.
   Future<GraphUser> connectWithDeviceCode() async {
+    if (_clientId.isEmpty) {
+      throw Exception(
+          'Graph client ID missing. Provide via --dart-define=GRAPH_CLIENT_ID');
+    }
     final authority = 'https://login.microsoftonline.com/$_tenant';
     final deviceCodeUrl = Uri.parse('$authority/oauth2/v2.0/devicecode');
     final tokenUrl = Uri.parse('$authority/oauth2/v2.0/token');

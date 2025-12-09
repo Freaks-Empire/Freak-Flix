@@ -2,14 +2,14 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/media_item.dart';
 
-// Put your OMDb API key here. Free keys are available at http://www.omdbapi.com/apikey.aspx
-const _omdbApiKey = 'REPLACE_WITH_OMDB_KEY';
+// OMDb API key injected via --dart-define (free keys: http://www.omdbapi.com/apikey.aspx).
+const _omdbApiKey = String.fromEnvironment('OMDB_API_KEY', defaultValue: '');
 
 class OmdbService {
   final Map<String, Map<String, dynamic>> _cache = {};
 
   Future<MediaItem> enrichWithOmdb(MediaItem item) async {
-    if (_omdbApiKey == 'REPLACE_WITH_OMDB_KEY') return item;
+    if (_omdbApiKey.isEmpty) return item;
     final query = _normalizedKey(item);
     if (_cache.containsKey(query)) {
       return _apply(item, _cache[query]!);

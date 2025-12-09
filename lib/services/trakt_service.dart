@@ -2,11 +2,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/media_item.dart';
 
-// Put your Trakt Client ID here. Create one at https://trakt.tv/oauth/applications
-// (copy the Client ID, no secret needed for public metadata reads).
-const _traktClientId = 'REPLACE_WITH_TRAKT_CLIENT_ID';
+// Trakt client ID injected via --dart-define (no secret required for public metadata reads).
+const _traktClientId = String.fromEnvironment('TRAKT_CLIENT_ID', defaultValue: '');
 
-bool get _hasTraktKey => _traktClientId != 'REPLACE_WITH_TRAKT_CLIENT_ID' && _traktClientId.isNotEmpty;
+bool get _hasTraktKey => _traktClientId.isNotEmpty;
 
 class TraktService {
   final Map<String, Map<String, dynamic>> _cache = {};
