@@ -3,13 +3,43 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class GraphUser {
+  final String id;
   final String displayName;
   final String userPrincipalName;
 
   GraphUser({
+    required this.id,
     required this.displayName,
     required this.userPrincipalName,
   });
+}
+
+class GraphAccount {
+  final String id;
+  final String displayName;
+  final String userPrincipalName;
+  final String accessToken;
+
+  GraphAccount({
+    required this.id,
+    required this.displayName,
+    required this.userPrincipalName,
+    required this.accessToken,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'displayName': displayName,
+        'userPrincipalName': userPrincipalName,
+        'accessToken': accessToken,
+      };
+
+  factory GraphAccount.fromJson(Map<String, dynamic> json) => GraphAccount(
+        id: json['id'] as String,
+        displayName: json['displayName'] as String? ?? '',
+        userPrincipalName: json['userPrincipalName'] as String? ?? '',
+        accessToken: json['accessToken'] as String,
+      );
 }
 
 class GraphAuthService {
@@ -24,44 +54,106 @@ class GraphAuthService {
     'Files.Read',
   ];
 
-  static const _tokenKey = 'graph_token_v1';
-  static const _userNameKey = 'graph_user_name_v1';
-  static const _userUpnKey = 'graph_user_upn_v1';
+  static const _accountsKey = 'graph_accounts_v1';
+  static const _activeAccountIdKey = 'graph_active_account_v1';
 
-  String? _accessToken;
-  GraphUser? _user;
+  List<GraphAccount> _accounts = [];
+  String? _activeAccountId;
 
-  String? get accessToken => _accessToken;
-  GraphUser? get currentUser => _user;
-  bool get isConnected => _accessToken != null;
+  List<GraphAccount> get accounts => List.unmodifiable(_accounts);
+  GraphAccount? get activeAccount {
+    if (_accounts.isEmpty) return null;
+    final existing = _accounts.where((a) => a.id == _activeAccountId);
+    if (existing.isNotEmpty) return existing.first;
+    return _accounts.first;
+  }
+
+  String? get activeAccountId => activeAccount?.id;
+  bool get isConnected => _accounts.isNotEmpty;
 
   /// Load saved token and user from SharedPreferences.
   Future<void> loadFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
-    _accessToken = prefs.getString(_tokenKey);
-    final name = prefs.getString(_userNameKey);
-    final upn = prefs.getString(_userUpnKey);
-    if (_accessToken != null && upn != null) {
-      _user = GraphUser(displayName: name ?? upn, userPrincipalName: upn);
+    _activeAccountId = prefs.getString(_activeAccountIdKey);
+    final raw = prefs.getString(_accountsKey);
+    if (raw == null) {
+      _accounts = [];
+      return;
     }
+    try {
+      final list = (jsonDecode(raw) as List<dynamic>)
+          .map((e) => GraphAccount.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _accounts = list;
+      if (_activeAccountId != null &&
+          !_accounts.any((a) => a.id == _activeAccountId)) {
+        _activeAccountId = _accounts.isNotEmpty ? _accounts.first.id : null;
+      }
+    } catch (_) {
+      _accounts = [];
+      _activeAccountId = null;
+    }
+  }
+
+  Future<void> _saveAccounts() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _accountsKey,
+      jsonEncode(_accounts.map((a) => a.toJson()).toList()),
+    );
+    if (_activeAccountId != null) {
+      await prefs.setString(_activeAccountIdKey, _activeAccountId!);
+    } else {
+      await prefs.remove(_activeAccountIdKey);
+    }
+  }
+
+  Future<void> _upsertAccount(GraphAccount account) async {
+    _accounts.removeWhere((a) => a.id == account.id);
+    _accounts.add(account);
+    _activeAccountId = account.id;
+    await _saveAccounts();
+  }
+
+  Future<void> removeAccount(String accountId) async {
+    _accounts.removeWhere((a) => a.id == accountId);
+    if (_activeAccountId == accountId) {
+      _activeAccountId = _accounts.isNotEmpty ? _accounts.first.id : null;
+    }
+    await _saveAccounts();
+  }
+
+  Future<void> setActiveAccount(String accountId) async {
+    if (_accounts.any((a) => a.id == accountId)) {
+      _activeAccountId = accountId;
+      await _saveAccounts();
+    }
+  }
+
+  Future<void> clearAll() async {
+    _accounts = [];
+    _activeAccountId = null;
+    await _saveAccounts();
   }
 
   Future<void> _saveToPrefs(String token, GraphUser user) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, token);
-    await prefs.setString(_userNameKey, user.displayName);
-    await prefs.setString(_userUpnKey, user.userPrincipalName);
-    _accessToken = token;
-    _user = user;
+    // Back-compat: store latest single token so old callers still work during migration.
+    await prefs.setString('graph_token_v1', token);
+    await prefs.setString('graph_user_name_v1', user.displayName);
+    await prefs.setString('graph_user_upn_v1', user.userPrincipalName);
+
+    final account = GraphAccount(
+      id: user.id,
+      displayName: user.displayName,
+      userPrincipalName: user.userPrincipalName,
+      accessToken: token,
+    );
+    await _upsertAccount(account);
   }
 
   Future<void> disconnect() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_tokenKey);
-    await prefs.remove(_userNameKey);
-    await prefs.remove(_userUpnKey);
-    _accessToken = null;
-    _user = null;
+    await clearAll();
   }
 
   /// Connects the account using device-code flow and returns user info.
@@ -143,9 +235,11 @@ class GraphAuthService {
           'Failed to fetch user profile: ${res.statusCode} ${res.body}');
     }
     final json = jsonDecode(res.body) as Map<String, dynamic>;
+    final id = (json['id'] as String?) ?? '';
     final displayName = (json['displayName'] as String?) ?? '';
     final upn = (json['userPrincipalName'] as String?) ?? '';
     return GraphUser(
+      id: id.isEmpty ? upn : id,
       displayName: displayName.isEmpty ? upn : displayName,
       userPrincipalName: upn,
     );
@@ -153,11 +247,13 @@ class GraphAuthService {
 
   /// Returns an access token, performing device-code login if needed.
   Future<String> getOrLoginWithDeviceCode() async {
-    if (_accessToken != null) return _accessToken!;
+    final active = activeAccount;
+    if (active != null) return active.accessToken;
     await connectWithDeviceCode();
-    if (_accessToken == null) {
+    final newActive = activeAccount;
+    if (newActive == null) {
       throw Exception('Failed to obtain Microsoft Graph access token');
     }
-    return _accessToken!;
+    return newActive.accessToken;
   }
 }

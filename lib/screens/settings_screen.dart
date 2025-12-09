@@ -64,97 +64,132 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Text('Cloud accounts', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
         Card(
-          child: ListTile(
-            title: const Text('OneDrive account'),
-            subtitle: Text(
-              _graphAuth.isConnected
-                  ? 'Connected as ${_graphAuth.currentUser?.userPrincipalName ?? 'Unknown user'}'
-                  : 'Not connected',
-            ),
-            trailing: _oneDriveLoading
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text('OneDrive accounts',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                    TextButton.icon(
+                      onPressed: _oneDriveLoading
+                          ? null
+                          : () async {
+                              setState(() => _oneDriveLoading = true);
+                              try {
+                                final user =
+                                    await _graphAuth.connectWithDeviceCode();
+                                if (!mounted) return;
+                                setState(() {});
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                        'Connected as ${user.userPrincipalName}'),
+                                  ),
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('OneDrive error: $e')),
+                                );
+                              } finally {
+                                if (mounted)
+                                  setState(() => _oneDriveLoading = false);
+                              }
+                            },
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add account'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (_oneDriveLoading)
+                  const LinearProgressIndicator(minHeight: 2),
+                if (_graphAuth.accounts.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text('No OneDrive accounts connected.'),
                   )
-                : TextButton(
-                    onPressed: () async {
-                      setState(() => _oneDriveLoading = true);
-                      try {
-                        if (!_graphAuth.isConnected) {
-                          final user = await _graphAuth.connectWithDeviceCode();
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                  'Connected to OneDrive as ${user.userPrincipalName}'),
-                            ),
-                          );
-                        } else {
-                          await _graphAuth.disconnect();
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Disconnected from OneDrive'),
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('OneDrive error: $e')),
-                        );
-                      } finally {
-                        if (mounted) {
-                          setState(() => _oneDriveLoading = false);
-                        }
-                      }
-                    },
-                    child:
-                        Text(_graphAuth.isConnected ? 'Disconnect' : 'Connect'),
+                else
+                  ..._graphAuth.accounts.map(
+                    (account) => RadioListTile<String>(
+                      value: account.id,
+                      groupValue: _graphAuth.activeAccountId,
+                      title: Text(account.displayName.isNotEmpty
+                          ? account.displayName
+                          : account.userPrincipalName),
+                      subtitle: Text(account.userPrincipalName),
+                      onChanged: (value) async {
+                        if (value == null) return;
+                        await _graphAuth.setActiveAccount(value);
+                        if (mounted) setState(() {});
+                      },
+                      secondary: IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        tooltip: 'Remove account',
+                        onPressed: () async {
+                          await _graphAuth.removeAccount(account.id);
+                          if (mounted) setState(() {});
+                        },
+                      ),
+                    ),
                   ),
+                if (_graphAuth.accounts.isNotEmpty)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () async {
+                        await _graphAuth.disconnect();
+                        if (mounted) setState(() {});
+                      },
+                      child: const Text('Disconnect all'),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
-        if (_graphAuth.isConnected) ...[
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: _oneDriveLoading
-                ? null
-                : () async {
-                    setState(() => _oneDriveLoading = true);
-                    try {
-                      final selection = await Navigator.of(context)
-                          .push<OneDriveFolderSelection>(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              OneDriveFolderPicker(auth: _graphAuth),
-                        ),
-                      );
-                      if (selection != null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                              content: Text(
-                                  'Selected OneDrive folder ${selection.path}')),
-                        );
-                        await library.scanOneDriveFolder(
-                          auth: _graphAuth,
-                          folderId: selection.id,
-                          folderPath: selection.path,
-                          metadata: metadata,
-                        );
-                      }
-                    } catch (e) {
-                      if (!mounted) return;
+        const SizedBox(height: 12),
+        FilledButton(
+          onPressed: _oneDriveLoading || _graphAuth.activeAccount == null
+              ? null
+              : () async {
+                  setState(() => _oneDriveLoading = true);
+                  try {
+                    final selection = await Navigator.of(context)
+                        .push<OneDriveFolderSelection>(
+                      MaterialPageRoute(
+                        builder: (_) => OneDriveFolderPicker(auth: _graphAuth),
+                      ),
+                    );
+                    if (selection != null) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('OneDrive error: $e')),
+                        SnackBar(
+                            content: Text(
+                                'Selected OneDrive folder ${selection.path}')),
                       );
-                    } finally {
-                      if (mounted) setState(() => _oneDriveLoading = false);
+                      await library.scanOneDriveFolder(
+                        auth: _graphAuth,
+                        folderId: selection.id,
+                        folderPath: selection.path,
+                        metadata: metadata,
+                      );
                     }
-                  },
-            child: const Text('Choose OneDrive folder'),
-          ),
-        ],
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('OneDrive error: $e')),
+                    );
+                  } finally {
+                    if (mounted) setState(() => _oneDriveLoading = false);
+                  }
+                },
+          child: const Text('Choose OneDrive folder'),
+        ),
         const Divider(height: 32),
         Text('Preferences', style: Theme.of(context).textTheme.titleLarge),
         SwitchListTile(
