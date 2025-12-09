@@ -1,5 +1,8 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/library_folder.dart';
 import '../providers/library_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/graph_auth_service.dart';
@@ -16,6 +19,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final GraphAuthService _graphAuth = GraphAuthService();
   bool _oneDriveLoading = false;
+  LibraryType _pendingType = LibraryType.movies;
 
   @override
   void initState() {
@@ -49,20 +53,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         if (library.isLoading && library.scanningStatus.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: Text(
-              library.scanningStatus,
-              style: TextStyle(color: Theme.of(context).colorScheme.primary),
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(library.scanningStatus)),
+              ],
             ),
           ),
-        const SizedBox(height: 8),
-        ElevatedButton(
-          onPressed: () => library.clear(),
-          child: const Text('Clear Library'),
-        ),
-        const SizedBox(height: 24),
-        Text('Cloud accounts', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
+        const SizedBox(height: 16),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(12),
@@ -72,33 +76,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Row(
                   children: [
                     const Expanded(
-                      child: Text('OneDrive accounts',
-                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      child: Text('OneDrive accounts', style: TextStyle(fontWeight: FontWeight.w600)),
                     ),
                     TextButton.icon(
                       onPressed: _oneDriveLoading
                           ? null
                           : () async {
+                              final messenger = ScaffoldMessenger.of(context);
                               setState(() => _oneDriveLoading = true);
                               try {
-                                final user =
-                                    await _graphAuth.connectWithDeviceCode();
+                                final user = await _graphAuth.connectWithDeviceCode();
                                 if (!mounted) return;
                                 setState(() {});
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                messenger.showSnackBar(
                                   SnackBar(
-                                    content: Text(
-                                        'Connected as ${user.userPrincipalName}'),
+                                    content: Text('Connected as ${user.userPrincipalName}'),
                                   ),
                                 );
                               } catch (e) {
                                 if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                messenger.showSnackBar(
                                   SnackBar(content: Text('OneDrive error: $e')),
                                 );
                               } finally {
-                                if (mounted)
-                                  setState(() => _oneDriveLoading = false);
+                                if (mounted) setState(() => _oneDriveLoading = false);
                               }
                             },
                       icon: const Icon(Icons.add),
@@ -106,9 +107,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ],
                 ),
+                if (_oneDriveLoading) const LinearProgressIndicator(minHeight: 2),
                 const SizedBox(height: 8),
-                if (_oneDriveLoading)
-                  const LinearProgressIndicator(minHeight: 2),
                 if (_graphAuth.accounts.isEmpty)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 8),
@@ -116,79 +116,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   )
                 else
                   ..._graphAuth.accounts.map(
-                    (account) => RadioListTile<String>(
-                      value: account.id,
-                      groupValue: _graphAuth.activeAccountId,
-                      title: Text(account.displayName.isNotEmpty
-                          ? account.displayName
-                          : account.userPrincipalName),
-                      subtitle: Text(account.userPrincipalName),
-                      onChanged: (value) async {
-                        if (value == null) return;
-                        await _graphAuth.setActiveAccount(value);
-                        if (mounted) setState(() {});
-                      },
-                      secondary: IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        tooltip: 'Remove account',
-                        onPressed: () async {
-                          await _graphAuth.removeAccount(account.id);
-                          if (mounted) setState(() {});
-                        },
-                      ),
-                    ),
-                  ),
-                if (_graphAuth.accounts.isNotEmpty)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () async {
-                        await _graphAuth.disconnect();
-                        if (mounted) setState(() {});
-                      },
-                      child: const Text('Disconnect all'),
-                    ),
+                    (account) {
+                      final folders = library.libraryFoldersForAccount(account.id);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(account.displayName.isNotEmpty ? account.displayName : account.userPrincipalName),
+                            subtitle: Text(account.userPrincipalName),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              tooltip: 'Remove account',
+                              onPressed: () async {
+                                await _graphAuth.removeAccount(account.id);
+                                await library.removeLibraryFoldersForAccount(account.id);
+                                if (mounted) setState(() {});
+                              },
+                            ),
+                          ),
+                          if (folders.isNotEmpty)
+                            ...folders.map(
+                              (folder) => ListTile(
+                                dense: true,
+                                leading: _typeIcon(folder.type),
+                                title: Text(folder.path),
+                                subtitle: Text(_typeLabel(folder.type)),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete_outline),
+                                  tooltip: 'Remove folder',
+                                  onPressed: () async {
+                                    await library.removeLibraryFolder(folder);
+                                    if (mounted) setState(() {});
+                                  },
+                                ),
+                              ),
+                            ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: FilledButton.tonal(
+                              onPressed: _oneDriveLoading
+                                  ? null
+                                  : () async {
+                                      await _pickAndAddFolder(context, account.id, library, metadata);
+                                    },
+                              child: const Text('Add library folder'),
+                            ),
+                          ),
+                          const Divider(),
+                        ],
+                      );
+                    },
                   ),
               ],
             ),
           ),
-        ),
-        const SizedBox(height: 12),
-        FilledButton(
-          onPressed: _oneDriveLoading || _graphAuth.activeAccount == null
-              ? null
-              : () async {
-                  setState(() => _oneDriveLoading = true);
-                  try {
-                    final selection = await Navigator.of(context)
-                        .push<OneDriveFolderSelection>(
-                      MaterialPageRoute(
-                        builder: (_) => OneDriveFolderPicker(auth: _graphAuth),
-                      ),
-                    );
-                    if (selection != null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content: Text(
-                                'Selected OneDrive folder ${selection.path}')),
-                      );
-                      await library.scanOneDriveFolder(
-                        auth: _graphAuth,
-                        folderId: selection.id,
-                        folderPath: selection.path,
-                        metadata: metadata,
-                      );
-                    }
-                  } catch (e) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('OneDrive error: $e')),
-                    );
-                  } finally {
-                    if (mounted) setState(() => _oneDriveLoading = false);
-                  }
-                },
-          child: const Text('Choose OneDrive folder'),
         ),
         const Divider(height: 32),
         Text('Preferences', style: Theme.of(context).textTheme.titleLarge),
@@ -209,5 +191,116 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _pickAndAddFolder(
+    BuildContext context,
+    String accountId,
+    LibraryProvider library,
+    MetadataService metadata,
+  ) async {
+    final type = await showDialog<LibraryType>(
+      context: context,
+      builder: (context) {
+        var localType = _pendingType;
+        return AlertDialog(
+          title: const Text('Select library type'),
+          content: DropdownButton<LibraryType>(
+            value: localType,
+            isExpanded: true,
+            items: const [
+              DropdownMenuItem(value: LibraryType.movies, child: Text('Movies')),
+              DropdownMenuItem(value: LibraryType.tv, child: Text('TV Shows')),
+              DropdownMenuItem(value: LibraryType.anime, child: Text('Anime')),
+              DropdownMenuItem(value: LibraryType.other, child: Text('Other')),
+            ],
+            onChanged: (val) {
+              if (val != null) {
+                localType = val;
+                setState(() => _pendingType = val);
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(localType),
+              child: const Text('Continue'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (type == null) return;
+  if (!mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    setState(() => _oneDriveLoading = true);
+    try {
+      final selection = await navigator.push<OneDriveFolderSelection>(
+        MaterialPageRoute(
+          builder: (_) => OneDriveFolderPicker(auth: _graphAuth, accountId: accountId),
+        ),
+      );
+      if (!mounted) return;
+      if (selection != null) {
+        final folder = LibraryFolder(
+          id: selection.id,
+          path: selection.path,
+          accountId: accountId,
+          type: type,
+        );
+        await library.addLibraryFolder(folder);
+        messenger.showSnackBar(
+          SnackBar(content: Text('Added ${_typeLabel(type)}: ${selection.path}')),
+        );
+        await library.scanLibraryFolder(
+          auth: _graphAuth,
+          folder: folder,
+          metadata: metadata,
+        );
+        setState(() {});
+      }
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('OneDrive error: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _oneDriveLoading = false);
+    }
+  }
+
+  Icon _typeIcon(LibraryType type) {
+    switch (type) {
+      case LibraryType.movies:
+        return const Icon(Icons.movie_creation_outlined);
+      case LibraryType.tv:
+        return const Icon(Icons.tv);
+      case LibraryType.anime:
+        return const Icon(Icons.animation_outlined);
+      case LibraryType.other:
+      default:
+        return const Icon(Icons.folder);
+    }
+  }
+
+  String _typeLabel(LibraryType type) {
+    switch (type) {
+      case LibraryType.movies:
+        return 'Movies';
+      case LibraryType.tv:
+        return 'TV';
+      case LibraryType.anime:
+        return 'Anime';
+      case LibraryType.other:
+      default:
+        return 'Other';
+    }
   }
 }

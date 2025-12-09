@@ -108,8 +108,8 @@ class TraktService {
       if (score > bestScore) {
         bestScore = score;
         best = _toMetadata(data, type);
-      } else if (best == null) {
-        best = _toMetadata(data, type);
+      } else {
+        best ??= _toMetadata(data, type);
       }
     }
 

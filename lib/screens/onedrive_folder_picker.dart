@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import '../services/graph_auth_service.dart';
+import '../services/graph_auth_service.dart' as graph_auth;
 
 class OneDriveFolderSelection {
   final String id;
@@ -15,8 +15,9 @@ class OneDriveFolderSelection {
 }
 
 class OneDriveFolderPicker extends StatefulWidget {
-  final GraphAuthService auth;
-  const OneDriveFolderPicker({super.key, required this.auth});
+  final graph_auth.GraphAuthService auth;
+  final String accountId;
+  const OneDriveFolderPicker({super.key, required this.auth, required this.accountId});
 
   @override
   State<OneDriveFolderPicker> createState() => _OneDriveFolderPickerState();
@@ -41,7 +42,11 @@ class _OneDriveFolderPickerState extends State<OneDriveFolderPicker> {
       _error = null;
     });
     try {
-      final token = await widget.auth.getOrLoginWithDeviceCode();
+      final account = widget.auth.accounts.firstWhere(
+        (a) => a.id == widget.accountId,
+        orElse: () => throw Exception('No account found for id ${widget.accountId}'),
+      );
+      final token = account.accessToken;
       final rootRes = await http.get(
         Uri.parse('https://graph.microsoft.com/v1.0/me/drive/root'),
         headers: {'Authorization': 'Bearer $token'},
@@ -72,7 +77,11 @@ class _OneDriveFolderPickerState extends State<OneDriveFolderPicker> {
     });
 
     try {
-      final t = token ?? await widget.auth.getOrLoginWithDeviceCode();
+      final t = token ??
+          widget.auth.accounts.firstWhere(
+            (a) => a.id == widget.accountId,
+            orElse: () => throw Exception('No account found for id ${widget.accountId}'),
+          ).accessToken;
       final url = Uri.parse(
           'https://graph.microsoft.com/v1.0/me/drive/items/${folder.id}/children');
       final res = await http.get(url, headers: {'Authorization': 'Bearer $t'});

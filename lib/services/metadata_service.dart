@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import '../models/media_item.dart';
 import '../providers/settings_provider.dart';
 import 'anilist_service.dart';
@@ -81,21 +83,6 @@ class MetadataService {
     if (meta == null) return _ensureTypeForTvHints(aniCandidate);
     final enriched = _trakt.applyMetadata(aniCandidate.copyWith(type: MediaType.movie), meta);
     return enriched;
-  }
-
-  MediaItem _applySeasonEpisodeFromFilename(MediaItem item) {
-    final match = RegExp(r'[Ss](\d{1,2})[Ee](\d{1,3})').firstMatch(item.fileName);
-    if (match == null) return item;
-
-    final season = int.tryParse(match.group(1) ?? '');
-    final episode = int.tryParse(match.group(2) ?? '');
-    if (season == null && episode == null) return item;
-
-    return item.copyWith(
-      season: item.season ?? season,
-      episode: item.episode ?? episode,
-      type: item.type == MediaType.unknown ? MediaType.tv : item.type,
-    );
   }
 
   MediaItem _ensureTypeForTvHints(MediaItem item) {

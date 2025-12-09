@@ -1,6 +1,6 @@
 {
-    "name": "localflix",
-    "short_name": "localflix",
+    "name": "Freak Flix",
+    "short_name": "FreakFlix",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

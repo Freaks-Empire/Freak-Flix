@@ -6,17 +6,20 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/library_folder.dart';
 import '../models/media_item.dart';
-import '../services/graph_auth_service.dart';
+import '../services/graph_auth_service.dart' as graph_auth;
 import '../services/metadata_service.dart';
 import 'settings_provider.dart';
 import '../utils/filename_parser.dart';
 
 class LibraryProvider extends ChangeNotifier {
   static const _prefsKey = 'library_v1';
+  static const _libraryFoldersKey = 'library_folders_v1';
 
   final SettingsProvider settings;
   List<MediaItem> items = [];
+  List<LibraryFolder> libraryFolders = [];
   bool isLoading = false;
   String? error;
   String scanningStatus = '';
@@ -25,39 +28,83 @@ class LibraryProvider extends ChangeNotifier {
 
   Future<void> loadLibrary() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_prefsKey);
-    if (raw == null) return;
-    items = MediaItem.listFromJson(raw);
-
-    // Reclassify with updated rules (anime flag + tv/movie only).
-    bool updated = false;
-    for (var i = 0; i < items.length; i++) {
-      final parsed = FilenameParser.parse(items[i].fileName);
-      final inferredType = _inferTypeFromPath(items[i]);
-      final inferredAnime = _inferAnimeFromPath(items[i]);
-      final updatedItem = items[i].copyWith(
-        title:
-            parsed.seriesTitle.isNotEmpty ? parsed.seriesTitle : items[i].title,
-        season: items[i].season ??
-            parsed.season ??
-            (parsed.episode != null ? 1 : null),
-        episode: items[i].episode ?? parsed.episode,
-        type: inferredType,
-        isAnime: inferredAnime,
-        year: items[i].year ?? parsed.year,
-      );
-      if (updatedItem != items[i]) {
-        items[i] = updatedItem;
-        updated = true;
+    final rawFolders = prefs.getString(_libraryFoldersKey);
+    if (rawFolders != null) {
+      try {
+        libraryFolders = (jsonDecode(rawFolders) as List<dynamic>)
+            .map((e) => LibraryFolder.fromJson(e as Map<String, dynamic>))
+            .toList();
+      } catch (_) {
+        libraryFolders = [];
       }
     }
-    if (updated) await saveLibrary();
+
+    final raw = prefs.getString(_prefsKey);
+    if (raw != null) {
+      items = MediaItem.listFromJson(raw);
+
+      // Reclassify with updated rules (anime flag + tv/movie only).
+      bool updated = false;
+      for (var i = 0; i < items.length; i++) {
+        final parsed = FilenameParser.parse(items[i].fileName);
+        final inferredType = _inferTypeFromPath(items[i]);
+        final inferredAnime = _inferAnimeFromPath(items[i]);
+        final updatedItem = items[i].copyWith(
+          title: parsed.seriesTitle.isNotEmpty ? parsed.seriesTitle : items[i].title,
+          season: items[i].season ?? parsed.season ?? (parsed.episode != null ? 1 : null),
+          episode: items[i].episode ?? parsed.episode,
+          type: inferredType,
+          isAnime: inferredAnime,
+          year: items[i].year ?? parsed.year,
+        );
+        if (updatedItem != items[i]) {
+          items[i] = updatedItem;
+          updated = true;
+        }
+      }
+      if (updated) await saveLibrary();
+    }
     notifyListeners();
   }
 
   Future<void> saveLibrary() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsKey, MediaItem.listToJson(items));
+  }
+
+  Future<void> _saveLibraryFolders() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _libraryFoldersKey,
+      jsonEncode(libraryFolders.map((f) => f.toJson()).toList()),
+    );
+  }
+
+  List<LibraryFolder> libraryFoldersForAccount(String accountId) {
+    return libraryFolders.where((f) => f.accountId == accountId).toList();
+  }
+
+  Future<void> addLibraryFolder(LibraryFolder folder) async {
+    libraryFolders.removeWhere(
+      (f) => f.id == folder.id && f.accountId == folder.accountId,
+    );
+    libraryFolders.add(folder);
+    await _saveLibraryFolders();
+    notifyListeners();
+  }
+
+  Future<void> removeLibraryFolder(LibraryFolder folder) async {
+    libraryFolders.removeWhere(
+      (f) => f.id == folder.id && f.accountId == folder.accountId,
+    );
+    await _saveLibraryFolders();
+    notifyListeners();
+  }
+
+  Future<void> removeLibraryFoldersForAccount(String accountId) async {
+    libraryFolders.removeWhere((f) => f.accountId == accountId);
+    await _saveLibraryFolders();
+    notifyListeners();
   }
 
   Future<void> pickAndScan({MetadataService? metadata}) async {
@@ -89,12 +136,11 @@ class LibraryProvider extends ChangeNotifier {
           return;
         }
         settings.setLastFolder(path);
-
+        
         // Spawn isolate for streaming background scanning
         final port = ReceivePort();
-        await Isolate.spawn(
-            _scanDirectoryInIsolate, _ScanRequest(port.sendPort, path));
-
+        await Isolate.spawn(_scanDirectoryInIsolate, _ScanRequest(port.sendPort, path));
+        
         final scannedItems = <MediaItem>[];
         await for (final message in port) {
           if (message is String) {
@@ -106,7 +152,7 @@ class LibraryProvider extends ChangeNotifier {
             break; // Done
           }
         }
-
+        
         scanningStatus = 'Finalizing...';
         notifyListeners();
         await _ingestItems(scannedItems, metadata);
@@ -124,21 +170,19 @@ class LibraryProvider extends ChangeNotifier {
   Future<void> _ingestFiles(List<File> files, MetadataService? metadata) async {
     final newItems = <MediaItem>[];
     for (final f in files) {
-      if (_isVideo(f.path)) {
-        newItems.add(_parseFile(f));
-      }
+       if (_isVideo(f.path)) {
+         newItems.add(_parseFile(f));
+       }
     }
     await _ingestItems(newItems, metadata);
   }
 
-  Future<void> _ingestItems(
-      List<MediaItem> newItems, MetadataService? metadata) async {
+  Future<void> _ingestItems(List<MediaItem> newItems, MetadataService? metadata) async {
     final map = {for (var i in items) i.filePath: i};
     for (final item in newItems) {
       map[item.filePath] = item;
     }
-    items = map.values.toList()
-      ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+    items = map.values.toList()..sort((a, b) => b.lastModified.compareTo(a.lastModified));
     notifyListeners();
 
     if (settings.autoFetchAfterScan && metadata != null) {
@@ -166,54 +210,62 @@ class LibraryProvider extends ChangeNotifier {
     await saveLibrary();
   }
 
-  List<MediaItem> get movies =>
-      items.where((i) => i.type == MediaType.movie).toList();
+  List<MediaItem> get movies => items.where((i) => i.type == MediaType.movie).toList();
 
-  // Group TV/anime by showKey and aggregate episodes under one show card.
-  // TV tab excludes anime; Anime tab shows only anime.
-  List<MediaItem> get tv =>
+    // Group TV/anime by showKey and aggregate episodes under one show card.
+    // TV tab excludes anime; Anime tab shows only anime.
+    List<MediaItem> get tv =>
       _groupShows(items.where((i) => i.type == MediaType.tv && !i.isAnime));
 
-  List<MediaItem> get anime =>
+    List<MediaItem> get anime =>
       _groupShows(items.where((i) => i.type == MediaType.tv && i.isAnime));
 
-  List<TvShowGroup> get groupedTvShows => _groupShowsToGroups(
-      items.where((i) => i.type == MediaType.tv && !i.isAnime));
+    List<TvShowGroup> get groupedTvShows =>
+      _groupShowsToGroups(items.where((i) => i.type == MediaType.tv && !i.isAnime));
 
-  List<TvShowGroup> get groupedAnimeShows => _groupShowsToGroups(
-      items.where((i) => i.type == MediaType.tv && i.isAnime));
+    List<TvShowGroup> get groupedAnimeShows =>
+      _groupShowsToGroups(items.where((i) => i.type == MediaType.tv && i.isAnime));
 
   List<MediaItem> get continueWatching =>
       items.where((i) => i.lastPositionSeconds > 0 && !i.isWatched).toList();
 
   List<MediaItem> get recentlyAdded {
-    final sorted = [...items]
-      ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+    final sorted = [...items]..sort((a, b) => b.lastModified.compareTo(a.lastModified));
     return sorted.take(20).toList();
   }
 
   List<MediaItem> get topRated {
-    final sorted = [...items]
-      ..sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
+    final sorted = [...items]..sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
     return sorted.take(20).toList();
   }
 
-  Future<void> scanOneDriveFolder({
-    required GraphAuthService auth,
-    required String folderId,
-    required String folderPath,
+  Future<void> scanLibraryFolder({
+    required graph_auth.GraphAuthService auth,
+    required LibraryFolder folder,
     MetadataService? metadata,
   }) async {
     error = null;
     isLoading = true;
-    scanningStatus = 'Scanning OneDrive folder...';
+    scanningStatus = 'Scanning ${folder.path.isEmpty ? '/' : folder.path}...';
     notifyListeners();
 
     try {
-      final token = await auth.getOrLoginWithDeviceCode();
-      final normalizedPath = folderPath.isEmpty ? '/' : folderPath;
+      final account = auth.accounts.firstWhere(
+        (a) => a.id == folder.accountId,
+        orElse: () => throw Exception('No account found for id ${folder.accountId}'),
+      );
+      final token = account.accessToken;
+      final normalizedPath = folder.path.isEmpty ? '/' : folder.path;
       final collected = <MediaItem>[];
-      await _walkOneDriveFolder(token, folderId, normalizedPath, collected);
+      final prefix = 'onedrive:${folder.accountId}';
+      await _walkOneDriveFolder(
+        token: token,
+        folderId: folder.id,
+        currentPath: normalizedPath,
+        out: collected,
+        accountPrefix: prefix,
+        libraryFolder: folder,
+      );
 
       scanningStatus = 'Found ${collected.length} videos. Ingesting...';
       notifyListeners();
@@ -227,25 +279,57 @@ class LibraryProvider extends ChangeNotifier {
       await saveLibrary();
     }
   }
+
+  Future<void> scanOneDriveFolder({
+    required graph_auth.GraphAuthService auth,
+    required String folderId,
+    required String folderPath,
+    MetadataService? metadata,
+  }) async {
+    final accountId = auth.activeAccountId;
+    if (accountId == null) {
+      error = 'No active OneDrive account';
+      notifyListeners();
+      return;
+    }
+
+    final folder = LibraryFolder(
+      id: folderId,
+      path: folderPath,
+      accountId: accountId,
+      type: LibraryType.other,
+    );
+    await scanLibraryFolder(auth: auth, folder: folder, metadata: metadata);
+  }
 }
 
-Future<void> _walkOneDriveFolder(
-  String token,
-  String folderId,
-  String currentPath,
-  List<MediaItem> out,
-) async {
-  final url = Uri.parse(
-      'https://graph.microsoft.com/v1.0/me/drive/items/$folderId/children');
-  await _walkOneDrivePage(token, url, currentPath, out);
+Future<void> _walkOneDriveFolder({
+  required String token,
+  required String folderId,
+  required String currentPath,
+  required List<MediaItem> out,
+  required String accountPrefix,
+  required LibraryFolder libraryFolder,
+}) async {
+  final url = Uri.parse('https://graph.microsoft.com/v1.0/me/drive/items/$folderId/children');
+  await _walkOneDrivePage(
+    token: token,
+    url: url,
+    currentPath: currentPath,
+    out: out,
+    accountPrefix: accountPrefix,
+    libraryFolder: libraryFolder,
+  );
 }
 
-Future<void> _walkOneDrivePage(
-  String token,
-  Uri url,
-  String currentPath,
-  List<MediaItem> out,
-) async {
+Future<void> _walkOneDrivePage({
+  required String token,
+  required Uri url,
+  required String currentPath,
+  required List<MediaItem> out,
+  required String accountPrefix,
+  required LibraryFolder libraryFolder,
+}) async {
   final res = await http.get(url, headers: {'Authorization': 'Bearer $token'});
   if (res.statusCode != 200) {
     throw Exception('Graph error: ${res.statusCode} ${res.body}');
@@ -262,7 +346,14 @@ Future<void> _walkOneDrivePage(
     final nextPath = currentPath == '/' ? '/$name' : '$currentPath/$name';
 
     if (isFolder) {
-      await _walkOneDriveFolder(token, id, nextPath, out);
+      await _walkOneDriveFolder(
+        token: token,
+        folderId: id,
+        currentPath: nextPath,
+        out: out,
+        accountPrefix: accountPrefix,
+        libraryFolder: libraryFolder,
+      );
       continue;
     }
 
@@ -272,38 +363,60 @@ Future<void> _walkOneDrivePage(
     if (downloadUrl == null) continue;
 
     final lastModifiedRaw = m['lastModifiedDateTime'] as String?;
-    final lastModified =
-        DateTime.tryParse(lastModifiedRaw ?? '') ?? DateTime.now();
+    final lastModified = DateTime.tryParse(lastModifiedRaw ?? '') ?? DateTime.now();
     final size = (m['size'] as num?)?.toInt() ?? 0;
     final parsed = FilenameParser.parse(name);
     final animeHint = nextPath.toLowerCase().contains('anime');
-    final type = (parsed.season != null || parsed.episode != null || animeHint)
-        ? MediaType.tv
-        : MediaType.movie;
-    final showKey =
-        currentPath.toLowerCase().isEmpty ? null : currentPath.toLowerCase();
+    final hasTvHints = parsed.season != null || parsed.episode != null || animeHint;
+    final mediaType = _typeForFolder(libraryFolder, hasTvHints);
+    final isAnime = libraryFolder.type == LibraryType.anime || animeHint;
+    final accountScopedFolderPath = '$accountPrefix$currentPath';
+    final accountScopedFilePath = '$accountPrefix$nextPath';
+    final showKey = mediaType == MediaType.tv
+        ? '$accountPrefix:${currentPath.toLowerCase()}'
+        : null;
 
     out.add(MediaItem(
-      id: 'onedrive_$id',
-      filePath: 'onedrive:$nextPath',
+      id: 'onedrive_${libraryFolder.accountId}_$id',
+      filePath: accountScopedFilePath,
       streamUrl: downloadUrl,
       fileName: name,
-      folderPath: currentPath,
+      folderPath: accountScopedFolderPath,
       sizeBytes: size,
       lastModified: lastModified,
       title: parsed.seriesTitle,
       year: parsed.year,
-      type: type,
+      type: mediaType,
       season: parsed.season,
       episode: parsed.episode,
-      isAnime: animeHint,
+      isAnime: isAnime,
       showKey: showKey,
     ));
   }
 
   final nextLink = body['@odata.nextLink'] as String?;
   if (nextLink != null) {
-    await _walkOneDrivePage(token, Uri.parse(nextLink), currentPath, out);
+    await _walkOneDrivePage(
+      token: token,
+      url: Uri.parse(nextLink),
+      currentPath: currentPath,
+      out: out,
+      accountPrefix: accountPrefix,
+      libraryFolder: libraryFolder,
+    );
+  }
+}
+
+MediaType _typeForFolder(LibraryFolder folder, bool hasTvHints) {
+  switch (folder.type) {
+    case LibraryType.movies:
+      return MediaType.movie;
+    case LibraryType.tv:
+    case LibraryType.anime:
+      return MediaType.tv;
+    case LibraryType.other:
+    default:
+      return hasTvHints ? MediaType.tv : MediaType.movie;
   }
 }
 
@@ -326,25 +439,25 @@ void _scanDirectoryInIsolate(_ScanRequest request) {
 
   try {
     request.sendPort.send('Scanning: ${request.path}...');
-
+    
     // Recursive listing can be blocking for huge dirs, but we are in an isolate.
     // However, to provide updates, we might want to manually recurse or just update periodically if possible.
     // listSync is simplest but doesn't allow mid-stream updates easily unless we iterate the iterable.
     // Let's iterate the iterable from listSync (which computes all at once usually) or use list() stream?
-    // listSync returns a List so it blocks until done.
+    // listSync returns a List so it blocks until done. 
     // Better to use Directory.list (Stream) or manual recursion for feedback.
     // For simplicity + feedback, let's use listSync but on subdirectories if we wanted granularity.
     // Actually, iterate listSync results? No, listSync blocks until the array is ready.
     // We should use Directory.listSync(recursive: true) which blocks. To show progress *during* search
     // we need manual recursion or non-recursive listSync.
-
+    
     // Let's use recursive: true for performance, but we can only report "Found X items" *after* listSync returns?
     // No, that defeats the purpose if listSync takes 30s.
     // Let's use generic manual recursion for better feedback.
-
+    
     final entities = dir.listSync(recursive: true, followLinks: false);
     request.sendPort.send('Found ${entities.length} files. Parsing...');
-
+    
     for (final f in entities) {
       if (f is File && _isVideo(f.path)) {
         items.add(_parseFile(f));
@@ -357,7 +470,7 @@ void _scanDirectoryInIsolate(_ScanRequest request) {
   } catch (e) {
     // Ignore access errors
   }
-
+  
   request.sendPort.send(items);
 }
 
@@ -402,14 +515,12 @@ MediaItem _parseFile(FileSystemEntity f) {
 }
 
 MediaType _inferTypeFromPath(MediaItem item) {
-  final path = item.filePath.toLowerCase();
-
   final fileName = p.basenameWithoutExtension(item.fileName).toLowerCase();
   final folderName = p.basename(item.folderPath).toLowerCase();
   final hasSeasonInFolder = RegExp(r'season[ _-]?\d{1,2}').hasMatch(folderName);
-  final hasTvPattern = RegExp(r'[Ss]\d{1,2}[Ee]\d{1,3}').hasMatch(fileName) ||
-      RegExp(r'(?:^|[\s._-])(?:ep(?:isode)?\s*)?\d{1,3}(?!\d)')
-          .hasMatch(fileName) ||
+  final hasTvPattern =
+      RegExp(r'[Ss]\d{1,2}[Ee]\d{1,3}').hasMatch(fileName) ||
+      RegExp(r'(?:^|[\s._-])(?:ep(?:isode)?\s*)?\d{1,3}(?!\d)').hasMatch(fileName) ||
       hasSeasonInFolder ||
       item.season != null ||
       item.episode != null;
@@ -426,12 +537,6 @@ String _seriesKey(MediaItem item) {
   if (item.showKey != null && item.showKey!.isNotEmpty) return item.showKey!;
   // Group by folder so all episodes in the same directory share a key.
   return item.folderPath.toLowerCase();
-}
-
-String _seriesKeyRaw(String title, int? year) {
-  final base = title.toLowerCase().trim();
-  final yr = year?.toString() ?? '';
-  return '$base-$yr';
 }
 
 List<MediaItem> _groupShows(Iterable<MediaItem> source) {
@@ -494,20 +599,14 @@ List<TvShowGroup> _groupShowsToGroups(Iterable<MediaItem> source) {
     final first = episodes.first;
     final parsedFirst = FilenameParser.parse(first.fileName);
     final title = parsedFirst.seriesTitle.isNotEmpty
-        ? parsedFirst.seriesTitle
-        : first.title ?? first.fileName;
-    final poster = episodes
-        .firstWhere((e) => e.posterUrl != null, orElse: () => first)
-        .posterUrl;
-    final backdrop = episodes
-        .firstWhere((e) => e.backdropUrl != null, orElse: () => first)
-        .backdropUrl;
-    final year =
-        episodes.firstWhere((e) => e.year != null, orElse: () => first).year ??
-            parsedFirst.year;
+      ? parsedFirst.seriesTitle
+      : (first.title?.isNotEmpty == true ? first.title! : first.fileName);
+    final poster = episodes.firstWhere((e) => e.posterUrl != null, orElse: () => first).posterUrl;
+    final backdrop = episodes.firstWhere((e) => e.backdropUrl != null, orElse: () => first).backdropUrl;
+    final year = episodes.firstWhere((e) => e.year != null, orElse: () => first).year ?? parsedFirst.year;
     final isAnime = episodes.any((e) => e.isAnime);
     return TvShowGroup(
-      title: title ?? 'Unknown',
+      title: title,
       isAnime: isAnime,
       showKey: entry.key,
       episodes: episodes,
