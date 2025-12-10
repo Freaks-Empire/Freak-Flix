@@ -10,7 +10,7 @@ Netsflix But Open Source
 - MPV playback via `flutter_mpv`: on Windows place `mpv-1.dll` next to the built exe; on Linux install `libmpv-dev` (e.g., `sudo apt install libmpv-dev`).
 
 ## Deploying to Netlify (web)
-- Build: `flutter build web --release`
+- Build: uses `netlify/build.sh` to install Flutter and run `flutter build web --release`
 - Deploy directory: `build/web` (configured in `netlify.toml`)
 - SPA routing: handled via the redirect in `netlify.toml` (all routes → `/index.html`).
 - Set your API keys (TMDB, Graph/Azure, etc.) as Netlify environment variables; avoid hard-coding in the build.

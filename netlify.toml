@@ -1,5 +1,5 @@
 [build]
-  command = "flutter build web --release"
+  command = "bash ./netlify/build.sh"
   publish = "build/web"
 
 # Route all paths to the SPA entry so client-side routing works.
