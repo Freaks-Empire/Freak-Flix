@@ -3,6 +3,13 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+class NotInitializedError implements Exception {
+  final String message;
+  NotInitializedError([this.message = '']);
+  @override
+  String toString() => 'NotInitializedError: $message';
+}
+
 class GraphUser {
   final String id;
   final String displayName;
@@ -44,15 +51,42 @@ class GraphAccount {
 }
 
 class GraphAuthService {
-  // Prefer .env values; fall back to --dart-define for CI/CLI usage.
-  static String get _tenant =>
-    dotenv.env['AZURE_TENANT_ID'] ??
-    String.fromEnvironment('GRAPH_TENANT_ID', defaultValue: 'common');
-  static String get _clientId =>
-    dotenv.env['AZURE_CLIENT_ID'] ??
-    String.fromEnvironment('GRAPH_CLIENT_ID', defaultValue: '');
-  static String get _redirectUri =>
-    dotenv.env['AZURE_REDIRECT_URI'] ?? 'freakflix://auth';
+  GraphAuthService._();
+  static final GraphAuthService _instance = GraphAuthService._();
+  factory GraphAuthService() => _instance;
+  static GraphAuthService get instance => _instance;
+
+  String? _clientId;
+  String _tenant = 'common';
+  late Uri _deviceCodeEndpoint;
+  late Uri _tokenEndpoint;
+
+  bool get isConfigured => _clientId != null && _clientId!.isNotEmpty;
+
+  void configureFromEnv() {
+    final String? clientIdRaw = dotenv.env['GRAPH_CLIENT_ID'] ?? dotenv.env['AZURE_CLIENT_ID'];
+    final String? tenantIdRaw = dotenv.env['GRAPH_TENANT_ID'] ?? dotenv.env['AZURE_TENANT_ID'];
+
+    final String clientId = clientIdRaw?.trim() ?? '';
+    final String tenant = (tenantIdRaw?.trim().isNotEmpty ?? false)
+        ? tenantIdRaw!.trim()
+        : 'common';
+
+    if (clientId.isEmpty) {
+      throw NotInitializedError('GRAPH_CLIENT_ID must be set in .env');
+    }
+
+    _clientId = clientId;
+    _tenant = tenant;
+    _deviceCodeEndpoint = Uri.parse('https://login.microsoftonline.com/$_tenant/oauth2/v2.0/devicecode');
+    _tokenEndpoint = Uri.parse('https://login.microsoftonline.com/$_tenant/oauth2/v2.0/token');
+  }
+
+  void _ensureConfigured() {
+    if (!isConfigured) {
+      throw NotInitializedError('GraphAuthService not configured. Call configureFromEnv() during startup.');
+    }
+  }
 
   static const _scopes = [
     'User.Read',
@@ -163,20 +197,19 @@ class GraphAuthService {
 
   /// Connects the account using device-code flow and returns user info.
   Future<GraphUser> connectWithDeviceCode() async {
-    if (_clientId.isEmpty) {
-      throw Exception(
-          'Graph client ID missing. Provide via --dart-define=GRAPH_CLIENT_ID');
-    }
-    final authority = 'https://login.microsoftonline.com/$_tenant';
-    final deviceCodeUrl = Uri.parse('$authority/oauth2/v2.0/devicecode');
-    final tokenUrl = Uri.parse('$authority/oauth2/v2.0/token');
+    _ensureConfigured();
+
+    final clientId = _clientId!;
+
+    final deviceCodeUrl = _deviceCodeEndpoint;
+    final tokenUrl = _tokenEndpoint;
 
     // Request device code
     final dcRes = await http.post(
       deviceCodeUrl,
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
       body: {
-        'client_id': _clientId,
+        'client_id': clientId,
         'scope': _scopes.join(' '),
       },
     );
@@ -209,7 +242,7 @@ class GraphAuthService {
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
           'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
-          'client_id': _clientId,
+          'client_id': clientId,
           'device_code': deviceCode,
         },
       );

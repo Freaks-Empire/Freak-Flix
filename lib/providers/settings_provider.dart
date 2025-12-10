@@ -2,14 +2,26 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+enum TmdbKeyStatus {
+  unknown,
+  valid,
+  invalid,
+}
+
 class SettingsProvider extends ChangeNotifier {
   static const _key = 'settings_v1';
+  static const _tmdbStatusKey = 'tmdbKeyStatus';
 
   bool isDarkMode = true;
   bool preferAniListForAnime = true;
   bool autoFetchAfterScan = true;
   String? lastScannedFolder;
   String tmdbApiKey = '';
+  TmdbKeyStatus tmdbStatus = TmdbKeyStatus.unknown;
+  bool _isTestingTmdbKey = false;
+
+  bool get isTestingTmdbKey => _isTestingTmdbKey;
+  bool get hasTmdbKey => tmdbApiKey.trim().isNotEmpty;
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -21,6 +33,12 @@ class SettingsProvider extends ChangeNotifier {
     autoFetchAfterScan = data['autoFetchAfterScan'] as bool? ?? true;
     lastScannedFolder = data['lastScannedFolder'] as String?;
     tmdbApiKey = data['tmdbApiKey'] as String? ?? '';
+    final statusIndex = data[_tmdbStatusKey] as int?;
+    if (statusIndex != null && statusIndex >= 0 && statusIndex < TmdbKeyStatus.values.length) {
+      tmdbStatus = TmdbKeyStatus.values[statusIndex];
+    } else {
+      tmdbStatus = TmdbKeyStatus.unknown;
+    }
     notifyListeners();
   }
 
@@ -34,6 +52,7 @@ class SettingsProvider extends ChangeNotifier {
         'autoFetchAfterScan': autoFetchAfterScan,
         'lastScannedFolder': lastScannedFolder,
         'tmdbApiKey': tmdbApiKey,
+        _tmdbStatusKey: tmdbStatus.index,
       }),
     );
   }
@@ -64,7 +83,34 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> setTmdbApiKey(String? value) async {
     tmdbApiKey = (value?.trim().isEmpty ?? true) ? '' : value!.trim();
+    tmdbStatus = TmdbKeyStatus.unknown;
     await save();
     notifyListeners();
+  }
+
+  Future<void> _setTmdbStatus(TmdbKeyStatus status) async {
+    tmdbStatus = status;
+    await save();
+    notifyListeners();
+  }
+
+  Future<void> testTmdbKey(Future<bool> Function(String key) validator) async {
+    if (!hasTmdbKey) {
+      await _setTmdbStatus(TmdbKeyStatus.invalid);
+      return;
+    }
+
+    _isTestingTmdbKey = true;
+    notifyListeners();
+
+    try {
+      final ok = await validator(tmdbApiKey);
+      await _setTmdbStatus(ok ? TmdbKeyStatus.valid : TmdbKeyStatus.invalid);
+    } catch (_) {
+      await _setTmdbStatus(TmdbKeyStatus.invalid);
+    } finally {
+      _isTestingTmdbKey = false;
+      notifyListeners();
+    }
   }
 }

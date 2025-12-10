@@ -1,17 +1,38 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/media_item.dart';
+import '../providers/settings_provider.dart';
 
 class TmdbService {
-  final String apiKey;
+  final SettingsProvider settings;
   final http.Client _client;
 
-  TmdbService(this.apiKey, {http.Client? client}) : _client = client ?? http.Client();
+  TmdbService(this.settings, {http.Client? client}) : _client = client ?? http.Client();
 
   static const _baseHost = 'api.themoviedb.org';
   static const _imageBase = 'https://image.tmdb.org/t/p/w500';
 
+  String? get _key {
+    final k = settings.tmdbApiKey.trim();
+    return k.isEmpty ? null : k;
+  }
+
+  bool get hasKey => _key != null;
+
+  Future<bool> validateKey() async {
+    final key = _key;
+    if (key == null) return false;
+
+    final uri = Uri.https(_baseHost, '/3/configuration', {'api_key': key});
+    final res = await _client.get(uri);
+    if (res.statusCode == 200) return true;
+    if (res.statusCode == 401 || res.statusCode == 403) return false;
+    return false;
+  }
+
   Future<MediaItem> enrich(MediaItem item) async {
+    final key = _key;
+    if (key == null) return item;
     if (item.title == null || item.title!.trim().isEmpty) return item;
 
     final searchPath = '/3/search/${item.type == MediaType.tv ? 'tv' : 'movie'}';
@@ -19,7 +40,7 @@ class TmdbService {
       _baseHost,
       searchPath,
       {
-        'api_key': apiKey,
+        'api_key': key,
         'query': item.title!,
         if (item.year != null) 'year': item.year.toString(),
         'include_adult': 'false',
@@ -53,7 +74,7 @@ class TmdbService {
     final detailsUri = Uri.https(
       _baseHost,
       detailsPath,
-      {'api_key': apiKey},
+      {'api_key': key},
     );
 
     final detailsRes = await _client.get(detailsUri);

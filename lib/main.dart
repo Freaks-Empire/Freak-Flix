@@ -12,6 +12,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart' show FileNotFoundError;
 import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
 import 'app.dart';
@@ -19,16 +20,28 @@ import 'providers/library_provider.dart';
 import 'providers/playback_provider.dart';
 import 'providers/settings_provider.dart';
 import 'services/metadata_service.dart';
+import 'services/tmdb_service.dart';
+import 'services/graph_auth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env');
+  try {
+    await dotenv.load(fileName: '.env');
+  } on FileNotFoundError {
+    debugPrint('No .env file found, continuing without it.');
+  }
+  try {
+    GraphAuthService.instance.configureFromEnv();
+  } catch (e) {
+    debugPrint('Graph configuration issue: $e');
+  }
   MediaKit.ensureInitialized();
   final settingsProvider = SettingsProvider();
   await settingsProvider.load();
+  final tmdbService = TmdbService(settingsProvider);
   final libraryProvider = LibraryProvider(settingsProvider);
   await libraryProvider.loadLibrary();
-  final metadataService = MetadataService(settingsProvider);
+  final metadataService = MetadataService(settingsProvider, tmdbService);
   final playbackProvider = PlaybackProvider(libraryProvider);
 
   runApp(
@@ -37,6 +50,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => settingsProvider),
         ChangeNotifierProvider(create: (_) => libraryProvider),
         ChangeNotifierProvider(create: (_) => playbackProvider),
+        Provider<TmdbService>.value(value: tmdbService),
         Provider<MetadataService>.value(value: metadataService),
       ],
       child: const FreakFlixApp(),

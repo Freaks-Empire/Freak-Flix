@@ -1,0 +1,157 @@
+import 'package:flutter/material.dart';
+import '../models/media_item.dart';
+import '../screens/details_screen.dart';
+import 'safe_network_image.dart';
+
+class HomeMediaCard extends StatelessWidget {
+  final MediaItem item;
+  const HomeMediaCard({super.key, required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final watchedSeconds = item.lastPositionSeconds;
+    final totalSeconds = item.totalDurationSeconds ??
+        (item.runtimeMinutes != null ? item.runtimeMinutes! * 60 : 0);
+    final progress = _progressValue(watchedSeconds, totalSeconds);
+
+    final watchedLabel = watchedSeconds > 0
+        ? _formatDurationShort(Duration(seconds: watchedSeconds))
+        : (totalSeconds > 0 ? 'Ready' : 'New');
+    final remainingLabel = totalSeconds > 0
+        ? '${_formatDurationShort(Duration(seconds: totalSeconds - watchedSeconds).abs())} left'
+        : '';
+    final daysLabel = _formatDaysAgo(item.lastModified);
+    final subtitle = _buildSubtitle(item);
+
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => DetailsScreen(item: item)),
+      ),
+      child: SizedBox(
+        width: 150,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Stack(
+                children: [
+                  AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: SafeNetworkImage(
+                      url: item.posterUrl,
+                      fit: BoxFit.cover,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.55),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: const Icon(Icons.more_vert, size: 16),
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 18,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      color: Colors.black.withOpacity(0.55),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _pillText(watchedLabel),
+                          if (remainingLabel.isNotEmpty)
+                            _pillText(remainingLabel),
+                          _pillText(daysLabel),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 4,
+                      backgroundColor: Colors.white.withOpacity(0.15),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              item.title ?? item.fileName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            Text(
+              subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onBackground.withOpacity(0.7),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static double _progressValue(int watchedSeconds, int totalSeconds) {
+    if (totalSeconds <= 0) return 0;
+    final ratio = watchedSeconds / totalSeconds;
+    if (ratio.isNaN) return 0;
+    return ratio.clamp(0.0, 1.0);
+  }
+
+  static String _formatDurationShort(Duration d) {
+    if (d.inHours >= 1) return '${d.inHours}h';
+    final minutes = d.inMinutes;
+    if (minutes <= 0) return '<1m';
+    return '${minutes}m';
+  }
+
+  static String _formatDaysAgo(DateTime date) {
+    final days = DateTime.now().difference(date).inDays;
+    if (days <= 0) return 'Today';
+    return '${days}d';
+  }
+
+  static String _buildSubtitle(MediaItem item) {
+    final season = item.season;
+    final episode = item.episode;
+    if (season != null && episode != null) {
+      return 'S${season} • E${episode}';
+    }
+    if (item.year != null) return '${item.year}';
+    return 'Episode';
+  }
+
+  Widget _pillText(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+}
+

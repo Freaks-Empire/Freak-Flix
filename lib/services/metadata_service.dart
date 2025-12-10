@@ -11,24 +11,12 @@ class MetadataService {
   final AniListService _ani = AniListService();
   final TraktService _trakt = TraktService();
   final SettingsProvider settings;
+  final TmdbService tmdbService;
   final Map<String, Map<String, dynamic>> _showCache = {};
-  TmdbService? _tmdb;
-  String? _lastTmdbKey;
 
-  MetadataService(this.settings);
+  MetadataService(this.settings, this.tmdbService);
 
   Future<MediaItem> enrich(MediaItem item) async {
-    final tmdbKey = settings.tmdbApiKey.trim();
-    if (tmdbKey.isNotEmpty) {
-      if (_tmdb == null || _lastTmdbKey != tmdbKey) {
-        _tmdb = TmdbService(tmdbKey);
-        _lastTmdbKey = tmdbKey;
-      }
-    } else {
-      _tmdb = null;
-      _lastTmdbKey = null;
-    }
-
     final parsed = FilenameParser.parse(item.fileName);
     var working = item.copyWith(
       title: parsed.seriesTitle,
@@ -103,12 +91,13 @@ class MetadataService {
       }
     }
 
-    if (_tmdb == null) {
+    final bool tmdbAllowed = settings.hasTmdbKey && settings.tmdbStatus != TmdbKeyStatus.invalid;
+    if (!tmdbAllowed || !tmdbService.hasKey) {
       return base;
     }
 
     try {
-      return await _tmdb!.enrich(base);
+      return await tmdbService.enrich(base);
     } catch (e) {
       print('[metadata] TMDB error: $e');
       return base;

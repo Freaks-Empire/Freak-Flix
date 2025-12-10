@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import '../screens/details_screen.dart';
+import 'safe_network_image.dart';
 
 class HeroBanner extends StatelessWidget {
   final MediaItem item;
@@ -16,9 +17,11 @@ class HeroBanner extends StatelessWidget {
         children: [
           AspectRatio(
             aspectRatio: 16 / 6,
-            child: item.backdropUrl != null
-                ? Image.network(item.backdropUrl!, fit: BoxFit.cover)
-                : Container(color: Colors.grey.shade900),
+            child: SafeNetworkImage(
+              url: item.backdropUrl,
+              fit: BoxFit.cover,
+              borderRadius: BorderRadius.zero,
+            ),
           ),
           Positioned.fill(
             child: Container(
@@ -38,7 +41,10 @@ class HeroBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(item.title ?? item.fileName,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.white)),
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineSmall
+                        ?.copyWith(color: Colors.white)),
                 const SizedBox(height: 8),
                 SizedBox(
                   width: 480,
@@ -52,7 +58,8 @@ class HeroBanner extends StatelessWidget {
                 const SizedBox(height: 8),
                 FilledButton.icon(
                   onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => DetailsScreen(item: item)),
+                    MaterialPageRoute(
+                        builder: (_) => DetailsScreen(item: item)),
                   ),
                   icon: const Icon(Icons.play_arrow),
                   label: const Text('Play'),

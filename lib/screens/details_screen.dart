@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/media_item.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
+import '../widgets/safe_network_image.dart';
 import 'video_player_screen.dart';
 
 class DetailsScreen extends StatefulWidget {
@@ -58,7 +59,11 @@ class _DetailsScreenState extends State<DetailsScreen> {
           if (_current.backdropUrl != null)
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.network(_current.backdropUrl!, fit: BoxFit.cover),
+              child: SafeNetworkImage(
+                url: _current.backdropUrl,
+                fit: BoxFit.cover,
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           const SizedBox(height: 12),
           Text(_current.title ?? _current.fileName,

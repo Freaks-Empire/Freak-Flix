@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import '../screens/details_screen.dart';
+import 'safe_network_image.dart';
 
 class MediaCard extends StatelessWidget {
   final MediaItem item;
@@ -32,9 +33,13 @@ class MediaCard extends StatelessWidget {
                       aspectRatio: 2 / 3,
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: item.posterUrl != null
-                            ? Image.network(item.posterUrl!, fit: BoxFit.cover)
-                            : Container(color: Colors.grey.shade800, child: const Icon(Icons.movie)),
+                        child: SafeNetworkImage(
+                          url: item.posterUrl,
+                          fit: BoxFit.cover,
+                          borderRadius: BorderRadius.circular(8),
+                          width: double.infinity,
+                          height: double.infinity,
+                        ),
                       ),
                     ),
                   ),

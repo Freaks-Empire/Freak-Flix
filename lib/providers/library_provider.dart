@@ -24,6 +24,91 @@ class LibraryProvider extends ChangeNotifier {
   String? error;
   String scanningStatus = '';
 
+  // Scan progress state
+  bool isScanning = false;
+  int scannedCount = 0;
+  int totalToScan = 0;
+  String? currentScanSource;
+  String? currentScanItem;
+  bool _cancelScanRequested = false;
+
+  void beginScan({String? sourceLabel, int? total}) {
+    isLoading = true;
+    isScanning = true;
+    _cancelScanRequested = false;
+
+    scannedCount = 0;
+    totalToScan = total ?? 0;
+    currentScanSource = sourceLabel;
+    currentScanItem = null;
+
+    _updateScanningStatus();
+    notifyListeners();
+  }
+
+  void reportScanProgress({
+    int? scanned,
+    int? total,
+    String? currentItem,
+    String? sourceLabel,
+  }) {
+    if (scanned != null) scannedCount = scanned;
+    if (total != null) totalToScan = total;
+    if (sourceLabel != null && sourceLabel.isNotEmpty) {
+      currentScanSource = sourceLabel;
+    }
+    if (currentItem != null && currentItem.isNotEmpty) {
+      currentScanItem = currentItem;
+    }
+    _updateScanningStatus();
+    notifyListeners();
+  }
+
+  void finishScan() {
+    isScanning = false;
+    isLoading = false;
+    _cancelScanRequested = false;
+
+    scannedCount = 0;
+    totalToScan = 0;
+    currentScanSource = null;
+    currentScanItem = null;
+    scanningStatus = '';
+
+    notifyListeners();
+  }
+
+  bool get cancelRequested => _cancelScanRequested;
+
+  void requestCancelScan() {
+    if (!isScanning) return;
+    _cancelScanRequested = true;
+    scanningStatus = 'Cancelling…';
+    notifyListeners();
+  }
+
+  void _updateScanningStatus() {
+    if (!isScanning) {
+      scanningStatus = '';
+      return;
+    }
+
+    final where = currentScanSource ?? '';
+    final item = currentScanItem ?? '';
+
+    if (totalToScan > 0) {
+      scanningStatus =
+          'Scanning $where  ($scannedCount / $totalToScan)… ${item.isEmpty ? '' : item}';
+    } else {
+      scanningStatus = 'Scanning $where… ${item.isEmpty ? '' : item}';
+    }
+  }
+
+  void _setScanStatus(String message) {
+    scanningStatus = message;
+    notifyListeners();
+  }
+
   LibraryProvider(this.settings);
 
   Future<void> loadLibrary() async {
@@ -50,8 +135,12 @@ class LibraryProvider extends ChangeNotifier {
         final inferredType = _inferTypeFromPath(items[i]);
         final inferredAnime = _inferAnimeFromPath(items[i]);
         final updatedItem = items[i].copyWith(
-          title: parsed.seriesTitle.isNotEmpty ? parsed.seriesTitle : items[i].title,
-          season: items[i].season ?? parsed.season ?? (parsed.episode != null ? 1 : null),
+          title: parsed.seriesTitle.isNotEmpty
+              ? parsed.seriesTitle
+              : items[i].title,
+          season: items[i].season ??
+              parsed.season ??
+              (parsed.episode != null ? 1 : null),
           episode: items[i].episode ?? parsed.episode,
           type: inferredType,
           isAnime: inferredAnime,
@@ -109,9 +198,7 @@ class LibraryProvider extends ChangeNotifier {
 
   Future<void> pickAndScan({MetadataService? metadata}) async {
     error = null;
-    isLoading = true;
-    scanningStatus = 'Initializing...';
-    notifyListeners();
+    beginScan(sourceLabel: 'Local files');
     try {
       if (Platform.isAndroid || Platform.isIOS) {
         final result = await FilePicker.platform.pickFiles(
@@ -120,49 +207,51 @@ class LibraryProvider extends ChangeNotifier {
           allowedExtensions: ['mp4', 'mkv', 'avi', 'mov', 'webm'],
         );
         if (result == null) {
-          isLoading = false;
-          scanningStatus = '';
-          notifyListeners();
           return;
         }
+
         final files = result.paths.whereType<String>().map(File.new).toList();
+        reportScanProgress(
+          scanned: 0,
+          total: files.length,
+          sourceLabel: 'Local files',
+          currentItem: 'Preparing files',
+        );
         await _ingestFiles(files, metadata);
       } else {
         final path = await FilePicker.platform.getDirectoryPath();
         if (path == null) {
-          isLoading = false;
-          scanningStatus = '';
-          notifyListeners();
           return;
         }
+        final sourceLabel = 'Local · ${p.basename(path)}';
         settings.setLastFolder(path);
-        
+
         // Spawn isolate for streaming background scanning
         final port = ReceivePort();
-        await Isolate.spawn(_scanDirectoryInIsolate, _ScanRequest(port.sendPort, path));
-        
+        await Isolate.spawn(
+          _scanDirectoryInIsolate,
+          _ScanRequest(port.sendPort, path),
+        );
+
         final scannedItems = <MediaItem>[];
         await for (final message in port) {
           if (message is String) {
-            scanningStatus = message;
-            notifyListeners();
+            reportScanProgress(sourceLabel: sourceLabel, currentItem: message);
           } else if (message is List<MediaItem>) {
             scannedItems.addAll(message);
             port.close();
             break; // Done
           }
         }
-        
-        scanningStatus = 'Finalizing...';
-        notifyListeners();
+
+        reportScanProgress(
+            sourceLabel: sourceLabel, currentItem: 'Finalizing...');
         await _ingestItems(scannedItems, metadata);
       }
     } catch (e) {
       error = e.toString();
     } finally {
-      isLoading = false;
-      scanningStatus = '';
-      notifyListeners();
+      finishScan();
       await saveLibrary();
     }
   }
@@ -170,29 +259,85 @@ class LibraryProvider extends ChangeNotifier {
   Future<void> _ingestFiles(List<File> files, MetadataService? metadata) async {
     final newItems = <MediaItem>[];
     for (final f in files) {
-       if (_isVideo(f.path)) {
-         newItems.add(_parseFile(f));
-       }
+      if (_isVideo(f.path)) {
+        newItems.add(_parseFile(f));
+      }
     }
     await _ingestItems(newItems, metadata);
   }
 
-  Future<void> _ingestItems(List<MediaItem> newItems, MetadataService? metadata) async {
+  Future<void> _ingestItems(
+      List<MediaItem> newItems, MetadataService? metadata) async {
     final map = {for (var i in items) i.filePath: i};
     for (final item in newItems) {
       map[item.filePath] = item;
     }
-    items = map.values.toList()..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+    items = map.values.toList()
+      ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
     notifyListeners();
 
     if (settings.autoFetchAfterScan && metadata != null) {
       for (int i = 0; i < items.length; i++) {
-        scanningStatus = 'Fetching metadata: ${items[i].title}';
-        notifyListeners();
+        _setScanStatus('Fetching metadata: ${items[i].title}');
         final enriched = await metadata.enrich(items[i]);
         items[i] = enriched;
         notifyListeners();
       }
+    }
+  }
+
+  /// Refetch metadata only for items inside a specific library folder.
+  /// [folderPath] is the root path, [label] is a friendly name: e.g. 'Anime'.
+  Future<void> refetchMetadataForFolder(
+    String folderPath,
+    String label,
+    MetadataService metadata,
+  ) async {
+    final normalized = folderPath.trim();
+
+    final targetItems = items.where((item) {
+      final path = item.folderPath.trim();
+      if (path == normalized) return true;
+      return path.startsWith('$normalized/');
+    }).toList();
+
+    await _refetchMetadataForItems(targetItems, metadata, label);
+  }
+
+  /// Internal helper: refetch only for the given items.
+  Future<void> _refetchMetadataForItems(
+    List<MediaItem> targetItems,
+    MetadataService metadata,
+    String label,
+  ) async {
+    if (targetItems.isEmpty) return;
+
+    isLoading = true;
+    scanningStatus =
+        'Refreshing $label metadata (${targetItems.length} items)...';
+    notifyListeners();
+
+    try {
+      for (var i = 0; i < targetItems.length; i++) {
+        final item = targetItems[i];
+        scanningStatus =
+            '[$label] (${i + 1}/${targetItems.length}) ${item.title ?? item.fileName}';
+        notifyListeners();
+
+        final enriched = await metadata.enrich(item);
+        final index = items.indexWhere((e) => e.id == item.id);
+        if (index != -1) {
+          items[index] = enriched;
+        }
+      }
+
+      await saveLibrary();
+
+      scanningStatus = 'Finished refreshing $label metadata.';
+      notifyListeners();
+    } finally {
+      isLoading = false;
+      // Let the finished message linger briefly; UI may clear it after delay.
     }
   }
 
@@ -210,32 +355,35 @@ class LibraryProvider extends ChangeNotifier {
     await saveLibrary();
   }
 
-  List<MediaItem> get movies => items.where((i) => i.type == MediaType.movie).toList();
+  List<MediaItem> get movies =>
+      items.where((i) => i.type == MediaType.movie).toList();
 
-    // Group TV/anime by showKey and aggregate episodes under one show card.
-    // TV tab excludes anime; Anime tab shows only anime.
-    List<MediaItem> get tv =>
+  // Group TV/anime by showKey and aggregate episodes under one show card.
+  // TV tab excludes anime; Anime tab shows only anime.
+  List<MediaItem> get tv =>
       _groupShows(items.where((i) => i.type == MediaType.tv && !i.isAnime));
 
-    List<MediaItem> get anime =>
+  List<MediaItem> get anime =>
       _groupShows(items.where((i) => i.type == MediaType.tv && i.isAnime));
 
-    List<TvShowGroup> get groupedTvShows =>
-      _groupShowsToGroups(items.where((i) => i.type == MediaType.tv && !i.isAnime));
+  List<TvShowGroup> get groupedTvShows => _groupShowsToGroups(
+      items.where((i) => i.type == MediaType.tv && !i.isAnime));
 
-    List<TvShowGroup> get groupedAnimeShows =>
-      _groupShowsToGroups(items.where((i) => i.type == MediaType.tv && i.isAnime));
+  List<TvShowGroup> get groupedAnimeShows => _groupShowsToGroups(
+      items.where((i) => i.type == MediaType.tv && i.isAnime));
 
   List<MediaItem> get continueWatching =>
       items.where((i) => i.lastPositionSeconds > 0 && !i.isWatched).toList();
 
   List<MediaItem> get recentlyAdded {
-    final sorted = [...items]..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+    final sorted = [...items]
+      ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
     return sorted.take(20).toList();
   }
 
   List<MediaItem> get topRated {
-    final sorted = [...items]..sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
+    final sorted = [...items]
+      ..sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
     return sorted.take(20).toList();
   }
 
@@ -246,13 +394,14 @@ class LibraryProvider extends ChangeNotifier {
   }) async {
     error = null;
     isLoading = true;
-    scanningStatus = 'Scanning ${folder.path.isEmpty ? '/' : folder.path}...';
+    _setScanStatus('Scanning ${folder.path.isEmpty ? '/' : folder.path}...');
     notifyListeners();
 
     try {
       final account = auth.accounts.firstWhere(
         (a) => a.id == folder.accountId,
-        orElse: () => throw Exception('No account found for id ${folder.accountId}'),
+        orElse: () =>
+            throw Exception('No account found for id ${folder.accountId}'),
       );
       final token = account.accessToken;
       final normalizedPath = folder.path.isEmpty ? '/' : folder.path;
@@ -265,17 +414,18 @@ class LibraryProvider extends ChangeNotifier {
         out: collected,
         accountPrefix: prefix,
         libraryFolder: folder,
+        onProgress: (path, count) {
+          _setScanStatus('OneDrive · $path ($count files)');
+        },
       );
 
-      scanningStatus = 'Found ${collected.length} videos. Ingesting...';
-      notifyListeners();
+      _setScanStatus('Found ${collected.length} videos. Ingesting...');
       await _ingestItems(collected, metadata);
     } catch (e) {
       error = e.toString();
     } finally {
       isLoading = false;
-      scanningStatus = '';
-      notifyListeners();
+      _setScanStatus('');
       await saveLibrary();
     }
   }
@@ -303,6 +453,8 @@ class LibraryProvider extends ChangeNotifier {
   }
 }
 
+typedef _ProgressCallback = void Function(String path, int filesFound);
+
 Future<void> _walkOneDriveFolder({
   required String token,
   required String folderId,
@@ -310,8 +462,10 @@ Future<void> _walkOneDriveFolder({
   required List<MediaItem> out,
   required String accountPrefix,
   required LibraryFolder libraryFolder,
+  _ProgressCallback? onProgress,
 }) async {
-  final url = Uri.parse('https://graph.microsoft.com/v1.0/me/drive/items/$folderId/children');
+  final url = Uri.parse(
+      'https://graph.microsoft.com/v1.0/me/drive/items/$folderId/children');
   await _walkOneDrivePage(
     token: token,
     url: url,
@@ -319,6 +473,7 @@ Future<void> _walkOneDriveFolder({
     out: out,
     accountPrefix: accountPrefix,
     libraryFolder: libraryFolder,
+    onProgress: onProgress,
   );
 }
 
@@ -329,6 +484,7 @@ Future<void> _walkOneDrivePage({
   required List<MediaItem> out,
   required String accountPrefix,
   required LibraryFolder libraryFolder,
+  _ProgressCallback? onProgress,
 }) async {
   final res = await http.get(url, headers: {'Authorization': 'Bearer $token'});
   if (res.statusCode != 200) {
@@ -345,6 +501,8 @@ Future<void> _walkOneDrivePage({
     final id = m['id'] as String? ?? '';
     final nextPath = currentPath == '/' ? '/$name' : '$currentPath/$name';
 
+    onProgress?.call(nextPath, out.length);
+
     if (isFolder) {
       await _walkOneDriveFolder(
         token: token,
@@ -353,6 +511,7 @@ Future<void> _walkOneDrivePage({
         out: out,
         accountPrefix: accountPrefix,
         libraryFolder: libraryFolder,
+        onProgress: onProgress,
       );
       continue;
     }
@@ -363,11 +522,13 @@ Future<void> _walkOneDrivePage({
     if (downloadUrl == null) continue;
 
     final lastModifiedRaw = m['lastModifiedDateTime'] as String?;
-    final lastModified = DateTime.tryParse(lastModifiedRaw ?? '') ?? DateTime.now();
+    final lastModified =
+        DateTime.tryParse(lastModifiedRaw ?? '') ?? DateTime.now();
     final size = (m['size'] as num?)?.toInt() ?? 0;
     final parsed = FilenameParser.parse(name);
     final animeHint = nextPath.toLowerCase().contains('anime');
-    final hasTvHints = parsed.season != null || parsed.episode != null || animeHint;
+    final hasTvHints =
+        parsed.season != null || parsed.episode != null || animeHint;
     final mediaType = _typeForFolder(libraryFolder, hasTvHints);
     final isAnime = libraryFolder.type == LibraryType.anime || animeHint;
     final accountScopedFolderPath = '$accountPrefix$currentPath';
@@ -392,6 +553,8 @@ Future<void> _walkOneDrivePage({
       isAnime: isAnime,
       showKey: showKey,
     ));
+
+    onProgress?.call(nextPath, out.length);
   }
 
   final nextLink = body['@odata.nextLink'] as String?;
@@ -403,6 +566,7 @@ Future<void> _walkOneDrivePage({
       out: out,
       accountPrefix: accountPrefix,
       libraryFolder: libraryFolder,
+      onProgress: onProgress,
     );
   }
 }
@@ -439,25 +603,25 @@ void _scanDirectoryInIsolate(_ScanRequest request) {
 
   try {
     request.sendPort.send('Scanning: ${request.path}...');
-    
+
     // Recursive listing can be blocking for huge dirs, but we are in an isolate.
     // However, to provide updates, we might want to manually recurse or just update periodically if possible.
     // listSync is simplest but doesn't allow mid-stream updates easily unless we iterate the iterable.
     // Let's iterate the iterable from listSync (which computes all at once usually) or use list() stream?
-    // listSync returns a List so it blocks until done. 
+    // listSync returns a List so it blocks until done.
     // Better to use Directory.list (Stream) or manual recursion for feedback.
     // For simplicity + feedback, let's use listSync but on subdirectories if we wanted granularity.
     // Actually, iterate listSync results? No, listSync blocks until the array is ready.
     // We should use Directory.listSync(recursive: true) which blocks. To show progress *during* search
     // we need manual recursion or non-recursive listSync.
-    
+
     // Let's use recursive: true for performance, but we can only report "Found X items" *after* listSync returns?
     // No, that defeats the purpose if listSync takes 30s.
     // Let's use generic manual recursion for better feedback.
-    
+
     final entities = dir.listSync(recursive: true, followLinks: false);
     request.sendPort.send('Found ${entities.length} files. Parsing...');
-    
+
     for (final f in entities) {
       if (f is File && _isVideo(f.path)) {
         items.add(_parseFile(f));
@@ -470,7 +634,7 @@ void _scanDirectoryInIsolate(_ScanRequest request) {
   } catch (e) {
     // Ignore access errors
   }
-  
+
   request.sendPort.send(items);
 }
 
@@ -518,9 +682,9 @@ MediaType _inferTypeFromPath(MediaItem item) {
   final fileName = p.basenameWithoutExtension(item.fileName).toLowerCase();
   final folderName = p.basename(item.folderPath).toLowerCase();
   final hasSeasonInFolder = RegExp(r'season[ _-]?\d{1,2}').hasMatch(folderName);
-  final hasTvPattern =
-      RegExp(r'[Ss]\d{1,2}[Ee]\d{1,3}').hasMatch(fileName) ||
-      RegExp(r'(?:^|[\s._-])(?:ep(?:isode)?\s*)?\d{1,3}(?!\d)').hasMatch(fileName) ||
+  final hasTvPattern = RegExp(r'[Ss]\d{1,2}[Ee]\d{1,3}').hasMatch(fileName) ||
+      RegExp(r'(?:^|[\s._-])(?:ep(?:isode)?\s*)?\d{1,3}(?!\d)')
+          .hasMatch(fileName) ||
       hasSeasonInFolder ||
       item.season != null ||
       item.episode != null;
@@ -599,11 +763,17 @@ List<TvShowGroup> _groupShowsToGroups(Iterable<MediaItem> source) {
     final first = episodes.first;
     final parsedFirst = FilenameParser.parse(first.fileName);
     final title = parsedFirst.seriesTitle.isNotEmpty
-      ? parsedFirst.seriesTitle
-      : (first.title?.isNotEmpty == true ? first.title! : first.fileName);
-    final poster = episodes.firstWhere((e) => e.posterUrl != null, orElse: () => first).posterUrl;
-    final backdrop = episodes.firstWhere((e) => e.backdropUrl != null, orElse: () => first).backdropUrl;
-    final year = episodes.firstWhere((e) => e.year != null, orElse: () => first).year ?? parsedFirst.year;
+        ? parsedFirst.seriesTitle
+        : (first.title?.isNotEmpty == true ? first.title! : first.fileName);
+    final poster = episodes
+        .firstWhere((e) => e.posterUrl != null, orElse: () => first)
+        .posterUrl;
+    final backdrop = episodes
+        .firstWhere((e) => e.backdropUrl != null, orElse: () => first)
+        .backdropUrl;
+    final year =
+        episodes.firstWhere((e) => e.year != null, orElse: () => first).year ??
+            parsedFirst.year;
     final isAnime = episodes.any((e) => e.isAnime);
     return TvShowGroup(
       title: title,
