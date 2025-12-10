@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/library_provider.dart';
@@ -48,55 +48,52 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
       home: Scaffold(
         body: Stack(
           children: [
-            Row(
+            Column(
               children: [
-              body: Stack(
-                children: [
-                  Column(
-                    children: [
-                      NavBar(
-                        index: _index,
-                        onTap: (i) => setState(() => _index = i),
-                      ),
-                      Expanded(child: _pages[_index]),
-                    ],
-                  ),
-                  if (library.isLoading)
-                    Positioned(
-                      top: 76,
-                      left: 12,
-                      right: 12,
-                      child: Material(
-                        elevation: 4,
-                        borderRadius: BorderRadius.circular(8),
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surface
-                            .withOpacity(0.9),
-                        child: Padding(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          child: Row(
-                            children: [
-                              const SizedBox(
-                                height: 18,
-                                width: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2.2),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  library.scanningStatus.isNotEmpty
-                                      ? library.scanningStatus
-                                      : 'Scanning library in background... You can keep browsing.',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
+                NavBar(
+                  index: _index,
+                  onTap: (i) => setState(() => _index = i),
+                ),
+                Expanded(child: _pages[_index]),
+              ],
+            ),
+            if (library.isLoading)
+              Positioned(
+                top: 76,
+                left: 12,
+                right: 12,
+                child: Material(
+                  elevation: 4,
+                  borderRadius: BorderRadius.circular(8),
+                  color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      children: [
+                        const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2.2),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            library.scanningStatus.isNotEmpty
+                                ? library.scanningStatus
+                                : 'Scanning library in background... You can keep browsing.',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                ],
+                  ),
+                ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -341,6 +341,52 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
+  /// Rescan a single OneDrive library folder and merge results into the library.
+  Future<void> rescanOneDriveFolder({
+    required graph_auth.GraphAuthService auth,
+    required LibraryFolder folder,
+    MetadataService? metadata,
+  }) async {
+    error = null;
+    isLoading = true;
+    final folderLabel = folder.path.isEmpty ? '/' : folder.path;
+    _setScanStatus('Rescanning $folderLabel...');
+
+    try {
+      final account = auth.accounts.firstWhere(
+        (a) => a.id == folder.accountId,
+        orElse: () =>
+        throw Exception('No account found for id ${folder.accountId}'),
+      );
+      final token = await auth.getFreshAccessToken(account.id);
+      final normalizedPath = folder.path.isEmpty ? '/' : folder.path;
+      final collected = <MediaItem>[];
+      final prefix = 'onedrive:${folder.accountId}';
+
+      await _walkOneDriveFolder(
+        token: token,
+        folderId: folder.id,
+        currentPath: normalizedPath,
+        out: collected,
+        accountPrefix: prefix,
+        libraryFolder: folder,
+        onProgress: (path, count) {
+          _setScanStatus('OneDrive · $path ($count files)');
+        },
+      );
+
+        _setScanStatus(
+          'Merging ${collected.length} items from $folderLabel...');
+      await _ingestItems(collected, metadata);
+    } catch (e) {
+      error = 'Rescan failed for $folderLabel: $e';
+    } finally {
+      isLoading = false;
+      _setScanStatus('');
+      await saveLibrary();
+    }
+  }
+
   Future<void> clear() async {
     items = [];
     await saveLibrary();
@@ -401,9 +447,9 @@ class LibraryProvider extends ChangeNotifier {
       final account = auth.accounts.firstWhere(
         (a) => a.id == folder.accountId,
         orElse: () =>
-            throw Exception('No account found for id ${folder.accountId}'),
+        throw Exception('No account found for id ${folder.accountId}'),
       );
-      final token = account.accessToken;
+      final token = await auth.getFreshAccessToken(account.id);
       final normalizedPath = folder.path.isEmpty ? '/' : folder.path;
       final collected = <MediaItem>[];
       final prefix = 'onedrive:${folder.accountId}';

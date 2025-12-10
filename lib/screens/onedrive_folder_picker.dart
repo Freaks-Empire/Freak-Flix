@@ -46,7 +46,7 @@ class _OneDriveFolderPickerState extends State<OneDriveFolderPicker> {
         (a) => a.id == widget.accountId,
         orElse: () => throw Exception('No account found for id ${widget.accountId}'),
       );
-      final token = account.accessToken;
+      final token = await widget.auth.getFreshAccessToken(account.id);
       final rootRes = await http.get(
         Uri.parse('https://graph.microsoft.com/v1.0/me/drive/root'),
         headers: {'Authorization': 'Bearer $token'},
@@ -78,10 +78,7 @@ class _OneDriveFolderPickerState extends State<OneDriveFolderPicker> {
 
     try {
       final t = token ??
-          widget.auth.accounts.firstWhere(
-            (a) => a.id == widget.accountId,
-            orElse: () => throw Exception('No account found for id ${widget.accountId}'),
-          ).accessToken;
+          await widget.auth.getFreshAccessToken(widget.accountId);
       final url = Uri.parse(
           'https://graph.microsoft.com/v1.0/me/drive/items/${folder.id}/children');
       final res = await http.get(url, headers: {'Authorization': 'Bearer $t'});

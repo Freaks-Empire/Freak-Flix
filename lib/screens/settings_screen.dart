@@ -197,32 +197,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   spacing: 8,
                                   children: [
                                     TextButton.icon(
+                                      icon: const Icon(Icons.autorenew_rounded,
+                                          size: 18),
+                                      label: const Text('Rescan library'),
+                                      onPressed: library.isLoading
+                                          ? null
+                                          : () async {
+                                              await library
+                                                  .rescanOneDriveFolder(
+                                                auth: _graphAuth,
+                                                folder: folder,
+                                                metadata: metadata,
+                                              );
+
+                                              if (context.mounted) {
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                        'Rescanned ${_typeLabel(folder.type)} library'),
+                                                    behavior: SnackBarBehavior
+                                                        .floating,
+                                                    duration: const Duration(
+                                                        seconds: 2),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                    ),
+                                    const SizedBox(width: 4),
+                                    TextButton.icon(
                                       icon: const Icon(Icons.refresh_rounded,
                                           size: 18),
                                       label: const Text('Refetch metadata'),
-                                      onPressed: () async {
-                                        final scopedRoot =
-                                            'onedrive:${folder.accountId}${folder.path.isEmpty ? '/' : folder.path}';
-                                        await library.refetchMetadataForFolder(
-                                          scopedRoot,
-                                          _typeLabel(folder.type),
-                                          metadata,
-                                        );
+                                      onPressed: library.isLoading
+                                          ? null
+                                          : () async {
+                                              final scopedRoot =
+                                                  'onedrive:${folder.accountId}${folder.path.isEmpty ? '/' : folder.path}';
+                                              await library
+                                                  .refetchMetadataForFolder(
+                                                scopedRoot,
+                                                _typeLabel(folder.type),
+                                                metadata,
+                                              );
 
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                  'Refreshed ${_typeLabel(folder.type)} metadata'),
-                                              behavior:
-                                                  SnackBarBehavior.floating,
-                                              duration:
-                                                  const Duration(seconds: 2),
-                                            ),
-                                          );
-                                        }
-                                      },
+                                              if (context.mounted) {
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                        'Refreshed ${_typeLabel(folder.type)} metadata'),
+                                                    behavior: SnackBarBehavior
+                                                        .floating,
+                                                    duration: const Duration(
+                                                        seconds: 2),
+                                                  ),
+                                                );
+                                              }
+                                            },
                                     ),
                                     IconButton(
                                       icon: const Icon(Icons.delete_outline),

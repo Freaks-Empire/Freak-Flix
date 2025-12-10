@@ -1,52 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-/// Demo item for UI scaffolding. Swap with MediaItem later.
-class DemoItem {
-  final String title;
-  final String subtitle; // e.g. 'S1 • E8 – The Mask'
-  final String imageUrl;
-  final double progress; // 0.0 – 1.0
-  final String timeLabel; // '45m'
-  final String remainingLabel; // '93 remaining'
-  final String daysLabel; // '2d'
+import '../models/media_item.dart';
+import '../providers/library_provider.dart';
+import 'home_media_card.dart';
 
-  DemoItem({
-    required this.title,
-    required this.subtitle,
-    required this.imageUrl,
-    required this.progress,
-    required this.timeLabel,
-    required this.remainingLabel,
-    required this.daysLabel,
-  });
-
-  factory DemoItem.fake(int idx) {
-    return DemoItem(
-      title: [
-        'Gotham',
-        'Two and a Half Men',
-        'House',
-        'Dark',
-        'Dune: Prophecy',
-      ][idx % 5],
-      subtitle: 'S1 • E${(idx % 10) + 1} – Episode ${(idx % 20) + 1}',
-      imageUrl:
-          'https://image.tmdb.org/t/p/w500/6n8xUAoY5jz11sXkjtEtpFl5T1W.jpg',
-      progress: 0.4 + (idx % 3) * 0.15,
-      timeLabel: '45m',
-      remainingLabel: '${60 + idx * 3} remaining',
-      daysLabel: '${(idx % 4) + 1}d',
-    );
-  }
-}
-
-/// Clone-style home dashboard. Swap demo data with real library items later.
+/// Clone-style home dashboard backed by the real library.
 class FreakflixDashboard extends StatelessWidget {
   const FreakflixDashboard({super.key});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final library = context.watch<LibraryProvider>();
+
+    // Real data sources
+    final continueWatching = library.continueWatching;
+    final recentlyAdded = library.recentlyAdded;
+    final topRated = library.topRated;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.background,
@@ -86,26 +57,26 @@ class FreakflixDashboard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    SizedBox(height: 4),
+                  children: [
+                    const SizedBox(height: 4),
                     _Section(
                       title: 'Continue Watching',
                       showArrow: true,
-                      fakeSeed: 0,
+                      items: continueWatching,
                     ),
-                    SizedBox(height: 12),
+                    if (continueWatching.isNotEmpty) const SizedBox(height: 12),
                     _Section(
-                      title: 'Start Watching',
+                      title: 'Recently Added',
                       showArrow: true,
-                      fakeSeed: 10,
+                      items: recentlyAdded,
                     ),
-                    SizedBox(height: 12),
+                    if (recentlyAdded.isNotEmpty) const SizedBox(height: 12),
                     _Section(
-                      title: 'Upcoming Schedule',
-                      showArrow: false,
-                      fakeSeed: 20,
+                      title: 'Top Rated',
+                      showArrow: true,
+                      items: topRated,
                     ),
-                    SizedBox(height: 32),
+                    const SizedBox(height: 32),
                   ],
                 ),
               ),
@@ -149,18 +120,19 @@ class _ModePill extends StatelessWidget {
 class _Section extends StatelessWidget {
   final String title;
   final bool showArrow;
-  final int fakeSeed;
+  final List<MediaItem> items;
 
   const _Section({
     required this.title,
     required this.showArrow,
-    required this.fakeSeed,
+    required this.items,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final items = List.generate(10, (i) => DemoItem.fake(fakeSeed + i));
+
+    if (items.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -186,116 +158,10 @@ class _Section extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             itemCount: items.length,
             separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (context, index) => _ShowCard(item: items[index]),
+            itemBuilder: (context, index) => HomeMediaCard(item: items[index]),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _ShowCard extends StatelessWidget {
-  final DemoItem item;
-
-  const _ShowCard({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return SizedBox(
-      width: 170,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Stack(
-              children: [
-                AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Image.network(
-                    item.imageUrl,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                Positioned(
-                  top: 4,
-                  right: 4,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    padding: const EdgeInsets.all(4),
-                    child: const Icon(
-                      Icons.more_vert,
-                      size: 16,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 18,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    color: Colors.black.withOpacity(0.55),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _stripText(item.timeLabel),
-                        _stripText(item.remainingLabel),
-                        _stripText(item.daysLabel),
-                      ],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: LinearProgressIndicator(
-                    value: item.progress.clamp(0.0, 1.0),
-                    minHeight: 4,
-                    backgroundColor: Colors.white.withOpacity(0.15),
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      theme.colorScheme.primary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            item.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          Text(
-            item.subtitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onBackground.withOpacity(0.7),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _stripText(String text) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 10,
-        fontWeight: FontWeight.w600,
-      ),
     );
   }
 }

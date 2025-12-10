@@ -15,6 +15,7 @@ class NavBar extends StatelessWidget {
       (Icons.animation, 'Anime'),
       (Icons.settings, 'Settings'),
     ];
+
     return Material(
       elevation: 0,
       color: theme.colorScheme.background,
@@ -28,13 +29,15 @@ class NavBar extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(width: 12),
-            ...List.generate(items.length, (i) {
-              final selected = i == index;
-              final (icon, label) = items[i];
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: InkWell(
+            const Spacer(),
+            Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: List.generate(items.length, (i) {
+                final selected = i == index;
+                final (icon, label) = items[i];
+                return InkWell(
                   borderRadius: BorderRadius.circular(22),
                   onTap: () => onTap(i),
                   child: Container(
@@ -53,31 +56,37 @@ class NavBar extends StatelessWidget {
                         width: 1,
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          icon,
-                          size: 18,
-                          color: selected
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurface.withOpacity(0.8),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          label,
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
+                    child: AnimatedSize(
+                      duration: const Duration(milliseconds: 150),
+                      curve: Curves.easeOut,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            icon,
+                            size: 18,
                             color: selected
                                 ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface.withOpacity(0.9),
+                                : theme.colorScheme.onSurface.withOpacity(0.8),
                           ),
-                        ),
-                      ],
+                          if (selected) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              label,
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              );
-            }),
+                );
+              }),
+            ),
+            const Spacer(),
           ],
         ),
       ),

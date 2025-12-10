@@ -27,12 +27,16 @@ class GraphAccount {
   final String displayName;
   final String userPrincipalName;
   final String accessToken;
+  final String? refreshToken;
+  final DateTime? expiresAt;
 
   GraphAccount({
     required this.id,
     required this.displayName,
     required this.userPrincipalName,
     required this.accessToken,
+    this.refreshToken,
+    this.expiresAt,
   });
 
   Map<String, dynamic> toJson() => {
@@ -40,13 +44,19 @@ class GraphAccount {
         'displayName': displayName,
         'userPrincipalName': userPrincipalName,
         'accessToken': accessToken,
+        'refreshToken': refreshToken,
+        'expiresAt': expiresAt?.toIso8601String(),
       };
 
   factory GraphAccount.fromJson(Map<String, dynamic> json) => GraphAccount(
         id: json['id'] as String,
         displayName: json['displayName'] as String? ?? '',
         userPrincipalName: json['userPrincipalName'] as String? ?? '',
-        accessToken: json['accessToken'] as String,
+      accessToken: json['accessToken'] as String,
+      refreshToken: json['refreshToken'] as String?,
+      expiresAt: json['expiresAt'] != null
+      ? DateTime.tryParse(json['expiresAt'] as String)
+      : null,
       );
 }
 
@@ -91,6 +101,7 @@ class GraphAuthService {
   static const _scopes = [
     'User.Read',
     'Files.Read',
+    'offline_access', // Needed to receive refresh tokens.
   ];
 
   static const _accountsKey = 'graph_accounts_v1';
@@ -250,8 +261,19 @@ class GraphAuthService {
       final body = jsonDecode(tokenRes.body) as Map<String, dynamic>;
       if (tokenRes.statusCode == 200) {
         final token = body['access_token'] as String;
+        final refreshToken = body['refresh_token'] as String?;
+        final expiresIn = (body['expires_in'] as num?)?.toInt() ?? 3600;
+        final expiresAt = DateTime.now().add(Duration(seconds: expiresIn));
         final user = await _fetchMe(token);
-        await _saveToPrefs(token, user);
+        final account = GraphAccount(
+          id: user.id,
+          displayName: user.displayName,
+          userPrincipalName: user.userPrincipalName,
+          accessToken: token,
+          refreshToken: refreshToken,
+          expiresAt: expiresAt,
+        );
+        await _upsertAccount(account);
         return user;
       }
 
@@ -286,12 +308,86 @@ class GraphAuthService {
   /// Returns an access token, performing device-code login if needed.
   Future<String> getOrLoginWithDeviceCode() async {
     final active = activeAccount;
-    if (active != null) return active.accessToken;
+    if (active != null) return getFreshAccessToken(active.id);
     await connectWithDeviceCode();
     final newActive = activeAccount;
     if (newActive == null) {
       throw Exception('Failed to obtain Microsoft Graph access token');
     }
-    return newActive.accessToken;
+    return getFreshAccessToken(newActive.id);
+  }
+
+  /// Ensure the access token for the given account is fresh, refreshing if possible.
+  Future<String> getFreshAccessToken(String accountId) async {
+    final account = _accounts.firstWhere(
+      (a) => a.id == accountId,
+      orElse: () => throw Exception('No account found for id $accountId'),
+    );
+
+    // If we do not know expiry (older saved token), just return what we have.
+    if (account.expiresAt == null) {
+      return account.accessToken;
+    }
+
+    // If token is still valid for at least 5 minutes, reuse it.
+    final now = DateTime.now();
+    final grace = const Duration(minutes: 5);
+    if (now.isBefore(account.expiresAt!.subtract(grace))) {
+      return account.accessToken;
+    }
+
+    // Try refresh if we have a refresh token.
+    if (account.refreshToken != null && account.refreshToken!.isNotEmpty) {
+      final refreshed = await _refreshAccount(account);
+      return refreshed.accessToken;
+    }
+
+    // Fall back to forcing a new login.
+    final user = await connectWithDeviceCode();
+    final refreshed = _accounts.firstWhere(
+      (a) => a.id == user.id,
+      orElse: () => throw Exception('Login succeeded but account missing'),
+    );
+    return refreshed.accessToken;
+  }
+
+  Future<GraphAccount> _refreshAccount(GraphAccount account) async {
+    _ensureConfigured();
+
+    final res = await http.post(
+      _tokenEndpoint,
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: {
+        'grant_type': 'refresh_token',
+        'client_id': _clientId!,
+        'refresh_token': account.refreshToken ?? '',
+        'scope': _scopes.join(' '),
+      },
+    );
+
+    if (res.statusCode != 200) {
+      throw Exception(
+          'Failed to refresh token (${res.statusCode}): ${res.body}');
+    }
+
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    final accessToken = body['access_token'] as String?;
+    final refreshToken = body['refresh_token'] as String? ?? account.refreshToken;
+    final expiresIn = (body['expires_in'] as num?)?.toInt() ?? 3600;
+    if (accessToken == null) {
+      throw Exception('Refresh response missing access_token');
+    }
+
+    final updated = GraphAccount(
+      id: account.id,
+      displayName: account.displayName,
+      userPrincipalName: account.userPrincipalName,
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      expiresAt: DateTime.now().add(Duration(seconds: expiresIn)),
+    );
+
+    await _upsertAccount(updated);
+    return updated;
   }
 }

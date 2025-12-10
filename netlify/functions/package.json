@@ -1,0 +1,13 @@
+{
+  "name": "freak-flix-functions",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Netlify Functions for Freak-Flix web deployment",
+  "main": "users.js",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "pg": "^8.11.3",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

@@ -1,0 +1,9 @@
+[build]
+  command = "flutter build web --release"
+  publish = "build/web"
+
+# Route all paths to the SPA entry so client-side routing works.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
