@@ -19,10 +19,12 @@ import 'app.dart';
 import 'providers/library_provider.dart';
 import 'providers/playback_provider.dart';
 import 'providers/settings_provider.dart';
+import 'providers/auth_provider.dart';
 import 'services/metadata_service.dart';
 import 'services/tmdb_service.dart';
 import 'services/graph_auth_service.dart';
 import 'services/tmdb_discover_service.dart';
+import 'services/netlify_auth_service.dart';
 import 'models/discover_filter.dart';
 
 void main() async {
@@ -46,6 +48,11 @@ void main() async {
   await libraryProvider.loadLibrary();
   final metadataService = MetadataService(settingsProvider, tmdbService);
   final playbackProvider = PlaybackProvider(libraryProvider);
+  final netlifySite = dotenv.env['NETLIFY_SITE_BASE'] ??
+      dotenv.env['SITE_BASE_URL'] ??
+      'https://freakflix.netlify.app';
+  final authProvider = AuthProvider(NetlifyAuthService(netlifySite));
+  await authProvider.loadFromStorage();
 
   runApp(
     MultiProvider(
@@ -54,6 +61,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => libraryProvider),
         ChangeNotifierProvider(create: (_) => playbackProvider),
         ChangeNotifierProvider(create: (_) => DiscoverFilterNotifier()),
+        ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
         Provider<TmdbService>.value(value: tmdbService),
         Provider<TmdbDiscoverService>.value(value: tmdbDiscoverService),
         Provider<MetadataService>.value(value: metadataService),

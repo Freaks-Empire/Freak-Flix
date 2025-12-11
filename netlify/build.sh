@@ -30,6 +30,8 @@ cd /opt/build/repo
 if [ -f "netlify/functions/package.json" ]; then
   pushd netlify/functions >/dev/null
   npm ci || npm install
+  # Ensure pg is available for new functions
+  npm install pg
   popd >/dev/null
 fi
 
