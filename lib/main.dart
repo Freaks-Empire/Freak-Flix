@@ -24,7 +24,7 @@ import 'services/metadata_service.dart';
 import 'services/tmdb_service.dart';
 import 'services/graph_auth_service.dart';
 import 'services/tmdb_discover_service.dart';
-import 'services/netlify_auth_service.dart';
+import 'services/auth0_service.dart';
 import 'models/discover_filter.dart';
 
 void main() async {
@@ -48,11 +48,14 @@ void main() async {
   await libraryProvider.loadLibrary();
   final metadataService = MetadataService(settingsProvider, tmdbService);
   final playbackProvider = PlaybackProvider(libraryProvider);
-  final netlifySite = dotenv.env['NETLIFY_SITE_BASE'] ??
-      dotenv.env['SITE_BASE_URL'] ??
-      'https://freakflix.netlify.app';
-  final authProvider = AuthProvider(NetlifyAuthService(netlifySite));
-  await authProvider.loadFromStorage();
+  final auth0Service = Auth0Service(
+    domain: dotenv.env['AUTH0_DOMAIN'] ?? '',
+    clientId: dotenv.env['AUTH0_CLIENT_ID'] ?? '',
+    audience: dotenv.env['AUTH0_AUDIENCE'],
+    callbackUrl: dotenv.env['AUTH0_CALLBACK_URL'],
+  );
+  final authProvider = AuthProvider(auth0Service);
+  await authProvider.restoreSession();
 
   runApp(
     MultiProvider(
