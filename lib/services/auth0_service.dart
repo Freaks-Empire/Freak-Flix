@@ -30,9 +30,9 @@ class Auth0Service {
   Future<void> login({bool signup = false}) async {
     await _auth0.webAuthentication().login(
           audience: audience,
-          scopes: ['openid', 'profile', 'email'],
+          scopes: {'openid', 'profile', 'email'},
           redirectUrl: callbackUrl,
-          parameters: signup ? {'screen_hint': 'signup'} : null,
+          parameters: signup ? {'screen_hint': 'signup'} : const {},
         );
   }
 
@@ -45,12 +45,11 @@ class Auth0Service {
   Future<Auth0UserProfile?> getUser() async {
     try {
       final creds = await _auth0.credentialsManager.credentials();
-      final claims = creds.idTokenClaims ?? {};
-      return Auth0UserProfile(
-        name: claims['name'] as String?,
-        email: claims['email'] as String?,
-        picture: claims['picture'] as String?,
-      );
+      // auth0_flutter_platform_interface v1.14 does not expose idTokenClaims; use a minimal profile.
+      if (creds.accessToken == null && creds.idToken == null) {
+        return null;
+      }
+      return const Auth0UserProfile();
     } catch (_) {
       return null;
     }
