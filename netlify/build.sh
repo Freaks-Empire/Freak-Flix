@@ -48,4 +48,8 @@ AUTH0_CALLBACK_URL=${AUTH0_CALLBACK_URL}
 EOF
 
 flutter pub get
-flutter build web --release
+flutter build web --release \
+  --dart-define=AUTH0_DOMAIN=${AUTH0_DOMAIN} \
+  --dart-define=AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID} \
+  --dart-define=AUTH0_AUDIENCE=${AUTH0_AUDIENCE} \
+  --dart-define=AUTH0_CALLBACK_URL=${AUTH0_CALLBACK_URL}

@@ -48,11 +48,24 @@ void main() async {
   await libraryProvider.loadLibrary();
   final metadataService = MetadataService(settingsProvider, tmdbService);
   final playbackProvider = PlaybackProvider(libraryProvider);
+  const auth0Domain = String.fromEnvironment('AUTH0_DOMAIN');
+  const auth0ClientId = String.fromEnvironment('AUTH0_CLIENT_ID');
+  const auth0Audience = String.fromEnvironment('AUTH0_AUDIENCE');
+  const auth0Callback = String.fromEnvironment('AUTH0_CALLBACK_URL');
   final auth0Service = Auth0Service(
-    domain: dotenv.env['AUTH0_DOMAIN'] ?? '',
-    clientId: dotenv.env['AUTH0_CLIENT_ID'] ?? '',
-    audience: dotenv.env['AUTH0_AUDIENCE'],
-    callbackUrl: dotenv.env['AUTH0_CALLBACK_URL'],
+    domain:
+        (auth0Domain.isNotEmpty ? auth0Domain : dotenv.env['AUTH0_DOMAIN']) ??
+            '',
+    clientId: (auth0ClientId.isNotEmpty
+            ? auth0ClientId
+            : dotenv.env['AUTH0_CLIENT_ID']) ??
+        '',
+    audience: (auth0Audience.isNotEmpty
+        ? auth0Audience
+        : dotenv.env['AUTH0_AUDIENCE']),
+    callbackUrl: (auth0Callback.isNotEmpty
+        ? auth0Callback
+        : dotenv.env['AUTH0_CALLBACK_URL']),
   );
   final authProvider = AuthProvider(auth0Service);
   await authProvider.restoreSession();
