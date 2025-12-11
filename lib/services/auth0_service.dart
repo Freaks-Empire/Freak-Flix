@@ -37,12 +37,10 @@ class Auth0Service {
   Future<void> login({bool signup = false}) async {
     if (kIsWeb) {
       await _auth0Web?.loginWithRedirect(
-        auth0_web.LoginOptions(
-          redirectUrl: callbackUrl,
-          audience: audience,
-          scopes: {'openid', 'profile', 'email'},
-          parameters: signup ? {'screen_hint': 'signup'} : const {},
-        ),
+        redirectUrl: callbackUrl,
+        audience: audience,
+        scopes: {'openid', 'profile', 'email'},
+        parameters: signup ? {'screen_hint': 'signup'} : const {},
       );
       return;
     }
@@ -57,9 +55,7 @@ class Auth0Service {
 
   Future<void> logout() async {
     if (kIsWeb) {
-      await _auth0Web?.logout(
-        auth0_web.LogoutOptions(returnTo: logoutUrl ?? callbackUrl),
-      );
+      await _auth0Web?.logout(returnTo: logoutUrl ?? callbackUrl);
       return;
     }
 
@@ -77,7 +73,7 @@ class Auth0Service {
         return Auth0UserProfile(
           name: user.name,
           email: user.email,
-          picture: user.pictureUrl,
+          picture: user.pictureUrl?.toString(),
         );
       }
 
@@ -96,10 +92,8 @@ class Auth0Service {
     try {
       if (kIsWeb) {
         final creds = await _auth0Web?.credentials(
-          auth0_web.CredentialsOptions(
-            audience: audience,
-            scopes: {'openid', 'profile', 'email'},
-          ),
+          audience: audience,
+          scopes: {'openid', 'profile', 'email'},
         );
         return creds?.accessToken;
       }
