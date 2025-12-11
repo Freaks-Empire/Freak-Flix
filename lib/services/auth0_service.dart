@@ -1,6 +1,4 @@
 import 'package:auth0_flutter/auth0_flutter.dart';
-import 'package:auth0_flutter_platform_interface/auth0_flutter_platform_interface.dart'
-    show AuthorizationParams, LogoutOptions;
 import 'package:auth0_flutter_web/auth0_flutter_web.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -40,11 +38,8 @@ class Auth0Service {
     if (kIsWeb) {
       await _auth0Web?.loginWithRedirect(
         redirectUrl: callbackUrl,
-        authorizationParams: AuthorizationParams(
-          audience: audience,
-          scope: 'openid profile email',
-          screenHint: signup ? 'signup' : null,
-        ),
+        audience: audience,
+        scope: 'openid profile email',
       );
       return;
     }
@@ -59,9 +54,7 @@ class Auth0Service {
 
   Future<void> logout() async {
     if (kIsWeb) {
-      await _auth0Web?.logout(
-        options: LogoutOptions(returnTo: logoutUrl ?? callbackUrl),
-      );
+      await _auth0Web?.logout(returnTo: logoutUrl ?? callbackUrl);
       return;
     }
 
@@ -76,9 +69,9 @@ class Auth0Service {
         final profile = await _auth0Web?.getUser();
         if (profile == null) return null;
         return Auth0UserProfile(
-          name: profile.name,
-          email: profile.email,
-          picture: profile.picture,
+          name: profile['name'] as String?,
+          email: profile['email'] as String?,
+          picture: profile['picture'] as String?,
         );
       }
 
@@ -97,7 +90,9 @@ class Auth0Service {
     try {
       if (kIsWeb) {
         return _auth0Web?.getTokenSilently(
-            audience: audience, scope: 'openid profile email');
+          audience: audience,
+          scope: 'openid profile email',
+        );
       }
       final creds = await _auth0?.credentialsManager.credentials();
       return creds?.accessToken;
