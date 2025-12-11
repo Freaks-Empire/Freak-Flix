@@ -4,13 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../services/graph_auth_service.dart';
+import '../widgets/device_code_dialog.dart';
 import 'video_player_screen.dart';
 
 class OneDriveBrowserScreen extends StatefulWidget {
   final GraphAuthService auth;
   final String initialPath;
 
-  const OneDriveBrowserScreen({super.key, required this.auth, this.initialPath = '/'});
+  const OneDriveBrowserScreen(
+      {super.key, required this.auth, this.initialPath = '/'});
 
   @override
   State<OneDriveBrowserScreen> createState() => _OneDriveBrowserScreenState();
@@ -37,15 +39,17 @@ class _OneDriveBrowserScreenState extends State<OneDriveBrowserScreen> {
     });
 
     try {
-      final token = await widget.auth.getOrLoginWithDeviceCode();
+      final token = await _ensureAccessToken();
       final url = _buildChildrenUrl(path);
-      final res = await http.get(url, headers: {'Authorization': 'Bearer $token'});
+      final res =
+          await http.get(url, headers: {'Authorization': 'Bearer $token'});
       if (res.statusCode != 200) {
         throw Exception('Graph error: ${res.statusCode} ${res.body}');
       }
 
       final json = jsonDecode(res.body) as Map<String, dynamic>;
-      final List<dynamic> value = json['value'] as List<dynamic>? ?? <dynamic>[];
+      final List<dynamic> value =
+          json['value'] as List<dynamic>? ?? <dynamic>[];
 
       final items = <_DriveItem>[];
       for (final raw in value) {
@@ -78,14 +82,30 @@ class _OneDriveBrowserScreenState extends State<OneDriveBrowserScreen> {
     }
   }
 
+  Future<String> _ensureAccessToken() async {
+    final active = widget.auth.activeAccount;
+    if (active != null) {
+      return widget.auth.getFreshAccessToken(active.id);
+    }
+
+    final account = await showDeviceCodeDialog(context, widget.auth);
+    if (account == null) {
+      throw Exception('Microsoft sign-in was canceled.');
+    }
+
+    return widget.auth.getFreshAccessToken(account.id);
+  }
+
   Uri _buildChildrenUrl(String path) {
     final trimmed = path.trim();
     if (trimmed.isEmpty || trimmed == '/') {
-      return Uri.parse('https://graph.microsoft.com/v1.0/me/drive/root/children');
+      return Uri.parse(
+          'https://graph.microsoft.com/v1.0/me/drive/root/children');
     }
     final normalized = trimmed.startsWith('/') ? trimmed.substring(1) : trimmed;
     final encodedPath = Uri.encodeComponent(normalized).replaceAll('%2F', '/');
-    return Uri.parse('https://graph.microsoft.com/v1.0/me/drive/root:/$encodedPath:/children');
+    return Uri.parse(
+        'https://graph.microsoft.com/v1.0/me/drive/root:/$encodedPath:/children');
   }
 
   bool _isVideo(String name) {
@@ -136,7 +156,8 @@ class _OneDriveBrowserScreenState extends State<OneDriveBrowserScreen> {
                   itemBuilder: (context, index) {
                     final item = _items[index];
                     return ListTile(
-                      leading: Icon(item.isFolder ? Icons.folder : Icons.video_file),
+                      leading:
+                          Icon(item.isFolder ? Icons.folder : Icons.video_file),
                       title: Text(item.name),
                       onTap: () {
                         if (item.isFolder) {
@@ -144,10 +165,12 @@ class _OneDriveBrowserScreenState extends State<OneDriveBrowserScreen> {
                               ? '/${item.name}'
                               : '$_currentPath/${item.name}';
                           _loadFolder(newPath);
-                        } else if (_isVideo(item.name) && item.downloadUrl != null) {
+                        } else if (_isVideo(item.name) &&
+                            item.downloadUrl != null) {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => VideoPlayerScreen(filePath: item.downloadUrl!),
+                              builder: (_) => VideoPlayerScreen(
+                                  filePath: item.downloadUrl!),
                             ),
                           );
                         }

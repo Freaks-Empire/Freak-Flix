@@ -52,12 +52,51 @@ class GraphAccount {
         id: json['id'] as String,
         displayName: json['displayName'] as String? ?? '',
         userPrincipalName: json['userPrincipalName'] as String? ?? '',
-      accessToken: json['accessToken'] as String,
-      refreshToken: json['refreshToken'] as String?,
-      expiresAt: json['expiresAt'] != null
-      ? DateTime.tryParse(json['expiresAt'] as String)
-      : null,
+        accessToken: json['accessToken'] as String,
+        refreshToken: json['refreshToken'] as String?,
+        expiresAt: json['expiresAt'] != null
+            ? DateTime.tryParse(json['expiresAt'] as String)
+            : null,
       );
+}
+
+class DeviceCodeSession {
+  final String deviceCode;
+  final String userCode;
+  final String verificationUri;
+  final int interval;
+  final DateTime expiresAt;
+
+  const DeviceCodeSession({
+    required this.deviceCode,
+    required this.userCode,
+    required this.verificationUri,
+    required this.interval,
+    required this.expiresAt,
+  });
+}
+
+enum DeviceCodePollState {
+  pending,
+  slowDown,
+  declined,
+  expired,
+  success,
+  error
+}
+
+class DeviceCodePollResult {
+  final DeviceCodePollState state;
+  final GraphAccount? account;
+  final String? error;
+  final int? recommendedInterval;
+
+  const DeviceCodePollResult({
+    required this.state,
+    this.account,
+    this.error,
+    this.recommendedInterval,
+  });
 }
 
 class GraphAuthService {
@@ -74,8 +113,10 @@ class GraphAuthService {
   bool get isConfigured => _clientId != null && _clientId!.isNotEmpty;
 
   void configureFromEnv() {
-    final String? clientIdRaw = dotenv.env['GRAPH_CLIENT_ID'] ?? dotenv.env['AZURE_CLIENT_ID'];
-    final String? tenantIdRaw = dotenv.env['GRAPH_TENANT_ID'] ?? dotenv.env['AZURE_TENANT_ID'];
+    final String? clientIdRaw =
+        dotenv.env['GRAPH_CLIENT_ID'] ?? dotenv.env['AZURE_CLIENT_ID'];
+    final String? tenantIdRaw =
+        dotenv.env['GRAPH_TENANT_ID'] ?? dotenv.env['AZURE_TENANT_ID'];
 
     final String clientId = clientIdRaw?.trim() ?? '';
     final String tenant = (tenantIdRaw?.trim().isNotEmpty ?? false)
@@ -88,13 +129,16 @@ class GraphAuthService {
 
     _clientId = clientId;
     _tenant = tenant;
-    _deviceCodeEndpoint = Uri.parse('https://login.microsoftonline.com/$_tenant/oauth2/v2.0/devicecode');
-    _tokenEndpoint = Uri.parse('https://login.microsoftonline.com/$_tenant/oauth2/v2.0/token');
+    _deviceCodeEndpoint = Uri.parse(
+        'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/devicecode');
+    _tokenEndpoint = Uri.parse(
+        'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/token');
   }
 
   void _ensureConfigured() {
     if (!isConfigured) {
-      throw NotInitializedError('GraphAuthService not configured. Call configureFromEnv() during startup.');
+      throw NotInitializedError(
+          'GraphAuthService not configured. Call configureFromEnv() during startup.');
     }
   }
 
@@ -206,21 +250,14 @@ class GraphAuthService {
     await clearAll();
   }
 
-  /// Connects the account using device-code flow and returns user info.
-  Future<GraphUser> connectWithDeviceCode() async {
+  Future<DeviceCodeSession> requestDeviceCode() async {
     _ensureConfigured();
 
-    final clientId = _clientId!;
-
-    final deviceCodeUrl = _deviceCodeEndpoint;
-    final tokenUrl = _tokenEndpoint;
-
-    // Request device code
     final dcRes = await http.post(
-      deviceCodeUrl,
+      _deviceCodeEndpoint,
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
       body: {
-        'client_id': clientId,
+        'client_id': _clientId!,
         'scope': _scopes.join(' '),
       },
     );
@@ -231,58 +268,135 @@ class GraphAuthService {
     }
 
     final dc = jsonDecode(dcRes.body) as Map<String, dynamic>;
-    final deviceCode = dc['device_code'] as String;
-    final userCode = dc['user_code'] as String;
-    final verificationUri = (dc['verification_uri'] as String?) ??
-        (dc['verification_uri_complete'] as String?) ??
+    final expiresIn = (dc['expires_in'] as num?)?.toInt() ?? 900;
+    final verificationUri = (dc['verification_uri_complete'] as String?) ??
+        (dc['verification_uri'] as String?) ??
         'https://microsoft.com/devicelogin';
-    final interval = (dc['interval'] as num?)?.toInt() ?? 5;
 
-    // Surface device-code instructions in logs for now.
-    print('========== Microsoft Login =========');
-    print('Go to: $verificationUri');
-    print('Enter code: $userCode');
-    print('====================================');
+    return DeviceCodeSession(
+      deviceCode: dc['device_code'] as String,
+      userCode: dc['user_code'] as String,
+      verificationUri: verificationUri,
+      interval: (dc['interval'] as num?)?.toInt() ?? 5,
+      expiresAt: DateTime.now().add(Duration(seconds: expiresIn)),
+    );
+  }
 
-    // 2) Poll for token
-    while (true) {
-      await Future.delayed(Duration(seconds: interval));
+  Future<DeviceCodePollResult> pollDeviceCode(DeviceCodeSession session) async {
+    _ensureConfigured();
 
-      final tokenRes = await http.post(
-        tokenUrl,
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: {
-          'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
-          'client_id': clientId,
-          'device_code': deviceCode,
-        },
+    final tokenRes = await http.post(
+      _tokenEndpoint,
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: {
+        'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
+        'client_id': _clientId!,
+        'device_code': session.deviceCode,
+      },
+    );
+
+    final body = jsonDecode(tokenRes.body) as Map<String, dynamic>;
+    if (tokenRes.statusCode == 200 && body['access_token'] != null) {
+      final account = await _accountFromTokenPayload(body);
+      return DeviceCodePollResult(
+          state: DeviceCodePollState.success, account: account);
+    }
+
+    final error = body['error'] as String? ?? 'unknown_error';
+    final description = body['error_description'] as String?;
+    if (error == 'authorization_pending') {
+      return const DeviceCodePollResult(state: DeviceCodePollState.pending);
+    }
+    if (error == 'slow_down') {
+      final nextInterval = session.interval + 5;
+      return DeviceCodePollResult(
+        state: DeviceCodePollState.slowDown,
+        recommendedInterval: nextInterval,
+        error: description,
+      );
+    }
+    if (error == 'authorization_declined') {
+      return DeviceCodePollResult(
+        state: DeviceCodePollState.declined,
+        error: description,
+      );
+    }
+    if (error == 'expired_token') {
+      return DeviceCodePollResult(
+        state: DeviceCodePollState.expired,
+        error: description,
+      );
+    }
+
+    return DeviceCodePollResult(
+      state: DeviceCodePollState.error,
+      error: description ?? error,
+    );
+  }
+
+  Future<GraphAccount> _accountFromTokenPayload(
+      Map<String, dynamic> body) async {
+    final token = body['access_token'] as String?;
+    if (token == null) {
+      throw Exception('Token response missing access_token');
+    }
+    final refreshToken = body['refresh_token'] as String?;
+    final expiresIn = (body['expires_in'] as num?)?.toInt() ?? 3600;
+    final expiresAt = DateTime.now().add(Duration(seconds: expiresIn));
+    final user = await _fetchMe(token);
+    final account = GraphAccount(
+      id: user.id,
+      displayName: user.displayName,
+      userPrincipalName: user.userPrincipalName,
+      accessToken: token,
+      refreshToken: refreshToken,
+      expiresAt: expiresAt,
+    );
+    await _upsertAccount(account);
+    return account;
+  }
+
+  GraphUser _userFromAccount(GraphAccount account) => GraphUser(
+        id: account.id,
+        displayName: account.displayName,
+        userPrincipalName: account.userPrincipalName,
       );
 
-      final body = jsonDecode(tokenRes.body) as Map<String, dynamic>;
-      if (tokenRes.statusCode == 200) {
-        final token = body['access_token'] as String;
-        final refreshToken = body['refresh_token'] as String?;
-        final expiresIn = (body['expires_in'] as num?)?.toInt() ?? 3600;
-        final expiresAt = DateTime.now().add(Duration(seconds: expiresIn));
-        final user = await _fetchMe(token);
-        final account = GraphAccount(
-          id: user.id,
-          displayName: user.displayName,
-          userPrincipalName: user.userPrincipalName,
-          accessToken: token,
-          refreshToken: refreshToken,
-          expiresAt: expiresAt,
-        );
-        await _upsertAccount(account);
-        return user;
-      }
+  /// Connects the account using device-code flow and returns user info.
+  Future<GraphUser> connectWithDeviceCode() async {
+    final session = await requestDeviceCode();
 
-      final error = body['error'] as String?;
-      if (error == 'authorization_pending') {
-        continue; // user hasn't finished yet
+    print('========== Microsoft Login =========');
+    print('Go to: ${session.verificationUri}');
+    print('Enter code: ${session.userCode}');
+    print('====================================');
+
+    var interval = session.interval;
+    while (DateTime.now().isBefore(session.expiresAt)) {
+      await Future.delayed(Duration(seconds: interval));
+      final result = await pollDeviceCode(session);
+      switch (result.state) {
+        case DeviceCodePollState.pending:
+          continue;
+        case DeviceCodePollState.slowDown:
+          interval = result.recommendedInterval ?? (interval + 5);
+          continue;
+        case DeviceCodePollState.declined:
+          throw Exception('Authorization declined by user.');
+        case DeviceCodePollState.expired:
+          throw Exception('Device code expired. Please try again.');
+        case DeviceCodePollState.error:
+          throw Exception('Token error: ${result.error ?? 'unknown_error'}');
+        case DeviceCodePollState.success:
+          final account = result.account;
+          if (account == null) {
+            throw Exception('Token response missing account payload');
+          }
+          return _userFromAccount(account);
       }
-      throw Exception('Token error: $error ${body['error_description']}');
     }
+
+    throw Exception('Device code expired. Please try again.');
   }
 
   Future<GraphUser> _fetchMe(String token) async {
@@ -372,7 +486,8 @@ class GraphAuthService {
 
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     final accessToken = body['access_token'] as String?;
-    final refreshToken = body['refresh_token'] as String? ?? account.refreshToken;
+    final refreshToken =
+        body['refresh_token'] as String? ?? account.refreshToken;
     final expiresIn = (body['expires_in'] as num?)?.toInt() ?? 3600;
     if (accessToken == null) {
       throw Exception('Refresh response missing access_token');
