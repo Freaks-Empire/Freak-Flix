@@ -22,6 +22,8 @@ import 'providers/settings_provider.dart';
 import 'services/metadata_service.dart';
 import 'services/tmdb_service.dart';
 import 'services/graph_auth_service.dart';
+import 'services/tmdb_discover_service.dart';
+import 'models/discover_filter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +41,7 @@ void main() async {
   final settingsProvider = SettingsProvider();
   await settingsProvider.load();
   final tmdbService = TmdbService(settingsProvider);
+  final tmdbDiscoverService = TmdbDiscoverService(settingsProvider);
   final libraryProvider = LibraryProvider(settingsProvider);
   await libraryProvider.loadLibrary();
   final metadataService = MetadataService(settingsProvider, tmdbService);
@@ -50,7 +53,9 @@ void main() async {
         ChangeNotifierProvider(create: (_) => settingsProvider),
         ChangeNotifierProvider(create: (_) => libraryProvider),
         ChangeNotifierProvider(create: (_) => playbackProvider),
+        ChangeNotifierProvider(create: (_) => DiscoverFilterNotifier()),
         Provider<TmdbService>.value(value: tmdbService),
+        Provider<TmdbDiscoverService>.value(value: tmdbDiscoverService),
         Provider<MetadataService>.value(value: metadataService),
       ],
       child: const FreakFlixApp(),

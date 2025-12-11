@@ -2,6 +2,9 @@
   command = "bash ./netlify/build.sh"
   publish = "build/web"
 
+[[plugins]]
+  package = "@netlify/plugin-functions-install-core"
+
 # Route all paths to the SPA entry so client-side routing works.
 [[redirects]]
   from = "/*"

@@ -2,12 +2,13 @@
 import 'package:provider/provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/library_provider.dart';
+import 'screens/discover_screen.dart';
 import 'screens/movies_screen.dart';
 import 'screens/tv_screen.dart';
 import 'screens/anime_screen.dart';
 import 'screens/settings_screen.dart';
 import 'widgets/home_dashboard.dart';
-import 'widgets/nav_bar.dart';
+import 'widgets/side_rail.dart';
 
 class FreakFlixApp extends StatefulWidget {
   const FreakFlixApp({super.key});
@@ -20,6 +21,7 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
   int _index = 0;
   final _pages = const [
     FreakflixDashboard(),
+    DiscoverScreen(),
     MoviesScreen(),
     TvScreen(),
     AnimeScreen(),
@@ -48,19 +50,17 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
       home: Scaffold(
         body: Stack(
           children: [
-            Column(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                NavBar(
-                  index: _index,
-                  onTap: (i) => setState(() => _index = i),
-                ),
+                SideRail(index: _index, onTap: (i) => setState(() => _index = i)),
                 Expanded(child: _pages[_index]),
               ],
             ),
             if (library.isLoading)
               Positioned(
-                top: 76,
-                left: 12,
+                top: 24,
+                left: 84,
                 right: 12,
                 child: Material(
                   elevation: 4,

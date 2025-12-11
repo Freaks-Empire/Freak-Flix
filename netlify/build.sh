@@ -26,6 +26,13 @@ flutter --version
 # Move to repo and build
 cd /opt/build/repo
 
+# Install Netlify Function dependencies (uses package-lock in netlify/functions)
+if [ -f "netlify/functions/package.json" ]; then
+  pushd netlify/functions >/dev/null
+  npm ci || npm install
+  popd >/dev/null
+fi
+
 # Generate .env for flutter_dotenv if env vars are present (keeps secrets in Netlify env, not git)
 cat > .env <<'EOF'
 # Generated during Netlify build

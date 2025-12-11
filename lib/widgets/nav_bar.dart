@@ -10,6 +10,7 @@ class NavBar extends StatelessWidget {
     final theme = Theme.of(context);
     final items = [
       (Icons.home_filled, 'Home'),
+      (Icons.auto_awesome, 'Discover'),
       (Icons.movie, 'Movies'),
       (Icons.tv, 'TV'),
       (Icons.animation, 'Anime'),
