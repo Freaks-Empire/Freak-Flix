@@ -37,9 +37,12 @@ class Auth0Service {
   Future<void> login({bool signup = false}) async {
     if (kIsWeb) {
       await _auth0Web?.loginWithRedirect(
-        redirectUrl: callbackUrl,
-        audience: audience,
-        scope: 'openid profile email',
+        auth0_web.LoginOptions(
+          redirectUrl: callbackUrl,
+          audience: audience,
+          scopes: {'openid', 'profile', 'email'},
+          parameters: signup ? {'screen_hint': 'signup'} : const {},
+        ),
       );
       return;
     }
@@ -54,7 +57,9 @@ class Auth0Service {
 
   Future<void> logout() async {
     if (kIsWeb) {
-      await _auth0Web?.logout(returnTo: logoutUrl ?? callbackUrl);
+      await _auth0Web?.logout(
+        auth0_web.LogoutOptions(returnTo: logoutUrl ?? callbackUrl),
+      );
       return;
     }
 
@@ -66,12 +71,13 @@ class Auth0Service {
   Future<Auth0UserProfile?> getUser() async {
     try {
       if (kIsWeb) {
-        final profile = await _auth0Web?.getUser();
-        if (profile == null) return null;
+        final creds = await _auth0Web?.credentials();
+        final user = creds?.user;
+        if (creds == null || user == null) return null;
         return Auth0UserProfile(
-          name: profile['name'] as String?,
-          email: profile['email'] as String?,
-          picture: profile['picture'] as String?,
+          name: user.name,
+          email: user.email,
+          picture: user.pictureUrl,
         );
       }
 
@@ -89,10 +95,13 @@ class Auth0Service {
   Future<String?> getAccessToken() async {
     try {
       if (kIsWeb) {
-        return _auth0Web?.getTokenSilently(
-          audience: audience,
-          scope: 'openid profile email',
+        final creds = await _auth0Web?.credentials(
+          auth0_web.CredentialsOptions(
+            audience: audience,
+            scopes: {'openid', 'profile', 'email'},
+          ),
         );
+        return creds?.accessToken;
       }
       final creds = await _auth0?.credentialsManager.credentials();
       return creds?.accessToken;
