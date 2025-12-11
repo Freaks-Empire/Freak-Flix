@@ -179,9 +179,9 @@ class ContinueWatchingCard extends StatelessWidget {
     final int? remaining = totalSeconds != null
       ? ((totalSeconds - elapsed).clamp(0, totalSeconds)).toInt()
       : null;
-    final progress = totalSeconds != null && totalSeconds > 0
-        ? (elapsed / totalSeconds).clamp(0, 1)
-        : 0.0;
+    final double progress = totalSeconds != null && totalSeconds > 0
+      ? (elapsed / totalSeconds).clamp(0, 1).toDouble()
+      : 0.0;
 
     String _formatMins(int seconds) {
       final minutes = (seconds / 60).round();
