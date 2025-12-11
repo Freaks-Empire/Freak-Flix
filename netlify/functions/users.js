@@ -3,7 +3,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const connectionString =
-  process.env.NETLIFY_DB_CONNECTION || process.env.NETLIFY_DB_CONNECTION_STRING;
+  process.env.NETLIFY_DB_CONNECTION ||
+  process.env.NETLIFY_DB_CONNECTION_STRING ||
+  process.env.NETLIFY_DATABASE_URL ||
+  process.env.NETLIFY_DATABASE_URL_UNPOOLED;
 
 const jwtSecret = process.env.JWT_SECRET;
 const jwtExpiry = process.env.JWT_EXPIRY || '7d';

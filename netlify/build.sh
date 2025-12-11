@@ -25,5 +25,14 @@ flutter --version
 
 # Move to repo and build
 cd /opt/build/repo
+
+# Generate .env for flutter_dotenv if env vars are present (keeps secrets in Netlify env, not git)
+cat > .env <<'EOF'
+# Generated during Netlify build
+GRAPH_CLIENT_ID=${GRAPH_CLIENT_ID}
+GRAPH_TENANT_ID=${GRAPH_TENANT_ID}
+TMDB_API_KEY=${TMDB_API_KEY}
+EOF
+
 flutter pub get
 flutter build web --release
