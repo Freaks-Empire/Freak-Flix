@@ -1,5 +1,5 @@
 import 'package:auth0_flutter/auth0_flutter.dart' as auth0_native;
-import 'package:auth0_flutter_web/auth0_flutter_web.dart' as auth0_web;
+import 'package:auth0_flutter/auth0_flutter_web.dart' as auth0_web;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 class Auth0UserProfile {
@@ -18,7 +18,7 @@ class Auth0Service {
   final String? logoutUrl;
 
   auth0_native.Auth0? _auth0;
-  auth0_web.Auth0? _auth0Web;
+  auth0_web.Auth0Web? _auth0Web;
 
   Auth0Service({
     required this.domain,
@@ -28,7 +28,7 @@ class Auth0Service {
     this.logoutUrl,
   }) {
     if (kIsWeb) {
-      _auth0Web = auth0_web.Auth0(domain: domain, clientId: clientId);
+      _auth0Web = auth0_web.Auth0Web(domain, clientId);
     } else {
       _auth0 = auth0_native.Auth0(domain, clientId);
     }
