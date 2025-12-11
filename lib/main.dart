@@ -52,6 +52,7 @@ void main() async {
   const auth0ClientId = String.fromEnvironment('AUTH0_CLIENT_ID');
   const auth0Audience = String.fromEnvironment('AUTH0_AUDIENCE');
   const auth0Callback = String.fromEnvironment('AUTH0_CALLBACK_URL');
+  const auth0Logout = String.fromEnvironment('AUTH0_LOGOUT_URL');
   final auth0Service = Auth0Service(
     domain:
         (auth0Domain.isNotEmpty ? auth0Domain : dotenv.env['AUTH0_DOMAIN']) ??
@@ -66,6 +67,8 @@ void main() async {
     callbackUrl: (auth0Callback.isNotEmpty
         ? auth0Callback
         : dotenv.env['AUTH0_CALLBACK_URL']),
+    logoutUrl:
+        (auth0Logout.isNotEmpty ? auth0Logout : dotenv.env['AUTH0_LOGOUT_URL']),
   );
   final authProvider = AuthProvider(auth0Service);
   await authProvider.restoreSession();

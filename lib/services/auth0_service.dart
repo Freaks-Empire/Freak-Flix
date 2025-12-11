@@ -13,6 +13,7 @@ class Auth0Service {
   final String clientId;
   final String? audience;
   final String? callbackUrl;
+  final String? logoutUrl;
 
   late final Auth0 _auth0;
 
@@ -21,6 +22,7 @@ class Auth0Service {
     required this.clientId,
     this.audience,
     this.callbackUrl,
+    this.logoutUrl,
   }) {
     _auth0 = Auth0(domain, clientId);
   }
@@ -36,7 +38,7 @@ class Auth0Service {
 
   Future<void> logout() async {
     await _auth0.webAuthentication().logout(
-          returnTo: callbackUrl,
+          returnTo: logoutUrl ?? callbackUrl,
         );
   }
 

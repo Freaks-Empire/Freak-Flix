@@ -52,4 +52,5 @@ flutter build web --release \
   --dart-define=AUTH0_DOMAIN=${AUTH0_DOMAIN} \
   --dart-define=AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID} \
   --dart-define=AUTH0_AUDIENCE=${AUTH0_AUDIENCE} \
-  --dart-define=AUTH0_CALLBACK_URL=${AUTH0_CALLBACK_URL}
+  --dart-define=AUTH0_CALLBACK_URL=${AUTH0_CALLBACK_URL} \
+  --dart-define=AUTH0_LOGOUT_URL=${AUTH0_LOGOUT_URL}
