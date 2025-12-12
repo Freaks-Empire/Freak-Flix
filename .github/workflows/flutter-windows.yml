@@ -13,7 +13,6 @@ jobs:
       GRAPH_CLIENT_ID: ${{ secrets.GRAPH_CLIENT_ID }}
       GRAPH_TENANT_ID: ${{ secrets.GRAPH_TENANT_ID }}
       TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
-      OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,4 +35,3 @@ jobs:
           --dart-define=GRAPH_CLIENT_ID=${{ env.GRAPH_CLIENT_ID }}
           --dart-define=GRAPH_TENANT_ID=${{ env.GRAPH_TENANT_ID }}
           --dart-define=TRAKT_CLIENT_ID=${{ env.TRAKT_CLIENT_ID }}
-          --dart-define=OMDB_API_KEY=${{ env.OMDB_API_KEY }}
