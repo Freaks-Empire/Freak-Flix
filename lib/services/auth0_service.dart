@@ -36,7 +36,9 @@ class Auth0Service {
   }
 
   Future<void> login({bool signup = false}) async {
+    _ensureConfig();
     if (kIsWeb) {
+      _ensureCallbackForWeb();
       await _ensureWebInitialized();
       await _auth0Web?.loginWithRedirect(
         redirectUrl: callbackUrl,
@@ -56,6 +58,7 @@ class Auth0Service {
   }
 
   Future<void> logout() async {
+    _ensureConfig();
     if (kIsWeb) {
       await _ensureWebInitialized();
       await _auth0Web?.logout();
@@ -69,6 +72,7 @@ class Auth0Service {
 
   Future<Auth0UserProfile?> getUser() async {
     try {
+      _ensureConfig();
       if (kIsWeb) {
         await _ensureWebInitialized();
         final creds = await _auth0Web?.credentials();
@@ -94,6 +98,7 @@ class Auth0Service {
 
   Future<String?> getAccessToken() async {
     try {
+      _ensureConfig();
       if (kIsWeb) {
         await _ensureWebInitialized();
         final creds = await _auth0Web?.credentials(
@@ -113,5 +118,22 @@ class Auth0Service {
     if (!kIsWeb || _webInitialized || _auth0Web == null) return;
     await _auth0Web!.onLoad(audience: audience);
     _webInitialized = true;
+  }
+
+  void _ensureConfig() {
+    if (domain.isEmpty || clientId.isEmpty) {
+      throw StateError(
+        'Auth0 is not configured. Please set AUTH0_DOMAIN and AUTH0_CLIENT_ID.',
+      );
+    }
+  }
+
+  void _ensureCallbackForWeb() {
+    if (!kIsWeb) return;
+    if (callbackUrl == null || callbackUrl!.isEmpty) {
+      throw StateError(
+        'Missing AUTH0_CALLBACK_URL. Add it to Netlify env or .env for web builds.',
+      );
+    }
   }
 }
