@@ -1,6 +1,6 @@
 import 'package:auth0_flutter/auth0_flutter.dart' as auth0_native;
 import 'package:auth0_flutter/auth0_flutter_web.dart' as auth0_web;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
 
 class Auth0UserProfile {
   final String? name;
