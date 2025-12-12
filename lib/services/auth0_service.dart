@@ -135,7 +135,14 @@ class Auth0Service {
   Future<void> _ensureWebInitialized() async {
     if (!kIsWeb || _webInitialized || _auth0Web == null) return;
     try {
-      await _auth0Web!.onLoad();
+      final redirect = _effectiveCallbackUrlForWeb();
+      final audienceValue = (audience != null && audience!.isNotEmpty)
+          ? audience!
+          : null;
+      await _auth0Web!.onLoad(
+        redirectUrl: redirect.isEmpty ? null : redirect,
+        audience: audienceValue,
+      );
       _webInitialized = true;
     } catch (e, st) {
       debugPrint('Auth0Web onLoad failed: $e');
