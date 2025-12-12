@@ -41,6 +41,7 @@ class Auth0Service {
     debugPrint(
         'Auth0 login start (web=$kIsWeb) domain=$domain clientId=$clientId redirect=$redirect audience=skipped');
     if (kIsWeb) {
+      await _ensureWebInitialized();
       if (_auth0Web == null) {
         debugPrint('Auth0Web instance is null; aborting login');
         return;
@@ -84,6 +85,7 @@ class Auth0Service {
     try {
       _ensureConfig();
       if (kIsWeb) {
+        await _ensureWebInitialized();
         if (_auth0Web == null) {
           debugPrint('Auth0Web instance is null; getUser aborted');
           return null;
@@ -113,6 +115,7 @@ class Auth0Service {
     try {
       _ensureConfig();
       if (kIsWeb) {
+        await _ensureWebInitialized();
         if (_auth0Web == null) {
           debugPrint('Auth0Web instance is null; access token aborted');
           return null;
