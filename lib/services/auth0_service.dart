@@ -38,27 +38,17 @@ class Auth0Service {
   Future<void> login({bool signup = false}) async {
     _ensureConfig();
     final redirect = _effectiveCallbackUrlForWeb();
-    final audienceValue = (audience != null && audience!.isNotEmpty)
-        ? audience!
-        : null;
+    final audienceValue = audience ?? '';
     debugPrint(
-        'Auth0 login start (web=$kIsWeb) domain=$domain clientId=$clientId redirect=$redirect audience=${audienceValue ?? 'null'}');
+        'Auth0 login start (web=$kIsWeb) domain=$domain clientId=$clientId redirect=$redirect audience=${audienceValue.isEmpty ? 'empty' : audienceValue}');
     if (kIsWeb) {
       await _ensureWebInitialized();
-      if (audienceValue != null) {
-        await _auth0Web?.loginWithRedirect(
-          redirectUrl: redirect,
-          audience: audienceValue,
-          scopes: {'openid', 'profile', 'email'},
-          parameters: signup ? {'screen_hint': 'signup'} : const {},
-        );
-      } else {
-        await _auth0Web?.loginWithRedirect(
-          redirectUrl: redirect,
-          scopes: {'openid', 'profile', 'email'},
-          parameters: signup ? {'screen_hint': 'signup'} : const {},
-        );
-      }
+      await _auth0Web?.loginWithRedirect(
+        redirectUrl: redirect,
+        audience: audienceValue.isEmpty ? null : audienceValue,
+        scopes: {'openid', 'profile', 'email'},
+        parameters: signup ? {'screen_hint': 'signup'} : const {},
+      );
       return;
     }
 
@@ -111,14 +101,12 @@ class Auth0Service {
 
   Future<String?> getAccessToken() async {
     try {
-      final audienceValue = (audience != null && audience!.isNotEmpty)
-          ? audience!
-          : null;
+      final audienceValue = audience ?? '';
       _ensureConfig();
       if (kIsWeb) {
         await _ensureWebInitialized();
         final creds = await _auth0Web?.credentials(
-          audience: audienceValue,
+          audience: audienceValue.isEmpty ? null : audienceValue,
           scopes: {'openid', 'profile', 'email'},
         );
         return creds?.accessToken;
@@ -132,14 +120,10 @@ class Auth0Service {
 
   Future<void> _ensureWebInitialized() async {
     if (!kIsWeb || _webInitialized || _auth0Web == null) return;
-    final audienceValue = (audience != null && audience!.isNotEmpty)
-        ? audience!
-        : null;
-    if (audienceValue != null) {
-      await _auth0Web!.onLoad(audience: audienceValue);
-    } else {
-      await _auth0Web!.onLoad();
-    }
+    final audienceValue = audience ?? '';
+    await _auth0Web!.onLoad(
+      audience: audienceValue.isEmpty ? null : audienceValue,
+    );
     _webInitialized = true;
   }
 
