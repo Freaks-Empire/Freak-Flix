@@ -29,12 +29,15 @@ class AuthProvider extends ChangeNotifier {
   Future<void> login() async {
     _setLoading(true);
     try {
-      await auth0.login();
-      _user = await auth0.getUser();
+      await auth.login();
+      _user = await auth.getUser();
       _error = null;
       notifyListeners();
-    } catch (e) {
-      _error = e.toString();
+    } catch (e, st) {
+      // Surface full stack to help diagnose null-assert errors in release.
+      _error = '$e\n$st';
+      debugPrint('Auth0 login error: $e');
+      debugPrintStack(stackTrace: st);
       rethrow;
     } finally {
       _setLoading(false);

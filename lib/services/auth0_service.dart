@@ -37,6 +37,8 @@ class Auth0Service {
 
   Future<void> login({bool signup = false}) async {
     _ensureConfig();
+    debugPrint(
+        'Auth0 login start (web=$kIsWeb) domain=$domain clientId=$clientId redirect=${_effectiveCallbackUrlForWeb()} audience=$audience');
     if (kIsWeb) {
       final redirect = _effectiveCallbackUrlForWeb();
       await _ensureWebInitialized();
