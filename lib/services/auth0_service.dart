@@ -38,17 +38,27 @@ class Auth0Service {
   Future<void> login({bool signup = false}) async {
     _ensureConfig();
     final redirect = _effectiveCallbackUrlForWeb();
-    final audienceValue = audience ?? '';
+    final audienceValue = (audience != null && audience!.isNotEmpty)
+        ? audience!
+        : null;
     debugPrint(
-        'Auth0 login start (web=$kIsWeb) domain=$domain clientId=$clientId redirect=$redirect audience=${audience ?? 'null'}');
+        'Auth0 login start (web=$kIsWeb) domain=$domain clientId=$clientId redirect=$redirect audience=${audienceValue ?? 'null'}');
     if (kIsWeb) {
       await _ensureWebInitialized();
-      await _auth0Web?.loginWithRedirect(
-        redirectUrl: redirect,
-        audience: audienceValue,
-        scopes: {'openid', 'profile', 'email'},
-        parameters: signup ? {'screen_hint': 'signup'} : const {},
-      );
+      if (audienceValue != null) {
+        await _auth0Web?.loginWithRedirect(
+          redirectUrl: redirect,
+          audience: audienceValue,
+          scopes: {'openid', 'profile', 'email'},
+          parameters: signup ? {'screen_hint': 'signup'} : const {},
+        );
+      } else {
+        await _auth0Web?.loginWithRedirect(
+          redirectUrl: redirect,
+          scopes: {'openid', 'profile', 'email'},
+          parameters: signup ? {'screen_hint': 'signup'} : const {},
+        );
+      }
       return;
     }
 
@@ -101,7 +111,9 @@ class Auth0Service {
 
   Future<String?> getAccessToken() async {
     try {
-      final audienceValue = audience ?? '';
+      final audienceValue = (audience != null && audience!.isNotEmpty)
+          ? audience!
+          : null;
       _ensureConfig();
       if (kIsWeb) {
         await _ensureWebInitialized();
@@ -120,7 +132,14 @@ class Auth0Service {
 
   Future<void> _ensureWebInitialized() async {
     if (!kIsWeb || _webInitialized || _auth0Web == null) return;
-    await _auth0Web!.onLoad(audience: audience ?? '');
+    final audienceValue = (audience != null && audience!.isNotEmpty)
+        ? audience!
+        : null;
+    if (audienceValue != null) {
+      await _auth0Web!.onLoad(audience: audienceValue);
+    } else {
+      await _auth0Web!.onLoad();
+    }
     _webInitialized = true;
   }
 
