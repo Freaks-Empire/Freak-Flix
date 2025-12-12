@@ -277,10 +277,16 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
 
     if (settings.autoFetchAfterScan && metadata != null) {
-      for (int i = 0; i < items.length; i++) {
-        _setScanStatus('Fetching metadata: ${items[i].title}');
-        final enriched = await metadata.enrich(items[i]);
-        items[i] = enriched;
+      // Parallelize metadata enrichment with a concurrency limit
+      const batchSize = 5;
+      for (int i = 0; i < items.length; i += batchSize) {
+        final batch = items.skip(i).take(batchSize).toList();
+        _setScanStatus('Fetching metadata: ${batch.first.title} ...');
+        final enrichedBatch = await Future.wait(batch.map((item) => metadata.enrich(item)));
+        for (int j = 0; j < batch.length; j++) {
+          final idx = items.indexWhere((e) => e.id == batch[j].id);
+          if (idx != -1) items[idx] = enrichedBatch[j];
+        }
         notifyListeners();
       }
     }
@@ -318,17 +324,21 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      for (var i = 0; i < targetItems.length; i++) {
-        final item = targetItems[i];
+      // Parallelize metadata enrichment with a concurrency limit
+      const batchSize = 5;
+      for (int i = 0; i < targetItems.length; i += batchSize) {
+        final batch = targetItems.skip(i).take(batchSize).toList();
         scanningStatus =
-            '[$label] (${i + 1}/${targetItems.length}) ${item.title ?? item.fileName}';
+            '[$label] (${i + 1}/${targetItems.length}) ${batch.first.title ?? batch.first.fileName} ...';
         notifyListeners();
-
-        final enriched = await metadata.enrich(item);
-        final index = items.indexWhere((e) => e.id == item.id);
-        if (index != -1) {
-          items[index] = enriched;
+        final enrichedBatch = await Future.wait(batch.map((item) => metadata.enrich(item)));
+        for (int j = 0; j < batch.length; j++) {
+          final index = items.indexWhere((e) => e.id == batch[j].id);
+          if (index != -1) {
+            items[index] = enrichedBatch[j];
+          }
         }
+        notifyListeners();
       }
 
       await saveLibrary();
@@ -625,7 +635,6 @@ MediaType _typeForFolder(LibraryFolder folder, bool hasTvHints) {
     case LibraryType.anime:
       return MediaType.tv;
     case LibraryType.other:
-    default:
       return hasTvHints ? MediaType.tv : MediaType.movie;
   }
 }
