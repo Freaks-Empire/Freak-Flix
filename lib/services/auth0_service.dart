@@ -19,6 +19,7 @@ class Auth0Service {
 
   auth0_native.Auth0? _auth0;
   auth0_web.Auth0Web? _auth0Web;
+  bool _webInitialized = false;
 
   Auth0Service({
     required this.domain,
@@ -36,6 +37,7 @@ class Auth0Service {
 
   Future<void> login({bool signup = false}) async {
     if (kIsWeb) {
+      await _ensureWebInitialized();
       await _auth0Web?.loginWithRedirect(
         redirectUrl: callbackUrl,
         audience: audience,
@@ -55,6 +57,7 @@ class Auth0Service {
 
   Future<void> logout() async {
     if (kIsWeb) {
+      await _ensureWebInitialized();
       await _auth0Web?.logout();
       return;
     }
@@ -67,6 +70,7 @@ class Auth0Service {
   Future<Auth0UserProfile?> getUser() async {
     try {
       if (kIsWeb) {
+        await _ensureWebInitialized();
         final creds = await _auth0Web?.credentials();
         final user = creds?.user;
         if (creds == null || user == null) return null;
@@ -91,6 +95,7 @@ class Auth0Service {
   Future<String?> getAccessToken() async {
     try {
       if (kIsWeb) {
+        await _ensureWebInitialized();
         final creds = await _auth0Web?.credentials(
           audience: audience,
           scopes: {'openid', 'profile', 'email'},
@@ -102,5 +107,11 @@ class Auth0Service {
     } catch (_) {
       return null;
     }
+  }
+
+  Future<void> _ensureWebInitialized() async {
+    if (!kIsWeb || _webInitialized || _auth0Web == null) return;
+    await _auth0Web!.onLoad(redirectUrl: callbackUrl, audience: audience);
+    _webInitialized = true;
   }
 }
