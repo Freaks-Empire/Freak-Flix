@@ -111,7 +111,7 @@ class Auth0Service {
 
   Future<void> _ensureWebInitialized() async {
     if (!kIsWeb || _webInitialized || _auth0Web == null) return;
-    await _auth0Web!.onLoad(redirectUrl: callbackUrl, audience: audience);
+    await _auth0Web!.onLoad(audience: audience);
     _webInitialized = true;
   }
 }
