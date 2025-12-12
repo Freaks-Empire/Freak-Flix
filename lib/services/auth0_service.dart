@@ -41,12 +41,21 @@ class Auth0Service {
     debugPrint(
         'Auth0 login start (web=$kIsWeb) domain=$domain clientId=$clientId redirect=$redirect audience=skipped');
     if (kIsWeb) {
-      await _ensureWebInitialized();
-      await _auth0Web?.loginWithRedirect(
-        redirectUrl: redirect,
-        scopes: {'openid', 'profile', 'email'},
-        parameters: signup ? {'screen_hint': 'signup'} : const {},
-      );
+      if (_auth0Web == null) {
+        debugPrint('Auth0Web instance is null; aborting login');
+        return;
+      }
+      try {
+        await _auth0Web?.loginWithRedirect(
+          redirectUrl: redirect,
+          scopes: {'openid', 'profile', 'email'},
+          parameters: signup ? {'screen_hint': 'signup'} : const {},
+        );
+      } catch (e, st) {
+        debugPrint('Auth0Web loginWithRedirect failed: $e');
+        debugPrintStack(stackTrace: st);
+        rethrow;
+      }
       return;
     }
 
@@ -75,7 +84,10 @@ class Auth0Service {
     try {
       _ensureConfig();
       if (kIsWeb) {
-        await _ensureWebInitialized();
+        if (_auth0Web == null) {
+          debugPrint('Auth0Web instance is null; getUser aborted');
+          return null;
+        }
         final creds = await _auth0Web?.credentials();
         final user = creds?.user;
         if (creds == null || user == null) return null;
@@ -101,7 +113,10 @@ class Auth0Service {
     try {
       _ensureConfig();
       if (kIsWeb) {
-        await _ensureWebInitialized();
+        if (_auth0Web == null) {
+          debugPrint('Auth0Web instance is null; access token aborted');
+          return null;
+        }
         final creds = await _auth0Web?.credentials(
           scopes: {'openid', 'profile', 'email'},
         );
@@ -116,8 +131,13 @@ class Auth0Service {
 
   Future<void> _ensureWebInitialized() async {
     if (!kIsWeb || _webInitialized || _auth0Web == null) return;
-    await _auth0Web!.onLoad();
-    _webInitialized = true;
+    try {
+      await _auth0Web!.onLoad();
+      _webInitialized = true;
+    } catch (e, st) {
+      debugPrint('Auth0Web onLoad failed: $e');
+      debugPrintStack(stackTrace: st);
+    }
   }
 
   void _ensureConfig() {
