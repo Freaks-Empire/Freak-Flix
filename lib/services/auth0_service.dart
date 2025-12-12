@@ -38,10 +38,10 @@ class Auth0Service {
   Future<void> login({bool signup = false}) async {
     _ensureConfig();
     if (kIsWeb) {
-      _ensureCallbackForWeb();
+      final redirect = _effectiveCallbackUrlForWeb();
       await _ensureWebInitialized();
       await _auth0Web?.loginWithRedirect(
-        redirectUrl: callbackUrl,
+        redirectUrl: redirect,
         audience: audience,
         scopes: {'openid', 'profile', 'email'},
         parameters: signup ? {'screen_hint': 'signup'} : const {},
@@ -128,12 +128,14 @@ class Auth0Service {
     }
   }
 
-  void _ensureCallbackForWeb() {
-    if (!kIsWeb) return;
-    if (callbackUrl == null || callbackUrl!.isEmpty) {
-      throw StateError(
-        'Missing AUTH0_CALLBACK_URL. Add it to Netlify env or .env for web builds.',
-      );
+  String _effectiveCallbackUrlForWeb() {
+    if (!kIsWeb) {
+      return callbackUrl ?? '';
     }
+    if (callbackUrl != null && callbackUrl!.isNotEmpty) {
+      return callbackUrl!;
+    }
+    // Fallback to current origin to avoid null crash; Auth0 should have this allowlisted.
+    return Uri.base.toString();
   }
 }
