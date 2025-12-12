@@ -53,22 +53,19 @@ void main() async {
   const auth0Audience = String.fromEnvironment('AUTH0_AUDIENCE');
   const auth0Callback = String.fromEnvironment('AUTH0_CALLBACK_URL');
   const auth0Logout = String.fromEnvironment('AUTH0_LOGOUT_URL');
+  final envDomain = dotenv.env['AUTH0_DOMAIN']?.trim();
+  final envClientId = dotenv.env['AUTH0_CLIENT_ID']?.trim();
+  final envAudience = dotenv.env['AUTH0_AUDIENCE']?.trim();
+  final envCallback = dotenv.env['AUTH0_CALLBACK_URL']?.trim();
+  final envLogout = dotenv.env['AUTH0_LOGOUT_URL']?.trim();
+  final audienceRaw = auth0Audience.isNotEmpty ? auth0Audience : envAudience;
+  final audience = (audienceRaw?.isEmpty ?? true) ? null : audienceRaw;
   final auth0Service = Auth0Service(
-    domain:
-        (auth0Domain.isNotEmpty ? auth0Domain : dotenv.env['AUTH0_DOMAIN']) ??
-            '',
-    clientId: (auth0ClientId.isNotEmpty
-            ? auth0ClientId
-            : dotenv.env['AUTH0_CLIENT_ID']) ??
-        '',
-    audience: (auth0Audience.isNotEmpty
-        ? auth0Audience
-        : dotenv.env['AUTH0_AUDIENCE']),
-    callbackUrl: (auth0Callback.isNotEmpty
-        ? auth0Callback
-        : dotenv.env['AUTH0_CALLBACK_URL']),
-    logoutUrl:
-        (auth0Logout.isNotEmpty ? auth0Logout : dotenv.env['AUTH0_LOGOUT_URL']),
+    domain: auth0Domain.isNotEmpty ? auth0Domain : (envDomain ?? ''),
+    clientId: auth0ClientId.isNotEmpty ? auth0ClientId : (envClientId ?? ''),
+    audience: audience,
+    callbackUrl: auth0Callback.isNotEmpty ? auth0Callback : envCallback,
+    logoutUrl: auth0Logout.isNotEmpty ? auth0Logout : envLogout,
   );
   final authProvider = AuthProvider(auth0Service);
   await authProvider.restoreSession();
