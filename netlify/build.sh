@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Optional audience may be unset in Netlify; default to empty string so set -u does not fail
+AUTH0_AUDIENCE=${AUTH0_AUDIENCE:-}
+AUTH0_LOGOUT_URL=${AUTH0_LOGOUT_URL:-}
+
 # Configure desired Flutter version
 FLUTTER_VERSION="3.24.3"
 FLUTTER_TARBALL="https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
@@ -36,7 +40,7 @@ if [ -f "netlify/functions/package.json" ]; then
 fi
 
 # Generate .env for flutter_dotenv if env vars are present (keeps secrets in Netlify env, not git)
-cat > .env <<'EOF'
+cat > .env <<EOF
 # Generated during Netlify build
 GRAPH_CLIENT_ID=${GRAPH_CLIENT_ID}
 GRAPH_TENANT_ID=${GRAPH_TENANT_ID}
