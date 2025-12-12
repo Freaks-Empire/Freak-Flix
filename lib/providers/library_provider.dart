@@ -12,6 +12,7 @@ import '../services/graph_auth_service.dart' as graph_auth;
 import '../services/metadata_service.dart';
 import 'settings_provider.dart';
 import '../utils/filename_parser.dart';
+import 'package:collection/collection.dart';
 
 class LibraryProvider extends ChangeNotifier {
   static const _prefsKey = 'library_v1';
@@ -506,6 +507,10 @@ class LibraryProvider extends ChangeNotifier {
       type: LibraryType.other,
     );
     await scanLibraryFolder(auth: auth, folder: folder, metadata: metadata);
+  }
+
+  MediaItem? findByTmdbId(int tmdbId) {
+    return items.firstWhereOrNull((i) => i.tmdbId == tmdbId);
   }
 }
 

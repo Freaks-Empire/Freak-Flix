@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/discover_filter.dart';
-import '../models/tmdb_item.dart';
+
 import '../services/tmdb_discover_service.dart';
 import '../widgets/discover_filter_sheet.dart';
 import '../widgets/discover_section.dart';

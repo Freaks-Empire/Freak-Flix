@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/tmdb_item.dart';
+import '../providers/library_provider.dart';
+import '../screens/details_screen.dart';
 
 class DiscoverCard extends StatelessWidget {
   final TmdbItem item;
@@ -8,71 +11,92 @@ class DiscoverCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return SizedBox(
-      width: 136,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: AspectRatio(
-              aspectRatio: 2 / 3,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (item.posterUrl != null)
-                    Image.network(
-                      item.posterUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _PosterFallback(type: item.type),
-                    )
-                  else
-                    _PosterFallback(type: item.type),
-                  Positioned(
-                    top: 6,
-                    right: 6,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.36),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Padding(
-                        padding: EdgeInsets.all(4),
-                        child: Icon(Icons.more_horiz, size: 16, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black54,
-                          ],
+    return GestureDetector(
+      onTap: () {
+        final library = context.read<LibraryProvider>();
+        final local = library.findByTmdbId(item.id);
+        if (local != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (ctx) => DetailsScreen(item: local),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Not available in library'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+      },
+      child: SizedBox(
+        width: 136,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: AspectRatio(
+                aspectRatio: 2 / 3,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (item.posterUrl != null)
+                      Image.network(
+                        item.posterUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _PosterFallback(type: item.type),
+                      )
+                    else
+                      _PosterFallback(type: item.type),
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.36),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(Icons.more_horiz, size: 16, color: Colors.white),
                         ),
                       ),
-                      child: _MetaRow(item: item),
                     ),
-                  ),
-                ],
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.black54,
+                            ],
+                          ),
+                        ),
+                        child: _MetaRow(item: item),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            item.title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              item.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
       ),
     );
   }
