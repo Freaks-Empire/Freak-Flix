@@ -60,11 +60,35 @@ void main() async {
   final envLogout = dotenv.env['AUTH0_LOGOUT_URL']?.trim();
   final audienceRaw = auth0Audience.isNotEmpty ? auth0Audience : envAudience;
   final audience = (audienceRaw?.isEmpty ?? true) ? null : audienceRaw;
+  final resolvedDomain = auth0Domain.isNotEmpty ? auth0Domain : (envDomain ?? '');
+  final resolvedClientId =
+      auth0ClientId.isNotEmpty ? auth0ClientId : (envClientId ?? '');
+  final resolvedCallback =
+      auth0Callback.isNotEmpty ? auth0Callback : (envCallback ?? '');
+
+  if (resolvedDomain.isEmpty || resolvedClientId.isEmpty) {
+    _runErrorApp(
+      'Missing Auth0 configuration. Set AUTH0_DOMAIN and AUTH0_CLIENT_ID.',
+    );
+    return;
+  }
+
+  if (resolvedCallback.isEmpty) {
+    _runErrorApp(
+      'Missing Auth0 callback URL. Set AUTH0_CALLBACK_URL in env/dart-define.',
+    );
+    return;
+  }
+
+  if (!GraphAuthService.instance.isConfigured) {
+    debugPrint('Graph not configured: set GRAPH_CLIENT_ID (and optional TENANT).');
+  }
+
   final auth0Service = Auth0Service(
-    domain: auth0Domain.isNotEmpty ? auth0Domain : (envDomain ?? ''),
-    clientId: auth0ClientId.isNotEmpty ? auth0ClientId : (envClientId ?? ''),
+    domain: resolvedDomain,
+    clientId: resolvedClientId,
     audience: audience,
-    callbackUrl: auth0Callback.isNotEmpty ? auth0Callback : envCallback,
+    callbackUrl: resolvedCallback,
     logoutUrl: auth0Logout.isNotEmpty ? auth0Logout : envLogout,
   );
   final authProvider = AuthProvider(auth0Service);
@@ -83,6 +107,25 @@ void main() async {
         Provider<MetadataService>.value(value: metadataService),
       ],
       child: const FreakFlixApp(),
+    ),
+  );
+}
+
+void _runErrorApp(String message) {
+  runApp(
+    MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18),
+            ),
+          ),
+        ),
+      ),
     ),
   );
 }
