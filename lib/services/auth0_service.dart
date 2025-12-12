@@ -55,7 +55,7 @@ class Auth0Service {
 
   Future<void> logout() async {
     if (kIsWeb) {
-      await _auth0Web?.logout(returnTo: logoutUrl ?? callbackUrl);
+      await _auth0Web?.logout();
       return;
     }
 
