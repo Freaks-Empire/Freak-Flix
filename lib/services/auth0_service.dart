@@ -37,14 +37,15 @@ class Auth0Service {
 
   Future<void> login({bool signup = false}) async {
     _ensureConfig();
+    final redirect = _effectiveCallbackUrlForWeb();
+    final audienceValue = audience ?? '';
     debugPrint(
-        'Auth0 login start (web=$kIsWeb) domain=$domain clientId=$clientId redirect=${_effectiveCallbackUrlForWeb()} audience=$audience');
+        'Auth0 login start (web=$kIsWeb) domain=$domain clientId=$clientId redirect=$redirect audience=${audience ?? 'null'}');
     if (kIsWeb) {
-      final redirect = _effectiveCallbackUrlForWeb();
       await _ensureWebInitialized();
       await _auth0Web?.loginWithRedirect(
         redirectUrl: redirect,
-        audience: audience,
+        audience: audienceValue,
         scopes: {'openid', 'profile', 'email'},
         parameters: signup ? {'screen_hint': 'signup'} : const {},
       );
@@ -104,7 +105,7 @@ class Auth0Service {
       if (kIsWeb) {
         await _ensureWebInitialized();
         final creds = await _auth0Web?.credentials(
-          audience: audience,
+          audience: audienceValue,
           scopes: {'openid', 'profile', 'email'},
         );
         return creds?.accessToken;
@@ -118,7 +119,7 @@ class Auth0Service {
 
   Future<void> _ensureWebInitialized() async {
     if (!kIsWeb || _webInitialized || _auth0Web == null) return;
-    await _auth0Web!.onLoad(audience: audience);
+    await _auth0Web!.onLoad(audience: audience ?? '');
     _webInitialized = true;
   }
 
