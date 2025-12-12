@@ -101,6 +101,7 @@ class Auth0Service {
 
   Future<String?> getAccessToken() async {
     try {
+      final audienceValue = audience ?? '';
       _ensureConfig();
       if (kIsWeb) {
         await _ensureWebInitialized();
