@@ -8,14 +8,21 @@ class SyncService {
   SyncService({required this.getAccessToken});
 
   // Base URL for Netlify Functions
-  // In development (local): usually http://localhost:8888/.netlify/functions/sync
-  // In production (web): /.netlify/functions/sync
   String get _endpoint {
-    if (kReleaseMode) {
-      return '/.netlify/functions/sync';
+    // For Web, relative path works and is preferred to avoid CORS issues if on same domain
+    if (kIsWeb) {
+      if (kReleaseMode) return '/.netlify/functions/sync';
+      // Local web dev
+      return 'http://localhost:8888/.netlify/functions/sync'; 
     }
-    // Adjust this if you run netlify dev locally
-    return 'http://localhost:8888/.netlify/functions/sync';
+    
+    // For Desktop/Mobile (Windows), we need the absolute URL.
+    // Unless you are running a local backend and want to debug against it,
+    // we should point to the production instance to verify "cloud sync".
+    return 'https://freak-flix.netlify.app/.netlify/functions/sync'; 
+    
+    // TODO: Make this configurable via .env if needed
+    // return dotenv.env['SYNC_ENDPOINT'] ?? 'https://freak-flix.netlify.app/.netlify/functions/sync';
   }
 
   Future<void> pushData(Map<String, dynamic> data) async {

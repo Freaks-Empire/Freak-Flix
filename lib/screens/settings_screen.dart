@@ -7,6 +7,7 @@ import '../models/library_folder.dart';
 import '../providers/auth_provider.dart';
 import '../providers/library_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/sync_provider.dart';
 import '../services/graph_auth_service.dart';
 import '../services/metadata_service.dart';
 import '../services/tmdb_service.dart';
@@ -163,6 +164,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             }
             return const SizedBox.shrink();
+          },
+        ),
+        const SizedBox(height: 16),
+        // Sync Section
+        Consumer<SyncProvider>(
+          builder: (context, sync, _) {
+            if (!context.watch<AuthProvider>().isAuthenticated) return const SizedBox.shrink();
+            
+            return Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.cloud_sync, size: 20),
+                        const SizedBox(width: 8),
+                        Text('Cloud Sync', style: Theme.of(context).textTheme.titleMedium),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (sync.isSyncing)
+                      const Row(
+                        children: [
+                          SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                          SizedBox(width: 8),
+                          Text('Syncing...'),
+                        ],
+                      )
+                    else if (sync.lastError != null)
+                      Row(
+                        children: [
+                          const Icon(Icons.error, color: Colors.amber, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text('Error: ${sync.lastError}')),
+                        ],
+                      )
+                    else 
+                      Row(
+                        children: [
+                          const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                          const SizedBox(width: 8),
+                          Text(sync.lastSyncTime != null 
+                              ? 'Synced at ${sync.lastSyncTime!.toLocal().toString().split('.')[0]}'
+                              : 'Ready to sync'),
+                        ],
+                      ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.tonal(
+                        onPressed: sync.isSyncing ? null : () => sync.forceSync(),
+                        child: const Text('Sync Now'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
           },
         ),
         const SizedBox(height: 16),

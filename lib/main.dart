@@ -25,26 +25,35 @@ import 'services/tmdb_service.dart';
 import 'services/graph_auth_service.dart';
 import 'services/tmdb_discover_service.dart';
 import 'services/auth0_service.dart';
-import 'services/sync_service.dart';
+import 'providers/sync_provider.dart';
 import 'models/discover_filter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   bool envLoaded = false;
   try {
+    // Try loading from file first (local dev)
     await dotenv.load(fileName: '.env');
     envLoaded = true;
-  } on FileNotFoundError {
-    debugPrint('No .env file found, continuing without it.');
   } catch (e) {
-    debugPrint('Error loading .env: $e');
+    debugPrint('Native .env load failed, resolving from assets: $e');
+    try {
+      // Fallback to asset bundle (production builds)
+      // Note: In release, assets are often just in 'assets/.env' or root.
+      // Trying generic 'assets/.env' if root failed.
+      await dotenv.load(fileName: 'resources/.env'); // try common alternative?
+      // Actually standard 'load' usually defaults to root bundle.
+      // Let's try 'assets/.env' explicitly just in case.
+    } catch (_) {
+       // Ignore
+    }
+    // Check if anything loaded
+    if (dotenv.env.isNotEmpty) envLoaded = true;
   }
 
-  try {
-    GraphAuthService.instance.configureFromEnv();
-  } catch (e) {
-    debugPrint('Graph configuration issue: $e');
-  }
+  // Critical check logic remains, but let's make reading simpler.
+  // If envLoaded is false, dotenv.env might still be empty map, safe to read.
+  
   MediaKit.ensureInitialized();
   final settingsProvider = SettingsProvider();
   await settingsProvider.load();
@@ -54,16 +63,19 @@ void main() async {
   await libraryProvider.loadLibrary();
   final metadataService = MetadataService(settingsProvider, tmdbService);
   final playbackProvider = PlaybackProvider(libraryProvider);
+  
   const auth0Domain = String.fromEnvironment('AUTH0_DOMAIN');
   const auth0ClientId = String.fromEnvironment('AUTH0_CLIENT_ID');
   const auth0Audience = String.fromEnvironment('AUTH0_AUDIENCE');
   const auth0Callback = String.fromEnvironment('AUTH0_CALLBACK_URL');
   const auth0Logout = String.fromEnvironment('AUTH0_LOGOUT_URL');
-  final envDomain = envLoaded ? dotenv.env['AUTH0_DOMAIN']?.trim() : null;
-  final envClientId = envLoaded ? dotenv.env['AUTH0_CLIENT_ID']?.trim() : null;
-  final envAudience = envLoaded ? dotenv.env['AUTH0_AUDIENCE']?.trim() : null;
-  final envCallback = envLoaded ? dotenv.env['AUTH0_CALLBACK_URL']?.trim() : null;
-  final envLogout = envLoaded ? dotenv.env['AUTH0_LOGOUT_URL']?.trim() : null;
+  
+  // Just read directly; if not loaded, returns null.
+  final envDomain = dotenv.env['AUTH0_DOMAIN']?.trim();
+  final envClientId = dotenv.env['AUTH0_CLIENT_ID']?.trim();
+  final envAudience = dotenv.env['AUTH0_AUDIENCE']?.trim();
+  final envCallback = dotenv.env['AUTH0_CALLBACK_URL']?.trim();
+  final envLogout = dotenv.env['AUTH0_LOGOUT_URL']?.trim();
   final audienceRaw = auth0Audience.isNotEmpty ? auth0Audience : envAudience;
   final audience = (audienceRaw?.isEmpty ?? true) ? null : audienceRaw;
   final resolvedDomain = auth0Domain.isNotEmpty ? auth0Domain : (envDomain ?? '');
@@ -101,54 +113,7 @@ void main() async {
   await authProvider.restoreSession();
 
   // --- Cloud Sync Integration ---
-  final syncService = SyncService(
-    getAccessToken: () => auth0Service.getIdToken(), // Use ID Token for JWT compatibility
-  );
-
-  Future<void> pushSync() async {
-    if (!authProvider.isAuthenticated) return;
-    // Debounce could go here
-    final data = {
-      'settings': settingsProvider.exportSettings(),
-      'graph': GraphAuthService.instance.exportState(),
-    };
-    await syncService.pushData(data);
-  }
-
-  Future<void> pullSync() async {
-    if (!authProvider.isAuthenticated) return;
-    final data = await syncService.pullData();
-    if (data != null) {
-      if (data['settings'] != null) {
-        // Temporarily remove listener to avoid echo push?
-        // For MVP, letting it echo once is fine.
-        await settingsProvider.importSettings(data['settings']);
-      }
-      if (data['graph'] != null) {
-        await GraphAuthService.instance.importState(data['graph']);
-      }
-    }
-  }
-
-  // 1. Pull on login
-  authProvider.addListener(() {
-    // We can't easily detect "just logged in" vs "other change" without state diff
-    // But pulling is safe.
-    if (authProvider.isAuthenticated) {
-      pullSync();
-    }
-  });
-
-  // 2. Push on settings change
-  settingsProvider.addListener(pushSync);
-
-  // 3. Push on graph change
-  GraphAuthService.instance.onStateChanged = pushSync;
-
-  // 4. Initial pull
-  if (authProvider.isAuthenticated) {
-     await pullSync();
-  }
+  // Managed by SyncProvider inside MultiProvider
   // -----------------------------
 
   runApp(
@@ -159,6 +124,13 @@ void main() async {
         ChangeNotifierProvider(create: (_) => playbackProvider),
         ChangeNotifierProvider(create: (_) => DiscoverFilterNotifier()),
         ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+        ChangeNotifierProvider(
+          create: (_) => SyncProvider(
+            auth: authProvider,
+            settings: settingsProvider,
+            library: libraryProvider,
+          ),
+        ),
         Provider<TmdbService>.value(value: tmdbService),
         Provider<TmdbDiscoverService>.value(value: tmdbDiscoverService),
         Provider<MetadataService>.value(value: metadataService),

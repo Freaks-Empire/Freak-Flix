@@ -512,6 +512,57 @@ class LibraryProvider extends ChangeNotifier {
   MediaItem? findByTmdbId(int tmdbId) {
     return items.firstWhereOrNull((i) => i.tmdbId == tmdbId);
   }
+
+  // --- Sync Methods ---
+
+  Map<String, dynamic> exportState() {
+    return {
+      'folders': libraryFolders.map((f) => f.toJson()).toList(),
+    };
+  }
+
+  Future<void> importState(Map<String, dynamic> data) async {
+    final rawFolders = data['folders'] as List<dynamic>?;
+    if (rawFolders != null) {
+      final newFolders = rawFolders
+          .map((e) => LibraryFolder.fromJson(e as Map<String, dynamic>))
+          .toList();
+      
+      // Merge logic: For now, simple replace or merge? 
+      // User expects sync. Let's try to merge missing ones or replace all?
+      // Replacing entirely might lose local-only folders (like "Local file picker"?).
+      // But libraryFolders stores specific configurations.
+      // Let's replace OneDrive folders but keep others? Or just simple replace.
+      // Based on app structure, having identical setup across devices is desired.
+      // Let's replace for now, but safer to merge unique IDs?
+      
+      // Let's do a merge based on ID:
+      for (final f in newFolders) {
+         final exists = libraryFolders.any((old) => old.id == f.id && old.accountId == f.accountId);
+         if (!exists) {
+           libraryFolders.add(f);
+         }
+      }
+      // What about deletions? If user deleted on Web, should we delete on Windows?
+      // Sync usually implies "current state". If we only add, deletions never sync.
+      // Let's Replace. But wait, local folders (not OneDrive) might vary by device path (C:\ vs /home/).
+      // OneDrive folders use ID so they are cross-platform safe.
+      // Filter: Keep local folders, replace/sync OneDrive folders.
+      
+      final localOnly = libraryFolders.where((f) => f.accountId.isEmpty).toList();
+      final cloudFolders = newFolders.where((f) => f.accountId.isNotEmpty).toList();
+      
+      libraryFolders = [...localOnly, ...cloudFolders];
+      
+      await _saveLibraryFolders();
+      notifyListeners();
+      
+      // Optional: Auto-scan new folders? 
+      // Maybe not immediately to avoid blasting network on startup. User can click "Rescan".
+      // But user expects to see items. 
+      // We'll leave auto-scan for now, user can click "Rescan".
+    }
+  }
 }
 
 typedef _ProgressCallback = void Function(String path, int filesFound);

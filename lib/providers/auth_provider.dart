@@ -50,13 +50,20 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    await auth0.logout();
-    _user = null;
-    _error = null;
-    notifyListeners();
+    try {
+      await auth0.logout();
+    } catch (e) {
+      debugPrint('Logout error (ignoring to ensure local cleanup): $e');
+    } finally {
+      // Always clear local state
+      _user = null;
+      _error = null;
+      notifyListeners();
+    }
   }
 
   Future<String?> getAccessToken() => auth0.getAccessToken();
+  Future<String?> getIdToken() => auth0.getIdToken();
 
   void _setLoading(bool v) {
     _loading = v;

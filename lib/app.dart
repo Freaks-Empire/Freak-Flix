@@ -4,13 +4,9 @@ import 'providers/settings_provider.dart';
 import 'providers/library_provider.dart';
 import 'providers/auth_provider.dart';
 import 'screens/discover_screen.dart';
-import 'screens/movies_screen.dart';
-import 'screens/tv_screen.dart';
-import 'screens/anime_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/auth/auth_screen.dart';
 import 'screens/setup_screen.dart';
-import 'widgets/home_dashboard.dart';
 import 'widgets/side_rail.dart';
 
 class FreakFlixApp extends StatefulWidget {
@@ -23,11 +19,7 @@ class FreakFlixApp extends StatefulWidget {
 class _FreakFlixAppState extends State<FreakFlixApp> {
   int _index = 0;
   final _pages = const [
-    FreakflixDashboard(),
-    DiscoverScreen(),
-    MoviesScreen(),
-    TvScreen(),
-    AnimeScreen(),
+    DiscoverScreen(), // New Homepage
     SettingsScreen(),
   ];
 

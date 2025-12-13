@@ -9,14 +9,6 @@ class SideRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final items = <_RailItem>[
-      _RailItem(icon: Icons.search, tooltip: 'Search / Discover', pageIndex: 1),
-      _RailItem(icon: Icons.home_filled, tooltip: 'Home', pageIndex: 0),
-      _RailItem(icon: Icons.star_outline, tooltip: 'Movies', pageIndex: 2),
-      _RailItem(icon: Icons.list_alt_outlined, tooltip: 'TV', pageIndex: 3),
-      _RailItem(icon: Icons.movie_creation_outlined, tooltip: 'Anime', pageIndex: 4),
-    ];
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       child: Column(
@@ -37,22 +29,19 @@ class SideRail extends StatelessWidget {
             ),
             child: Column(
               children: [
-                for (final item in items) ...[
-                  _RailButton(
-                    icon: item.icon,
-                    tooltip: item.tooltip,
-                    selected: index == item.pageIndex,
-                    onTap: () => onTap(item.pageIndex),
-                    theme: theme,
-                  ),
-                  const SizedBox(height: 10),
-                ],
-                const SizedBox(height: 6),
                 _RailButton(
-                  icon: Icons.person_outline,
-                  tooltip: 'Profile / Settings',
-                  selected: index == 5,
-                  onTap: () => onTap(5),
+                  icon: Icons.home_filled, // "Discover" is now Home
+                  tooltip: 'Home',
+                  selected: index == 0,
+                  onTap: () => onTap(0),
+                  theme: theme,
+                ),
+                const SizedBox(height: 10),
+                _RailButton(
+                  icon: Icons.settings_outlined,
+                  tooltip: 'Settings',
+                  selected: index == 1,
+                  onTap: () => onTap(1),
                   theme: theme,
                 ),
               ],
@@ -64,12 +53,7 @@ class SideRail extends StatelessWidget {
   }
 }
 
-class _RailItem {
-  final IconData icon;
-  final String tooltip;
-  final int pageIndex;
-  const _RailItem({required this.icon, required this.tooltip, required this.pageIndex});
-}
+
 
 class _RailButton extends StatelessWidget {
   final IconData icon;
