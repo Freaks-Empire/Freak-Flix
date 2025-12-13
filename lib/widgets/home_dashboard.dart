@@ -14,9 +14,27 @@ class FreakflixDashboard extends StatelessWidget {
     final theme = Theme.of(context);
     final library = context.watch<LibraryProvider>();
     final continueWatching = library.continueWatching;
-    final startWatching = [...library.items
+    final rawStartWatching = [...library.items
         .where((i) => i.type == MediaType.tv && !i.isWatched && i.lastPositionSeconds == 0)]
+      ..sort((a, b) {
+        // Sort by series first, then episode number
+        final titleCmp = (a.title ?? '').compareTo(b.title ?? '');
+        if (titleCmp != 0) return titleCmp;
+        return (a.episode ?? 0).compareTo(b.episode ?? 0);
+      });
+
+    // Deduplicate by series (using title/tmdbId as key)
+    final Map<String, MediaItem> uniqueSeries = {};
+    for (final item in rawStartWatching) {
+      final key = item.tmdbId?.toString() ?? item.title ?? 'unknown';
+      if (!uniqueSeries.containsKey(key)) {
+        uniqueSeries[key] = item;
+      }
+    }
+    
+    final startWatching = uniqueSeries.values.toList()
       ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+      
     final upcoming = [...library.tv]
       ..sort((a, b) => (b.year ?? 0).compareTo(a.year ?? 0));
 
@@ -25,14 +43,7 @@ class FreakflixDashboard extends StatelessWidget {
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            SliverAppBar(
-              pinned: true,
-              elevation: 0,
-              toolbarHeight: 52,
-              backgroundColor: theme.colorScheme.background,
-              titleSpacing: 16,
-              title: const _TopBar(),
-            ),
+
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -71,54 +82,7 @@ class FreakflixDashboard extends StatelessWidget {
   }
 }
 
-class _TopBar extends StatefulWidget {
-  const _TopBar();
 
-  @override
-  State<_TopBar> createState() => _TopBarState();
-}
-
-class _TopBarState extends State<_TopBar> {
-  int _segIndex = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
-          'Library',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: SegmentedPillBar(
-            items: const [
-              SegmentedPillItem('Media', Icons.widgets_outlined),
-              SegmentedPillItem('Shows', Icons.tv_outlined),
-              SegmentedPillItem('Movies', Icons.movie_outlined),
-            ],
-            selectedIndex: _segIndex,
-            onChanged: (i) {
-              setState(() => _segIndex = i);
-              // TODO: hook into filtering logic when ready
-            },
-          ),
-        ),
-        const SizedBox(width: 12),
-        IconButton(
-          icon: const Icon(Icons.search_rounded),
-          onPressed: () {},
-        ),
-        IconButton(
-          icon: const Icon(Icons.tune_rounded),
-          onPressed: () {},
-        ),
-      ],
-    );
-  }
-}
 
 class HomeSectionRow extends StatelessWidget {
   final String title;
@@ -153,7 +117,7 @@ class HomeSectionRow extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         SizedBox(
-          height: 230,
+          height: 280,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: items.length,
