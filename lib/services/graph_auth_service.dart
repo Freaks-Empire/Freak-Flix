@@ -109,6 +109,8 @@ class GraphAuthService {
   String _tenant = 'common';
   late Uri _deviceCodeEndpoint;
   late Uri _tokenEndpoint;
+  
+  void Function()? onStateChanged;
 
   bool get isConfigured => _clientId != null && _clientId!.isNotEmpty;
 
@@ -165,6 +167,24 @@ class GraphAuthService {
   String? get activeAccountId => activeAccount?.id;
   bool get isConnected => _accounts.isNotEmpty;
 
+  Map<String, dynamic> exportState() {
+    return {
+      'accounts': _accounts.map((a) => a.toJson()).toList(),
+      'activeAccountId': _activeAccountId,
+    };
+  }
+
+  Future<void> importState(Map<String, dynamic> data) async {
+    if (data['accounts'] != null) {
+      final list = (data['accounts'] as List<dynamic>)
+          .map((e) => GraphAccount.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _accounts = list;
+    }
+    _activeAccountId = data['activeAccountId'] as String?;
+    await _saveAccounts();
+  }
+
   /// Load saved token and user from SharedPreferences.
   Future<void> loadFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
@@ -200,6 +220,7 @@ class GraphAuthService {
     } else {
       await prefs.remove(_activeAccountIdKey);
     }
+    onStateChanged?.call();
   }
 
   Future<void> _upsertAccount(GraphAccount account) async {

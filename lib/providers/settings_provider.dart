@@ -113,4 +113,36 @@ class SettingsProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+  Map<String, dynamic> exportSettings() {
+    return {
+      'isDarkMode': isDarkMode,
+      'preferAniListForAnime': preferAniListForAnime,
+      'autoFetchAfterScan': autoFetchAfterScan,
+      'lastScannedFolder': lastScannedFolder,
+      'tmdbApiKey': tmdbApiKey,
+      'tmdbStatus': tmdbStatus.index,
+    };
+  }
+
+  Future<void> importSettings(Map<String, dynamic> data) async {
+    if (data.containsKey('isDarkMode')) isDarkMode = data['isDarkMode'];
+    if (data.containsKey('preferAniListForAnime')) {
+      preferAniListForAnime = data['preferAniListForAnime'];
+    }
+    if (data.containsKey('autoFetchAfterScan')) {
+      autoFetchAfterScan = data['autoFetchAfterScan'];
+    }
+    if (data.containsKey('lastScannedFolder')) {
+      lastScannedFolder = data['lastScannedFolder'];
+    }
+    if (data.containsKey('tmdbApiKey')) tmdbApiKey = data['tmdbApiKey'] ?? '';
+    if (data.containsKey('tmdbStatus')) {
+      final idx = data['tmdbStatus'] as int;
+      if (idx >= 0 && idx < TmdbKeyStatus.values.length) {
+        tmdbStatus = TmdbKeyStatus.values[idx];
+      }
+    }
+    await save();
+    notifyListeners();
+  }
 }

@@ -25,6 +25,7 @@ import 'services/tmdb_service.dart';
 import 'services/graph_auth_service.dart';
 import 'services/tmdb_discover_service.dart';
 import 'services/auth0_service.dart';
+import 'services/sync_service.dart';
 import 'models/discover_filter.dart';
 
 void main() async {
@@ -98,6 +99,57 @@ void main() async {
   );
   final authProvider = AuthProvider(auth0Service);
   await authProvider.restoreSession();
+
+  // --- Cloud Sync Integration ---
+  final syncService = SyncService(
+    getAccessToken: () => authProvider.getAccessToken(),
+  );
+
+  Future<void> pushSync() async {
+    if (!authProvider.isAuthenticated) return;
+    // Debounce could go here
+    final data = {
+      'settings': settingsProvider.exportSettings(),
+      'graph': GraphAuthService.instance.exportState(),
+    };
+    await syncService.pushData(data);
+  }
+
+  Future<void> pullSync() async {
+    if (!authProvider.isAuthenticated) return;
+    final data = await syncService.pullData();
+    if (data != null) {
+      if (data['settings'] != null) {
+        // Temporarily remove listener to avoid echo push?
+        // For MVP, letting it echo once is fine.
+        await settingsProvider.importSettings(data['settings']);
+      }
+      if (data['graph'] != null) {
+        await GraphAuthService.instance.importState(data['graph']);
+      }
+    }
+  }
+
+  // 1. Pull on login
+  authProvider.addListener(() {
+    // We can't easily detect "just logged in" vs "other change" without state diff
+    // But pulling is safe.
+    if (authProvider.isAuthenticated) {
+      pullSync();
+    }
+  });
+
+  // 2. Push on settings change
+  settingsProvider.addListener(pushSync);
+
+  // 3. Push on graph change
+  GraphAuthService.instance.onStateChanged = pushSync;
+
+  // 4. Initial pull
+  if (authProvider.isAuthenticated) {
+     await pullSync();
+  }
+  // -----------------------------
 
   runApp(
     MultiProvider(
