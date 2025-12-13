@@ -102,7 +102,7 @@ void main() async {
 
   // --- Cloud Sync Integration ---
   final syncService = SyncService(
-    getAccessToken: () => authProvider.getAccessToken(),
+    getAccessToken: () => auth0Service.getIdToken(), // Use ID Token for JWT compatibility
   );
 
   Future<void> pushSync() async {

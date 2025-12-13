@@ -185,6 +185,31 @@ class Auth0Service {
     }
   }
 
+  Future<String?> getIdToken() async {
+    try {
+      _ensureConfig();
+
+      if (_isWindows) {
+        // We don't cache ID token in memory variable currently, so read from prefs
+        final prefs = await SharedPreferences.getInstance();
+        return prefs.getString(_windowsIdTokenKey);
+      }
+
+      if (kIsWeb) {
+        await _ensureWebInitialized();
+        if (_auth0Web == null) return null;
+        final creds = await _auth0Web?.credentials();
+        return creds?.idToken;
+      }
+
+      final creds = await _auth0?.credentialsManager.credentials();
+      return creds?.idToken;
+    } catch (e) {
+      debugPrint('Error getting ID token: $e');
+      return null;
+    }
+  }
+
   // --- Windows Implementation ---
 
   Future<void> _loginWindows(bool signup) async {
