@@ -357,7 +357,12 @@ class Auth0Service {
   Future<void> _ensureWebInitialized() async {
     if (!kIsWeb || _webInitialized || _auth0Web == null) return;
     try {
-      await _auth0Web!.onLoad();
+      await _auth0Web!.onLoad(
+        clientOptions: {
+          'cacheLocation': 'localstorage',
+          'useRefreshTokens': true,
+        },
+      );
       _webInitialized = true;
     } catch (e, st) {
       debugPrint('Auth0Web onLoad failed: $e');
