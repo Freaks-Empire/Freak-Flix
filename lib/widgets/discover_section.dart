@@ -50,7 +50,7 @@ class DiscoverSection extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           SizedBox(
-            height: 240,
+            height: 280,
             child: items.isEmpty
                 ? Center(
                     child: Text(

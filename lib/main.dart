@@ -29,11 +29,16 @@ import 'models/discover_filter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  bool envLoaded = false;
   try {
     await dotenv.load(fileName: '.env');
+    envLoaded = true;
   } on FileNotFoundError {
     debugPrint('No .env file found, continuing without it.');
+  } catch (e) {
+    debugPrint('Error loading .env: $e');
   }
+
   try {
     GraphAuthService.instance.configureFromEnv();
   } catch (e) {
@@ -53,11 +58,11 @@ void main() async {
   const auth0Audience = String.fromEnvironment('AUTH0_AUDIENCE');
   const auth0Callback = String.fromEnvironment('AUTH0_CALLBACK_URL');
   const auth0Logout = String.fromEnvironment('AUTH0_LOGOUT_URL');
-  final envDomain = dotenv.env['AUTH0_DOMAIN']?.trim();
-  final envClientId = dotenv.env['AUTH0_CLIENT_ID']?.trim();
-  final envAudience = dotenv.env['AUTH0_AUDIENCE']?.trim();
-  final envCallback = dotenv.env['AUTH0_CALLBACK_URL']?.trim();
-  final envLogout = dotenv.env['AUTH0_LOGOUT_URL']?.trim();
+  final envDomain = envLoaded ? dotenv.env['AUTH0_DOMAIN']?.trim() : null;
+  final envClientId = envLoaded ? dotenv.env['AUTH0_CLIENT_ID']?.trim() : null;
+  final envAudience = envLoaded ? dotenv.env['AUTH0_AUDIENCE']?.trim() : null;
+  final envCallback = envLoaded ? dotenv.env['AUTH0_CALLBACK_URL']?.trim() : null;
+  final envLogout = envLoaded ? dotenv.env['AUTH0_LOGOUT_URL']?.trim() : null;
   final audienceRaw = auth0Audience.isNotEmpty ? auth0Audience : envAudience;
   final audience = (audienceRaw?.isEmpty ?? true) ? null : audienceRaw;
   final resolvedDomain = auth0Domain.isNotEmpty ? auth0Domain : (envDomain ?? '');

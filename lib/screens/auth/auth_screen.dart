@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
@@ -64,6 +66,17 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                     ),
                   ),
+                  if (auth.isLoading && !kIsWeb && Platform.isWindows)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () => auth.cancelLogin(),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                    ),
                   TextButton(
                     onPressed:
                         auth.isLoading ? null : () => _login(signup: true),

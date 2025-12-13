@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/tmdb_item.dart';
+import '../models/media_item.dart';
 import '../providers/library_provider.dart';
 import '../screens/details_screen.dart';
 
@@ -22,11 +23,27 @@ class DiscoverCard extends StatelessWidget {
             ),
           );
         } else {
-          ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Not available in library'),
-              duration: Duration(seconds: 1),
+          // Convert TMDB item to a stub MediaItem for viewing details
+          final stub = MediaItem(
+            id: 'tmdb_${item.id}',
+            filePath: '', // Empty path indicates not in library
+            fileName: item.title,
+            folderPath: '',
+            sizeBytes: 0,
+            lastModified: DateTime.now(),
+            title: item.title,
+            year: item.releaseYear,
+            type: item.type == TmdbMediaType.tv ? MediaType.tv : MediaType.movie,
+            posterUrl: item.posterUrl,
+            backdropUrl: null, // TMDB item currently doesn't have backdrop in list response, could fetch later or ignore
+            overview: item.overview,
+            rating: item.voteAverage,
+            tmdbId: item.id,
+          );
+          
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (ctx) => DetailsScreen(item: stub),
             ),
           );
         }
@@ -136,10 +153,6 @@ class _MetaRow extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _MetaChip(
-          icon: Icons.visibility_outlined,
-          label: watchers != null ? '${_formatCompact(watchers)}' : '--',
-        ),
         _MetaChip(
           icon: Icons.star,
           label: rating ?? '--',

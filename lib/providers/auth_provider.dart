@@ -38,10 +38,15 @@ class AuthProvider extends ChangeNotifier {
       _error = '$e\n$st';
       debugPrint('Auth0 login error: $e');
       debugPrintStack(stackTrace: st);
-      rethrow;
+      // Don't rethrow, just show error in UI
     } finally {
       _setLoading(false);
     }
+  }
+
+  Future<void> cancelLogin() async {
+    await auth0.cancelLogin();
+    _setLoading(false);
   }
 
   Future<void> logout() async {
