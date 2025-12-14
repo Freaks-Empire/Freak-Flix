@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import '../widgets/video_player/video_controls.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
   final String filePath;
-  const VideoPlayerScreen({required this.filePath, super.key});
+  final String? title;
+  const VideoPlayerScreen({required this.filePath, this.title, super.key});
 
   @override
   State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
@@ -33,17 +35,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
+        fit: StackFit.expand,
         children: [
           Center(
-            child: Video(controller: controller),
-          ),
-          Positioned(
-            top: 20,
-            left: 20,
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
+            child: Video(
+              controller: controller,
+              controls: NoVideoControls, // Disable default controls
             ),
+          ),
+          VideoControls(
+            player: player,
+            controller: controller,
+            title: widget.title ?? 'Video',
+            onBack: () => Navigator.pop(context),
           ),
         ],
       ),

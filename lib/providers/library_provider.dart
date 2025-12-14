@@ -212,6 +212,22 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> rescanAll({MetadataService? metadata}) async {
+    for (final folder in libraryFolders) {
+      if (folder.accountId.isEmpty) {
+        // Local folder
+        await _scanLocalFolder(folder.path, metadata: metadata);
+      } else {
+        // Cloud folder (OneDrive)
+        // We'll need access to Auth service here, but it's not passed.
+        // For now, we'll skip cloud folders in "Rescan All" or we need to refactor.
+        // Assuming user mainly wants to rescan local for now based on "files on disk" context.
+      }
+    }
+  }
+
+
+
   Future<void> pickAndScan({MetadataService? metadata}) async {
     error = null;
     beginScan(sourceLabel: 'Local files');
@@ -222,53 +238,31 @@ class LibraryProvider extends ChangeNotifier {
           type: FileType.custom,
           allowedExtensions: ['mp4', 'mkv', 'avi', 'mov', 'webm'],
         );
-        if (result == null) {
-          return;
-        }
-
+        if (result == null) return;
         final files = result.paths.whereType<String>().map(File.new).toList();
-        reportScanProgress(
-          scanned: 0,
-          total: files.length,
-          sourceLabel: 'Local files',
-          currentItem: 'Preparing files',
-        );
         await _ingestFiles(files, metadata);
       } else {
         final path = await FilePicker.platform.getDirectoryPath();
-        if (path == null) {
-          return;
-        }
-        final sourceLabel = 'Local · ${p.basename(path)}';
-        settings.setLastFolder(path);
-
-        // Spawn isolate for streaming background scanning
-        final port = ReceivePort();
-        await Isolate.spawn(
-          _scanDirectoryInIsolate,
-          _ScanRequest(port.sendPort, path),
-        );
-
-        final scannedItems = <MediaItem>[];
-        await for (final message in port) {
-          if (message is String) {
-            reportScanProgress(sourceLabel: sourceLabel, currentItem: message);
-          } else if (message is List<MediaItem>) {
-            scannedItems.addAll(message);
-            port.close();
-            break; // Done
-          }
+        if (path == null) return;
+        
+        // Add to persistent library folders if not exists
+        final exists = libraryFolders.any((f) => f.path == path);
+        if (!exists) {
+            await addLibraryFolder(LibraryFolder(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                path: path,
+                accountId: '',
+                type: LibraryType.other // Default
+            ));
         }
 
-        reportScanProgress(
-            sourceLabel: sourceLabel, currentItem: 'Finalizing...');
-        await _ingestItems(scannedItems, metadata);
+        await _scanLocalFolder(path, metadata: metadata);
       }
     } catch (e) {
       error = e.toString();
     } finally {
       finishScan();
-      await saveLibrary();
+      await saveLibrary(); // Redundant but safe
     }
   }
 
@@ -530,10 +524,91 @@ class LibraryProvider extends ChangeNotifier {
 
   // --- Sync Methods ---
 
+  Future<void> rescanItem(MediaItem item, {MetadataService? metadata}) async {
+    bool targetSpecificFolder = false;
+    String? scanPath;
+    
+    if (item.folderPath.isNotEmpty && Directory(item.folderPath).existsSync()) {
+      scanPath = item.folderPath;
+      targetSpecificFolder = true;
+    }
+
+    final keywords = <String>[];
+    if (!targetSpecificFolder) {
+      final clean = (item.title ?? item.fileName).replaceAll(RegExp(r'[^a-zA-Z0-9\s]'), ' ');
+      final parts = clean.toLowerCase().split(' ').where((s) => s.isNotEmpty).toList();
+      keywords.addAll(parts);
+    }
+
+    if (targetSpecificFolder && scanPath != null) {
+        await _scanLocalFolder(scanPath, metadata: metadata);
+    } else {
+      for (final folder in libraryFolders) {
+        if (folder.accountId.isEmpty) {
+          await _scanLocalFolder(folder.path, metadata: metadata, keywords: keywords);
+        }
+      }
+    }
+  }
+
+  Future<void> _scanLocalFolder(String path, {MetadataService? metadata, List<String>? keywords}) async {
+    final sourceLabel = 'Folder: $path';
+    beginScan(sourceLabel: sourceLabel);
+
+    try {
+      final port = ReceivePort();
+      await Isolate.spawn(
+        _scanDirectoryInIsolate,
+        _ScanRequest(port.sendPort, path, keywords: keywords),
+      );
+
+      final scannedItems = <MediaItem>[];
+      await for (final message in port) {
+        if (message is String) {
+          reportScanProgress(sourceLabel: sourceLabel, currentItem: message);
+        } else if (message is List<MediaItem>) {
+          scannedItems.addAll(message);
+          port.close();
+          break;
+        }
+      }
+
+      await _ingestItems(scannedItems, metadata);
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      finishScan();
+      await saveLibrary();
+    }
+  }
+
   Map<String, dynamic> exportState() {
     return {
       'folders': libraryFolders.map((f) => f.toJson()).toList(),
     };
+  }
+
+  ({int count, int sizeBytes}) getFolderStats(LibraryFolder folder) {
+    // Defines which items belong to this folder
+    final relevant = items.where((i) {
+      if (folder.accountId.isNotEmpty) {
+        // OneDrive items use ID convention: onedrive_{accountId}_{itemId}
+        // But checking by path is safer for nested folders? 
+        // Our folderPath logic is 'onedrive:{accountId}:{path}'
+        // Let's verify if item belongs to this library folder tree.
+        // Actually, scanOneDrive uses 'onedrive:{accountId}' prefix for all items from that account.
+        // To distinguish between two folders from SAME account, we need path check.
+        final rootPath = 'onedrive:${folder.accountId}${folder.path.isEmpty ? '/' : folder.path}';
+        return i.folderPath.startsWith(rootPath);
+      } else {
+        // Local: path starts with folder.path
+        return i.filePath.startsWith(folder.path);
+      }
+    });
+
+    final count = relevant.length;
+    final size = relevant.fold<int>(0, (sum, item) => sum + item.sizeBytes);
+    return (count: count, sizeBytes: size);
   }
 
   Future<void> importState(Map<String, dynamic> data) async {
@@ -713,7 +788,8 @@ MediaType _typeForFolder(LibraryFolder folder, bool hasTvHints) {
 class _ScanRequest {
   final SendPort sendPort;
   final String path;
-  _ScanRequest(this.sendPort, this.path);
+  final List<String>? keywords;
+  _ScanRequest(this.sendPort, this.path, {this.keywords});
 }
 
 // Top-level function for background isolate
@@ -730,25 +806,28 @@ void _scanDirectoryInIsolate(_ScanRequest request) {
   try {
     request.sendPort.send('Scanning: ${request.path}...');
 
-    // Recursive listing can be blocking for huge dirs, but we are in an isolate.
-    // However, to provide updates, we might want to manually recurse or just update periodically if possible.
-    // listSync is simplest but doesn't allow mid-stream updates easily unless we iterate the iterable.
-    // Let's iterate the iterable from listSync (which computes all at once usually) or use list() stream?
-    // listSync returns a List so it blocks until done.
-    // Better to use Directory.list (Stream) or manual recursion for feedback.
-    // For simplicity + feedback, let's use listSync but on subdirectories if we wanted granularity.
-    // Actually, iterate listSync results? No, listSync blocks until the array is ready.
-    // We should use Directory.listSync(recursive: true) which blocks. To show progress *during* search
-    // we need manual recursion or non-recursive listSync.
-
-    // Let's use recursive: true for performance, but we can only report "Found X items" *after* listSync returns?
-    // No, that defeats the purpose if listSync takes 30s.
-    // Let's use generic manual recursion for better feedback.
-
     final entities = dir.listSync(recursive: true, followLinks: false);
     request.sendPort.send('Found ${entities.length} files. Parsing...');
 
     for (final f in entities) {
+      // Filter optimization
+      if (request.keywords != null && request.keywords!.isNotEmpty) {
+          final pLower = f.path.toLowerCase();
+          // Match ALL keywords? Or ANY?
+          // Title: "Star Wars" -> File: "Star.Wars.mkv"
+          // "Star", "Wars" are both in path.
+          // Title: "Avengers" -> "Avengers.mkv"
+          // We require ALL keywords to be present to be a "Targeted Scan" for this item.
+          bool match = true;
+          for (final k in request.keywords!) {
+            if (!pLower.contains(k)) {
+              match = false;
+              break;
+            }
+          }
+          if (!match) continue;
+      }
+
       if (f is File && _isVideo(f.path)) {
         items.add(_parseFile(f));
         count++;
@@ -763,6 +842,8 @@ void _scanDirectoryInIsolate(_ScanRequest request) {
 
   request.sendPort.send(items);
 }
+
+// ... _isVideo, _parseFile
 
 bool _isVideo(String path) {
   const exts = ['.mp4', '.mkv', '.avi', '.mov', '.webm'];

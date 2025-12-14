@@ -9,6 +9,7 @@ import '../utils/filename_parser.dart';
 
 class MetadataService {
   final AniListService _ani = AniListService();
+  AniListService get aniListService => _ani;
   final TraktService _trakt = TraktService();
   final SettingsProvider settings;
   final TmdbService tmdbService;
@@ -89,6 +90,11 @@ class MetadataService {
           }
         }
       }
+    }
+
+    // If found in AniList and it is Anime, we skip TMDB logic to respect user preference.
+    if (base.isAnime && base.anilistId != null) {
+       return base;
     }
 
     final bool tmdbAllowed = settings.hasTmdbKey && settings.tmdbStatus != TmdbKeyStatus.invalid;

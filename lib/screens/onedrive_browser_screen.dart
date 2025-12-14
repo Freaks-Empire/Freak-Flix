@@ -170,7 +170,9 @@ class _OneDriveBrowserScreenState extends State<OneDriveBrowserScreen> {
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) => VideoPlayerScreen(
-                                  filePath: item.downloadUrl!),
+                                  filePath: item.downloadUrl!,
+                                  title: item.name,
+                              ),
                             ),
                           );
                         }

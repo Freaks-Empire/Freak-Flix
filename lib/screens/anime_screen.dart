@@ -13,7 +13,7 @@ class AnimeScreen extends StatelessWidget {
     if (shows.isEmpty) return const EmptyState(message: 'No anime found.');
 
     return GridView.builder(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 100, 12, 12),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 5,
         childAspectRatio: 2 / 3,

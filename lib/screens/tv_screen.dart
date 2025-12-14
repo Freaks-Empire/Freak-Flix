@@ -17,7 +17,7 @@ class TvScreen extends StatelessWidget {
     print('TV GROUPS: ${shows.map((s) => '${s.title} (${s.episodes.length})').toList()}');
 
     return GridView.builder(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 100, 12, 12),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 5,
         childAspectRatio: 2 / 3,

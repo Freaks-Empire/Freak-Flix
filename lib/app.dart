@@ -7,9 +7,13 @@ import 'providers/auth_provider.dart';
 import 'screens/discover_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/auth/auth_screen.dart';
-import 'screens/setup_screen.dart';
+import 'screens/search_screen.dart';
 import 'widgets/navigation_dock.dart';
 import 'services/tmdb_discover_service.dart';
+
+import 'screens/movies_screen.dart';
+import 'screens/tv_screen.dart';
+import 'screens/anime_screen.dart';
 
 class FreakFlixApp extends StatefulWidget {
   const FreakFlixApp({super.key});
@@ -22,9 +26,10 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
   int _index = 0;
   final _pages = const [
     DiscoverScreen(type: DiscoverType.all), // Home
-    DiscoverScreen(type: DiscoverType.movie), // Movies
-    DiscoverScreen(type: DiscoverType.tv), // TV
-    DiscoverScreen(type: DiscoverType.anime), // Anime
+    MoviesScreen(), // Movies (Library)
+    TvScreen(), // TV (Library)
+    AnimeScreen(), // Anime (Library)
+    SearchScreen(), // Search
     SettingsScreen(), // Settings
   ];
 
@@ -97,7 +102,7 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
                           child: Material(
                             elevation: 4,
                             borderRadius: BorderRadius.circular(20),
-                            color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
+                            color: Colors.grey[900]?.withOpacity(0.95),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               child: Row(
@@ -106,14 +111,17 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
                                   const SizedBox(
                                     height: 16,
                                     width: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.redAccent),
+                                    ),
                                   ),
                                   const SizedBox(width: 12),
                                   Text(
                                     library.scanningStatus.isNotEmpty
                                         ? library.scanningStatus
                                         : 'Scanning library...',
-                                    style: const TextStyle(fontSize: 12),
+                                    style: const TextStyle(fontSize: 12, color: Colors.white),
                                   ),
                                 ],
                               ),

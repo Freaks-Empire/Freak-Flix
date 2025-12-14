@@ -280,6 +280,31 @@ class PosterCard extends StatelessWidget {
                     Image.network(item.posterUrl!, fit: BoxFit.cover)
                   else
                     Container(color: theme.colorScheme.surfaceVariant),
+                  
+                  // Availability Indicator
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Consumer<LibraryProvider>(
+                      builder: (context, library, _) {
+                        final isLocal = item.filePath.isNotEmpty || 
+                            (item.tmdbId != null && library.findByTmdbId(item.tmdbId!) != null);
+                            
+                        if (isLocal) return const SizedBox.shrink();
+
+                        return DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.6),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(Icons.close, size: 16, color: Colors.redAccent),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                   Positioned(
                     top: 8,
                     right: 8,

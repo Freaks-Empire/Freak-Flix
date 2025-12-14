@@ -415,89 +415,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ),
                           if (folders.isNotEmpty)
-                            ...folders.map(
-                              (folder) => ListTile(
-                                dense: true,
-                                leading: _typeIcon(folder.type),
-                                title: Text(folder.path),
-                                subtitle: Text(_typeLabel(folder.type)),
-                                trailing: Wrap(
-                                  spacing: 8,
-                                  children: [
-                                    TextButton.icon(
-                                      icon: const Icon(Icons.autorenew_rounded,
-                                          size: 18),
-                                      label: const Text('Rescan library'),
-                                      onPressed: library.isLoading
-                                          ? null
-                                          : () async {
-                                              await library
-                                                  .rescanOneDriveFolder(
-                                                auth: _graphAuth,
-                                                folder: folder,
-                                                metadata: metadata,
-                                              );
-
-                                              if (context.mounted) {
-                                                ScaffoldMessenger.of(context)
-                                                    .showSnackBar(
-                                                  SnackBar(
-                                                    content: Text(
-                                                        'Rescanned ${_typeLabel(folder.type)} library'),
-                                                    behavior: SnackBarBehavior
-                                                        .floating,
-                                                    duration: const Duration(
-                                                        seconds: 2),
-                                                  ),
-                                                );
-                                              }
-                                            },
-                                    ),
-                                    const SizedBox(width: 4),
-                                    TextButton.icon(
-                                      icon: const Icon(Icons.refresh_rounded,
-                                          size: 18),
-                                      label: const Text('Refetch metadata'),
-                                      onPressed: library.isLoading
-                                          ? null
-                                          : () async {
-                                              final scopedRoot =
-                                                  'onedrive:${folder.accountId}${folder.path.isEmpty ? '/' : folder.path}';
-                                              await library
-                                                  .refetchMetadataForFolder(
-                                                scopedRoot,
-                                                _typeLabel(folder.type),
-                                                metadata,
-                                              );
-
-                                              if (context.mounted) {
-                                                ScaffoldMessenger.of(context)
-                                                    .showSnackBar(
-                                                  SnackBar(
-                                                    content: Text(
-                                                        'Refreshed ${_typeLabel(folder.type)} metadata'),
-                                                    behavior: SnackBarBehavior
-                                                        .floating,
-                                                    duration: const Duration(
-                                                        seconds: 2),
-                                                  ),
-                                                );
-                                              }
-                                            },
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline),
-                                      tooltip: 'Remove folder',
-                                      onPressed: () async {
-                                        await library
-                                            .removeLibraryFolder(folder);
-                                        if (mounted) setState(() {});
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                            ...folders.map((f) => _buildFolderTile(f, library, metadata)),
                           Align(
                             alignment: Alignment.centerRight,
                             child: FilledButton.tonal(
@@ -715,6 +633,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Widget _buildFolderTile(LibraryFolder folder, LibraryProvider library, MetadataService metadata) {
+    final stats = library.getFolderStats(folder);
+    final sizeStr = _formatSize(stats.sizeBytes);
+    
+    return ListTile(
+      dense: true,
+      leading: _typeIcon(folder.type),
+      title: Text(folder.path),
+      subtitle: Text(
+          '${_typeLabel(folder.type)} • ${stats.count} files • $sizeStr'),
+      trailing: Wrap(
+        spacing: 8,
+        children: [
+          TextButton.icon(
+            icon: const Icon(Icons.autorenew_rounded, size: 18),
+            label: const Text('Rescan library'),
+            onPressed: library.isLoading
+                ? null
+                : () async {
+                    await library.rescanOneDriveFolder(
+                      auth: _graphAuth,
+                      folder: folder,
+                      metadata: metadata,
+                    );
+
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                              'Rescanned ${_typeLabel(folder.type)} library'),
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+          ),
+          const SizedBox(width: 4),
+          TextButton.icon(
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Refetch metadata'),
+            onPressed: library.isLoading
+                ? null
+                : () async {
+                    final scopedRoot =
+                        'onedrive:${folder.accountId}${folder.path.isEmpty ? '/' : folder.path}';
+                    await library.refetchMetadataForFolder(
+                      scopedRoot,
+                      _typeLabel(folder.type),
+                      metadata,
+                    );
+
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                              'Refreshed ${_typeLabel(folder.type)} metadata'),
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Remove folder',
+            onPressed: () async {
+              await library.removeLibraryFolder(folder);
+              if (mounted) setState(() {});
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   String _typeLabel(LibraryType type) {
     switch (type) {
       case LibraryType.movies:
@@ -727,5 +722,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       default:
         return 'Other';
     }
+  }
+  String _formatSize(int bytes) {
+    if (bytes <= 0) return '0 B';
+    const suffixes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var i = 0;
+    double size = bytes.toDouble();
+    while (size >= 1024 && i < suffixes.length - 1) {
+      size /= 1024;
+      i++;
+    }
+    return '${size.toStringAsFixed(1)} ${suffixes[i]}';
   }
 }

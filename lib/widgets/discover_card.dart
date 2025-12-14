@@ -82,30 +82,34 @@ class DiscoverCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // Library Status Indicator
-                    Positioned(
-                      top: 6,
-                      left: 6,
-                      child: Consumer<LibraryProvider>(
-                        builder: (context, library, _) {
-                          final inLibrary = library.findByTmdbId(item.id) != null;
-                          return DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.6),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(4),
-                              child: Icon(
-                                inLibrary ? Icons.check : Icons.close,
-                                size: 16,
-                                color: inLibrary ? Colors.greenAccent : Colors.redAccent,
+                      Positioned(
+                        top: 6,
+                        left: 6,
+                        child: Consumer<LibraryProvider>(
+                          builder: (context, library, _) {
+                            final match = library.findByTmdbId(item.id);
+                            final inLibrary = match != null && (
+                              match.type == MediaType.movie || 
+                              match.episodes.isNotEmpty
+                            );
+                            
+                            return DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.6),
+                                shape: BoxShape.circle,
                               ),
-                            ),
-                          );
-                        },
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: Icon(
+                                  inLibrary ? Icons.check : Icons.close,
+                                  size: 16,
+                                  color: inLibrary ? Colors.greenAccent : Colors.redAccent,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                    ),
                     Positioned(
                       bottom: 0,
                       left: 0,

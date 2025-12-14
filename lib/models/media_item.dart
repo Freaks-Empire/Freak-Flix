@@ -96,6 +96,7 @@ class MediaItem {
 
   bool isAnime;
   int? tmdbId;
+  int? anilistId;
   String? showKey;
   List<EpisodeItem> episodes;
 
@@ -145,6 +146,7 @@ class MediaItem {
     List<String>? genres,
     bool? isAnime,
     int? tmdbId,
+    int? anilistId,
     String? showKey,
     List<EpisodeItem>? episodes,
     bool? isWatched,
@@ -172,6 +174,7 @@ class MediaItem {
       genres: genres ?? this.genres,
       isAnime: isAnime ?? this.isAnime,
       tmdbId: tmdbId ?? this.tmdbId,
+      anilistId: anilistId ?? this.anilistId,
       showKey: showKey ?? this.showKey,
       episodes: episodes ?? this.episodes,
       isWatched: isWatched ?? this.isWatched,
@@ -202,6 +205,9 @@ class MediaItem {
         'isAnime': isAnime,
         'tmdbId': tmdbId,
         'showKey': showKey,
+        'tmdbId': tmdbId,
+        'anilistId': anilistId,
+        'showKey': showKey,
         'episodes': episodes.map((e) => e.toJson()).toList(),
         'isWatched': isWatched,
         'lastPositionSeconds': lastPositionSeconds,
@@ -230,6 +236,8 @@ class MediaItem {
       genres: (json['genres'] as List<dynamic>?)?.cast<String>() ?? [],
       isAnime: json['isAnime'] as bool? ?? false,
       tmdbId: json['tmdbId'] as int?,
+      tmdbId: json['tmdbId'] as int?,
+      anilistId: json['anilistId'] as int?,
       showKey: json['showKey'] as String?,
       episodes: (json['episodes'] as List<dynamic>? ?? [])
           .map((e) => EpisodeItem.fromJson(e as Map<String, dynamic>))

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import '../screens/details_screen.dart';
+import '../providers/library_provider.dart';
+import 'package:provider/provider.dart';
 import 'safe_network_image.dart';
 
 class MediaCard extends StatelessWidget {
@@ -33,13 +35,55 @@ class MediaCard extends StatelessWidget {
                       aspectRatio: 2 / 3,
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: SafeNetworkImage(
-                          url: item.posterUrl,
-                          fit: BoxFit.cover,
-                          borderRadius: BorderRadius.circular(8),
-                          width: double.infinity,
-                          height: double.infinity,
-                        ),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          SafeNetworkImage(
+                            url: item.posterUrl,
+                            fit: BoxFit.cover,
+                            borderRadius: BorderRadius.circular(8),
+                            width: double.infinity,
+                            height: double.infinity,
+                          ),
+                          // Availability Indicator
+                          Positioned(
+                            top: 4,
+                            left: 4,
+                            child: Consumer<LibraryProvider>(
+                              builder: (context, library, _) {
+                                // If it has a filePath, it's local.
+                                // If it has a tmdbId, check if it exists in library.
+                                bool isLocal = item.filePath.isNotEmpty;
+                                
+                                if (!isLocal && item.tmdbId != null) {
+                                  final match = library.findByTmdbId(item.tmdbId!);
+                                  if (match != null) {
+                                    // Make sure TV shows actually have episodes
+                                    if (match.type == MediaType.movie) {
+                                      isLocal = true;
+                                    } else {
+                                      isLocal = match.episodes.isNotEmpty;
+                                    }
+                                  }
+                                }
+                                    
+                                if (isLocal) return const SizedBox.shrink(); // Don't show anything if available (or show check if desired)
+                                
+                                return DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.6),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(4),
+                                    child: Icon(Icons.close, size: 16, color: Colors.redAccent),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
                       ),
                     ),
                   ),

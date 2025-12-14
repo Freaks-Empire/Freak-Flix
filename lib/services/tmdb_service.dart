@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/media_item.dart';
 import '../models/tmdb_item.dart';
+import '../models/tmdb_episode.dart';
+import '../models/tmdb_extended_details.dart';
 import '../providers/settings_provider.dart';
 
 class TmdbService {
@@ -162,59 +164,70 @@ class TmdbService {
         .where((i) => i.posterUrl != null)
         .toList(); // Simple de-dup? IDK, set probably better but list is fine for now
 
+    // Parse Seasons (Only for TV)
+    final seasonsData = data['seasons'] as List<dynamic>?;
+    final seasonList = (seasonsData ?? [])
+        .map((s) => TmdbSeason.fromMap(s))
+        .where((s) => s.seasonNumber > 0) // Usually skip season 0 (Specials) unless wanted
+        .toList();
+
     return TmdbExtendedDetails(
-        cast: castList, videos: vidList, recommendations: combinedRecs);
-  }
-}
-
-class TmdbExtendedDetails {
-  final List<TmdbCast> cast;
-  final List<TmdbVideo> videos;
-  final List<TmdbItem> recommendations;
-
-  const TmdbExtendedDetails({
-    required this.cast,
-    required this.videos,
-    required this.recommendations,
-  });
-}
-
-class TmdbCast {
-  final String name;
-  final String character;
-  final String? profileUrl;
-
-  const TmdbCast({required this.name, required this.character, this.profileUrl});
-
-  factory TmdbCast.fromMap(Map<String, dynamic> map, String validImageBase) {
-    final path = map['profile_path'] as String?;
-    return TmdbCast(
-      name: map['name'] as String? ?? 'Unknown',
-      character: map['character'] as String? ?? '',
-      profileUrl: path != null ? '$validImageBase$path' : null,
+      cast: castList,
+      videos: vidList,
+      recommendations: combinedRecs,
+      seasons: seasonList,
     );
   }
-}
 
-class TmdbVideo {
-  final String key;
-  final String site;
-  final String type;
-  final String name;
+  Future<List<TmdbEpisode>> getSeasonEpisodes(int tvId, int seasonNumber) async {
+    final key = _key;
+    if (key == null) return [];
 
-  const TmdbVideo({
-    required this.key,
-    required this.site,
-    required this.type,
-    required this.name,
-  });
+    final path = '/3/tv/$tvId/season/$seasonNumber';
+    final uri = Uri.https(_baseHost, path, {'api_key': key});
 
-  factory TmdbVideo.fromMap(Map<String, dynamic> map) {
-    return TmdbVideo(
-      key: map['key'] as String? ?? '',
-      site: map['site'] as String? ?? '',
-      type: map['type'] as String? ?? '',
-      name: map['name'] as String? ?? '',
-    );
+    final res = await _client.get(uri);
+    if (res.statusCode != 200) return [];
+
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    final episodes = data['episodes'] as List<dynamic>?;
+
+    if (episodes == null) return [];
+
+    return episodes
+        .map((e) => TmdbEpisode.fromMap(e, _imageBase))
+        .toList();
+  }
+  Future<List<TmdbItem>> searchMulti(String query) async {
+    final key = _key;
+    if (key == null || query.trim().isEmpty) return [];
+
+    final uri = Uri.https(_baseHost, '/3/search/multi', {
+      'api_key': key,
+      'query': query,
+      'include_adult': 'false',
+      'language': 'en-US',
+    });
+
+    final res = await _client.get(uri);
+    if (res.statusCode != 200) return [];
+
+    final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+    final results = decoded['results'] as List<dynamic>?;
+    if (results == null) return [];
+
+    return results
+        .where((m) => m['media_type'] == 'movie' || m['media_type'] == 'tv')
+        .map((m) => TmdbItem.fromMap(
+              m,
+              imageBase: _imageBase,
+              defaultType: m['media_type'] == 'movie'
+                  ? TmdbMediaType.movie
+                  : TmdbMediaType.tv,
+            ))
+        .where((i) => i.posterUrl != null) // Filter items without posters
+        .toList();
   }
 }
+
+

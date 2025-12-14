@@ -54,14 +54,16 @@ class TmdbDiscoverService {
     // Special handling for Anime Trending -> use Discover with recent dates or just popularity?
     // TMDB doesn't have /trending/anime. use discover.
     if (type == DiscoverType.anime) {
+      // Trending: Airing in last 3 months + high popularity (Seasonal hits)
+      final threeMonthsAgo = DateTime.now().subtract(const Duration(days: 90));
       return _fetchAnime(
         sortBy: 'popularity.desc', 
         filter: filter, 
         page: page,
-        // Optional: filter by air date for "trending"? standard popularity is fine for now.
+        extraQuery: {'air_date.gte': threeMonthsAgo.toString().substring(0,10)},
       );
     }
-
+    
     String path;
     switch (type) {
       case DiscoverType.movie:
@@ -90,17 +92,18 @@ class TmdbDiscoverService {
   }
 
   Future<List<TmdbItem>> fetchRecommended({DiscoverFilter? filter, DiscoverType type = DiscoverType.all, int page = 1}) async {
-    // "Recommended" usually means curated or popular.
-    // For explicit types, we can just fetch another variations or repeat popular?
-    // Let's use "Airing Today" for TV/Anime, "Now Playing" for Movies.
+    // "Recommended" -> Top Rated / Critically Acclaimed
     
     if (type == DiscoverType.anime) {
-      // Airing now
+       // Top Rated Anime
        return _fetchAnime(
-        sortBy: 'popularity.desc', 
+        sortBy: 'vote_average.desc', 
         filter: filter,
         page: page,
-        extraQuery: {'air_date.gte': DateTime.now().subtract(const Duration(days: 7)).toString().substring(0,10)}
+        extraQuery: {
+          'vote_count.gte': '250',
+          // Exclude extremely old stuff if desired? No, masterpieces are timeless.
+        }
       );
     }
 
