@@ -124,6 +124,7 @@ class MediaItem {
     this.genres = const [],
     this.isAnime = false,
     this.tmdbId,
+    this.anilistId,
     this.showKey,
     this.episodes = const [],
     this.isWatched = false,
@@ -236,7 +237,7 @@ class MediaItem {
       genres: (json['genres'] as List<dynamic>?)?.cast<String>() ?? [],
       isAnime: json['isAnime'] as bool? ?? false,
       tmdbId: json['tmdbId'] as int?,
-      tmdbId: json['tmdbId'] as int?,
+
       anilistId: json['anilistId'] as int?,
       showKey: json['showKey'] as String?,
       episodes: (json['episodes'] as List<dynamic>? ?? [])
