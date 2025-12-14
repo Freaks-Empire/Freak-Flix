@@ -39,6 +39,7 @@ class SyncProvider extends ChangeNotifier {
     // For now, we can rely on manual or app start, OR check for specific changes?
     // Actually, GraphService notifies on account changes. 
     // We can add a specialized listener or just debounce pushes?
+    library.onConfigChanged.listen((_) => pushSync());
     
     // Listen to Auth for initial PULL
     auth.addListener(_onAuthChanged);
@@ -116,8 +117,6 @@ class SyncProvider extends ChangeNotifier {
   // Manual trigger
   Future<void> forceSync() async {
     await pullSync(); 
-    // Usually manual sync implies "fetch latest", but could also be "push mine".
-    // Let's do Pull first (resolve conflicts?), then Push?
-    // Or just Pull.
+    await pushSync();
   }
 }

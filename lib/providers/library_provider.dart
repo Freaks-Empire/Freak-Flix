@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'dart:isolate';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -24,6 +25,9 @@ class LibraryProvider extends ChangeNotifier {
   bool isLoading = false;
   String? error;
   String scanningStatus = '';
+
+  final _configChangedController = StreamController<void>.broadcast();
+  Stream<void> get onConfigChanged => _configChangedController.stream;
 
   // Scan progress state
   bool isScanning = false;
@@ -88,6 +92,9 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+    super.dispose();
+  }
+
   void _updateScanningStatus() {
     if (!isScanning) {
       scanningStatus = '';
@@ -108,6 +115,12 @@ class LibraryProvider extends ChangeNotifier {
   void _setScanStatus(String message) {
     scanningStatus = message;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _configChangedController.close();
+    super.dispose();
   }
 
   LibraryProvider(this.settings);
@@ -180,6 +193,7 @@ class LibraryProvider extends ChangeNotifier {
     );
     libraryFolders.add(folder);
     await _saveLibraryFolders();
+    _configChangedController.add(null);
     notifyListeners();
   }
 
@@ -188,12 +202,14 @@ class LibraryProvider extends ChangeNotifier {
       (f) => f.id == folder.id && f.accountId == folder.accountId,
     );
     await _saveLibraryFolders();
+    _configChangedController.add(null);
     notifyListeners();
   }
 
   Future<void> removeLibraryFoldersForAccount(String accountId) async {
     libraryFolders.removeWhere((f) => f.accountId == accountId);
     await _saveLibraryFolders();
+    _configChangedController.add(null);
     notifyListeners();
   }
 
