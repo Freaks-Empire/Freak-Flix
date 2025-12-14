@@ -127,6 +127,9 @@ class TmdbDiscoverService {
     return _getList(uri, defaultType: mediaType);
   }
 
+  Map<String, String>? _applyFilter(DiscoverFilter? filter) {
+    if (filter == null) return null;
+
     final query = <String, String>{};
     if (filter.genreId != null) query['with_genres'] = '${filter.genreId}';
 
