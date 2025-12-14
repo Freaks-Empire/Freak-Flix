@@ -42,7 +42,7 @@ class TmdbDiscoverService {
     );
   }
 
-  Future<List<TmdbItem>> fetchTrending({DiscoverFilter? filter}) async {
+  Future<List<TmdbItem>> fetchTrending({DiscoverFilter? filter, int page = 1}) async {
     final key = _key;
     if (key == null) return [];
     final uri = Uri.https(
@@ -51,45 +51,50 @@ class TmdbDiscoverService {
       {
         'api_key': key,
         'language': 'en-US',
+        'page': '$page',
       },
     );
     return _getList(uri, defaultType: TmdbMediaType.movie, allowFilter: false);
   }
 
-  Future<List<TmdbItem>> fetchRecommended({DiscoverFilter? filter}) async {
+  Future<List<TmdbItem>> fetchRecommended({DiscoverFilter? filter, int page = 1}) async {
     return _fetchWithOptionalDiscover(
       mediaType: TmdbMediaType.tv,
       fallbackPath: '/3/tv/popular',
       sortBy: 'popularity.desc',
       filter: filter,
+      page: page,
     );
   }
 
-  Future<List<TmdbItem>> fetchPopular({DiscoverFilter? filter}) async {
+  Future<List<TmdbItem>> fetchPopular({DiscoverFilter? filter, int page = 1}) async {
     return _fetchWithOptionalDiscover(
       mediaType: TmdbMediaType.movie,
       fallbackPath: '/3/movie/popular',
       sortBy: 'popularity.desc',
       filter: filter,
+      page: page,
     );
   }
 
-  Future<List<TmdbItem>> fetchUpcoming({DiscoverFilter? filter}) async {
+  Future<List<TmdbItem>> fetchUpcoming({DiscoverFilter? filter, int page = 1}) async {
     return _fetchWithOptionalDiscover(
       mediaType: TmdbMediaType.movie,
       fallbackPath: '/3/movie/upcoming',
       sortBy: 'primary_release_date.asc',
       filter: filter,
       extraQuery: {'region': 'US'},
+      page: page,
     );
   }
 
-  Future<List<TmdbItem>> fetchTopRated({DiscoverFilter? filter}) async {
+  Future<List<TmdbItem>> fetchTopRated({DiscoverFilter? filter, int page = 1}) async {
     return _fetchWithOptionalDiscover(
       mediaType: TmdbMediaType.movie,
       fallbackPath: '/3/movie/top_rated',
       sortBy: 'vote_average.desc',
       filter: filter,
+      page: page,
     );
   }
 
@@ -99,6 +104,7 @@ class TmdbDiscoverService {
     required String sortBy,
     DiscoverFilter? filter,
     Map<String, String>? extraQuery,
+    int page = 1,
   }) async {
     final key = _key;
     if (key == null) return [];
@@ -111,6 +117,7 @@ class TmdbDiscoverService {
     final query = {
       'api_key': key,
       'language': 'en-US',
+      'page': '$page',
       if (hasFilter) 'sort_by': sortBy,
       ...?_applyFilter(filter),
       ...?extraQuery,
@@ -119,9 +126,6 @@ class TmdbDiscoverService {
     final uri = Uri.https(_baseHost, path, query);
     return _getList(uri, defaultType: mediaType);
   }
-
-  Map<String, String>? _applyFilter(DiscoverFilter? filter) {
-    if (filter == null) return null;
 
     final query = <String, String>{};
     if (filter.genreId != null) query['with_genres'] = '${filter.genreId}';
