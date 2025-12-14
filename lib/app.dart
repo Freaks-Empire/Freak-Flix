@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'dart:ui'; // Required for PointerDeviceKind
 import 'package:provider/provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/library_provider.dart';
@@ -31,6 +32,7 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
     final dark = settings.isDarkMode;
     return MaterialApp(
       title: 'Freak-Flix',
+      scrollBehavior: CustomScrollBehavior(),
       debugShowCheckedModeBanner: false,
       themeMode: dark ? ThemeMode.dark : ThemeMode.light,
       theme: ThemeData(
@@ -98,3 +100,12 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
     );
   }
 }
+
+class CustomScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+      };
+}
+
