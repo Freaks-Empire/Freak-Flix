@@ -48,13 +48,19 @@ void main() async {
        // Ignore
     }
     // Check if anything loaded
-    if (dotenv.env.isNotEmpty) envLoaded = true;
+    // if (dotenv.env.isNotEmpty) envLoaded = true; // Unsafe if not initialized
   }
 
   // Critical check logic remains, but let's make reading simpler.
   // If envLoaded is false, dotenv.env might still be empty map, safe to read.
   
   MediaKit.ensureInitialized();
+  try {
+    GraphAuthService.instance.configureFromEnv();
+  } catch (e) {
+    debugPrint('GraphAuthService init warning: $e');
+  }
+
   final settingsProvider = SettingsProvider();
   await settingsProvider.load();
   final tmdbService = TmdbService(settingsProvider);
@@ -71,11 +77,22 @@ void main() async {
   const auth0Logout = String.fromEnvironment('AUTH0_LOGOUT_URL');
   
   // Just read directly; if not loaded, returns null.
-  final envDomain = dotenv.env['AUTH0_DOMAIN']?.trim();
-  final envClientId = dotenv.env['AUTH0_CLIENT_ID']?.trim();
-  final envAudience = dotenv.env['AUTH0_AUDIENCE']?.trim();
-  final envCallback = dotenv.env['AUTH0_CALLBACK_URL']?.trim();
-  final envLogout = dotenv.env['AUTH0_LOGOUT_URL']?.trim();
+  // Just read directly; if not loaded, returns null.
+  String? envDomain;
+  if (dotenv.isInitialized) {
+    envDomain = dotenv.env['AUTH0_DOMAIN']?.trim();
+  }
+  String? envClientId;
+  String? envAudience;
+  String? envCallback;
+  String? envLogout;
+
+  if (dotenv.isInitialized) {
+    envClientId = dotenv.env['AUTH0_CLIENT_ID']?.trim();
+    envAudience = dotenv.env['AUTH0_AUDIENCE']?.trim();
+    envCallback = dotenv.env['AUTH0_CALLBACK_URL']?.trim();
+    envLogout = dotenv.env['AUTH0_LOGOUT_URL']?.trim();
+  }
   final audienceRaw = auth0Audience.isNotEmpty ? auth0Audience : envAudience;
   final audience = (audienceRaw?.isEmpty ?? true) ? null : audienceRaw;
   final resolvedDomain = auth0Domain.isNotEmpty ? auth0Domain : (envDomain ?? '');

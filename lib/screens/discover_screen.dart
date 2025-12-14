@@ -8,7 +8,8 @@ import '../widgets/discover_filter_sheet.dart';
 import '../widgets/discover_section.dart';
 
 class DiscoverScreen extends StatefulWidget {
-  const DiscoverScreen({super.key});
+  final DiscoverType type;
+  const DiscoverScreen({super.key, this.type = DiscoverType.all});
 
   @override
   State<DiscoverScreen> createState() => _DiscoverScreenState();
@@ -25,6 +26,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     _load();
   }
 
+  @override
+  void didUpdateWidget(DiscoverScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.type != oldWidget.type) {
+      _load();
+    }
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -33,7 +42,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     try {
       final filter = context.read<DiscoverFilterNotifier>().filter;
       final service = context.read<TmdbDiscoverService>();
-      final bundle = await service.fetchAll(filter: filter);
+      final bundle = await service.fetchAll(filter: filter, type: widget.type);
       if (!mounted) return;
       setState(() => _bundle = bundle);
     } catch (e) {
@@ -61,11 +70,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    String title = 'Discover';
+    switch (widget.type) {
+      case DiscoverType.movie: title = 'Movies'; break;
+      case DiscoverType.tv: title = 'TV Shows'; break;
+      case DiscoverType.anime: title = 'Anime'; break;
+      case DiscoverType.all: default: title = 'Discover'; break;
+    }
 
     return Scaffold(
       backgroundColor: theme.colorScheme.background,
       appBar: AppBar(
-        title: const Text('Discover'),
+        title: Text(title),
         actions: [
           IconButton(
             tooltip: 'Filters',
@@ -86,40 +102,43 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 children: [
+                   // Add extra top padding for the dock
+                  const SizedBox(height: 60), 
+                  
                   DiscoverSection(
                     title: 'Trending',
                     items: _bundle.trending,
                     loading: _loading,
                     onRetry: _load,
-                    onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchTrending(filter: context.read<DiscoverFilterNotifier>().filter, page: p),
+                    onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchTrending(filter: context.read<DiscoverFilterNotifier>().filter, type: widget.type, page: p),
                   ),
                   DiscoverSection(
                     title: 'Recommended',
                     items: _bundle.recommended,
                     loading: _loading,
                     onRetry: _load,
-                    onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchRecommended(filter: context.read<DiscoverFilterNotifier>().filter, page: p),
+                    onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchRecommended(filter: context.read<DiscoverFilterNotifier>().filter, type: widget.type, page: p),
                   ),
                   DiscoverSection(
                     title: 'Popular',
                     items: _bundle.popular,
                     loading: _loading,
                     onRetry: _load,
-                    onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchPopular(filter: context.read<DiscoverFilterNotifier>().filter, page: p),
+                    onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchPopular(filter: context.read<DiscoverFilterNotifier>().filter, type: widget.type, page: p),
                   ),
                   DiscoverSection(
                     title: 'Upcoming',
                     items: _bundle.upcoming,
                     loading: _loading,
                     onRetry: _load,
-                    onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchUpcoming(filter: context.read<DiscoverFilterNotifier>().filter, page: p),
+                    onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchUpcoming(filter: context.read<DiscoverFilterNotifier>().filter, type: widget.type, page: p),
                   ),
                   DiscoverSection(
                     title: 'Top Rated',
                     items: _bundle.topRated,
                     loading: _loading,
                     onRetry: _load,
-                    onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchTopRated(filter: context.read<DiscoverFilterNotifier>().filter, page: p),
+                    onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchTopRated(filter: context.read<DiscoverFilterNotifier>().filter, type: widget.type, page: p),
                   ),
                   const SizedBox(height: 24),
                 ],

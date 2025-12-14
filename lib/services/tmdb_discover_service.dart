@@ -4,6 +4,8 @@ import '../models/discover_filter.dart';
 import '../models/tmdb_item.dart';
 import '../providers/settings_provider.dart';
 
+enum DiscoverType { all, movie, tv, anime }
+
 class TmdbDiscoverService {
   final SettingsProvider settings;
   final http.Client _client;
@@ -18,19 +20,22 @@ class TmdbDiscoverService {
     return k.isEmpty ? null : k;
   }
 
-  Future<DiscoverBundle> fetchAll({DiscoverFilter? filter}) async {
+  Future<DiscoverBundle> fetchAll({DiscoverFilter? filter, DiscoverType type = DiscoverType.all}) async {
     final key = _key;
     if (key == null) {
       throw Exception('TMDB API key is missing. Add it in Settings first.');
     }
 
     final f = filter ?? DiscoverFilter.empty;
+    
+    // For anime, "Upcoming" is usually "Airing Now/Next Season", handled via discover dates.
+    // For specific types, we parallelize.
     final results = await Future.wait([
-      fetchTrending(filter: f),
-      fetchRecommended(filter: f),
-      fetchPopular(filter: f),
-      fetchUpcoming(filter: f),
-      fetchTopRated(filter: f),
+      fetchTrending(filter: f, type: type),
+      fetchRecommended(filter: f, type: type),
+      fetchPopular(filter: f, type: type),
+      fetchUpcoming(filter: f, type: type),
+      fetchTopRated(filter: f, type: type),
     ]);
 
     return DiscoverBundle(
@@ -42,42 +47,136 @@ class TmdbDiscoverService {
     );
   }
 
-  Future<List<TmdbItem>> fetchTrending({DiscoverFilter? filter, int page = 1}) async {
+  Future<List<TmdbItem>> fetchTrending({DiscoverFilter? filter, DiscoverType type = DiscoverType.all, int page = 1}) async {
     final key = _key;
     if (key == null) return [];
+
+    // Special handling for Anime Trending -> use Discover with recent dates or just popularity?
+    // TMDB doesn't have /trending/anime. use discover.
+    if (type == DiscoverType.anime) {
+      return _fetchAnime(
+        sortBy: 'popularity.desc', 
+        filter: filter, 
+        page: page,
+        // Optional: filter by air date for "trending"? standard popularity is fine for now.
+      );
+    }
+
+    String path;
+    switch (type) {
+      case DiscoverType.movie:
+        path = '/3/trending/movie/week';
+        break;
+      case DiscoverType.tv:
+        path = '/3/trending/tv/week';
+        break;
+      default:
+        path = '/3/trending/all/week';
+        break;
+    }
+
     final uri = Uri.https(
       _baseHost,
-      '/3/trending/all/week',
+      path,
       {
         'api_key': key,
         'language': 'en-US',
         'page': '$page',
       },
     );
-    return _getList(uri, defaultType: TmdbMediaType.movie, allowFilter: false);
+    // For trending/all, defaultType isn't strict, items have 'media_type'.
+    // but _getList needs a fallback.
+    return _getList(uri, defaultType: type == DiscoverType.movie ? TmdbMediaType.movie : TmdbMediaType.tv, allowFilter: false);
   }
 
-  Future<List<TmdbItem>> fetchRecommended({DiscoverFilter? filter, int page = 1}) async {
+  Future<List<TmdbItem>> fetchRecommended({DiscoverFilter? filter, DiscoverType type = DiscoverType.all, int page = 1}) async {
+    // "Recommended" usually means curated or popular.
+    // For explicit types, we can just fetch another variations or repeat popular?
+    // Let's use "Airing Today" for TV/Anime, "Now Playing" for Movies.
+    
+    if (type == DiscoverType.anime) {
+      // Airing now
+       return _fetchAnime(
+        sortBy: 'popularity.desc', 
+        filter: filter,
+        page: page,
+        extraQuery: {'air_date.gte': DateTime.now().subtract(const Duration(days: 7)).toString().substring(0,10)}
+      );
+    }
+
+    if (type == DiscoverType.movie) {
+      return _fetchWithOptionalDiscover(
+        mediaType: TmdbMediaType.movie,
+        fallbackPath: '/3/movie/now_playing',
+        sortBy: 'popularity.desc',
+        filter: filter,
+        page: page,
+        extraQuery: {'region': 'US'}
+      );
+    }
+
+    if (type == DiscoverType.tv) {
+      return _fetchWithOptionalDiscover(
+        mediaType: TmdbMediaType.tv,
+        fallbackPath: '/3/tv/on_the_air',
+        sortBy: 'popularity.desc',
+        filter: filter,
+        page: page,
+      );
+    }
+
+    // Default mixed: TV popular as before?
     return _fetchWithOptionalDiscover(
       mediaType: TmdbMediaType.tv,
-      fallbackPath: '/3/tv/popular',
+      fallbackPath: '/3/tv/popular', // keeping old default
       sortBy: 'popularity.desc',
       filter: filter,
       page: page,
     );
   }
 
-  Future<List<TmdbItem>> fetchPopular({DiscoverFilter? filter, int page = 1}) async {
+  Future<List<TmdbItem>> fetchPopular({DiscoverFilter? filter, DiscoverType type = DiscoverType.all, int page = 1}) async {
+    if (type == DiscoverType.anime) {
+      return _fetchAnime(sortBy: 'popularity.desc', filter: filter, page: page);
+    }
+    
+    final mediaType = (type == DiscoverType.tv) ? TmdbMediaType.tv : TmdbMediaType.movie; 
+    // If all, default to movie popular? Or mixed?
+    // Old implementation used "movie/popular" for this slot? No, lines 71 was movie/popular.
+
+    final path = (type == DiscoverType.tv) ? '/3/tv/popular' : '/3/movie/popular';
+    
     return _fetchWithOptionalDiscover(
-      mediaType: TmdbMediaType.movie,
-      fallbackPath: '/3/movie/popular',
+      mediaType: mediaType,
+      fallbackPath: path,
       sortBy: 'popularity.desc',
       filter: filter,
       page: page,
     );
   }
 
-  Future<List<TmdbItem>> fetchUpcoming({DiscoverFilter? filter, int page = 1}) async {
+  Future<List<TmdbItem>> fetchUpcoming({DiscoverFilter? filter, DiscoverType type = DiscoverType.all, int page = 1}) async {
+     if (type == DiscoverType.anime) {
+      // Upcoming anime: future dates
+      final nextWeek = DateTime.now().add(const Duration(days: 1));
+      return _fetchAnime(
+        sortBy: 'popularity.desc', 
+        filter: filter,
+        page: page,
+        extraQuery: {'first_air_date.gte': nextWeek.toString().substring(0,10)}
+      );
+    }
+    
+    if (type == DiscoverType.tv) {
+       return _fetchWithOptionalDiscover(
+        mediaType: TmdbMediaType.tv,
+        fallbackPath: '/3/tv/airing_today', // closest to upcoming
+        sortBy: 'popularity.desc',
+        filter: filter,
+        page: page,
+      ); 
+    }
+
     return _fetchWithOptionalDiscover(
       mediaType: TmdbMediaType.movie,
       fallbackPath: '/3/movie/upcoming',
@@ -88,13 +187,42 @@ class TmdbDiscoverService {
     );
   }
 
-  Future<List<TmdbItem>> fetchTopRated({DiscoverFilter? filter, int page = 1}) async {
+  Future<List<TmdbItem>> fetchTopRated({DiscoverFilter? filter, DiscoverType type = DiscoverType.all, int page = 1}) async {
+     if (type == DiscoverType.anime) {
+      return _fetchAnime(sortBy: 'vote_average.desc', filter: filter, page: page, extraQuery: {'vote_count.gte': '100'});
+    }
+    
+    final mediaType = (type == DiscoverType.tv) ? TmdbMediaType.tv : TmdbMediaType.movie; 
+    final path = (type == DiscoverType.tv) ? '/3/tv/top_rated' : '/3/movie/top_rated';
+
     return _fetchWithOptionalDiscover(
-      mediaType: TmdbMediaType.movie,
-      fallbackPath: '/3/movie/top_rated',
+      mediaType: mediaType,
+      fallbackPath: path,
       sortBy: 'vote_average.desc',
       filter: filter,
       page: page,
+    );
+  }
+
+  // --- Helper for Anime ---
+  Future<List<TmdbItem>> _fetchAnime({
+    required String sortBy,
+    DiscoverFilter? filter,
+    int page = 1,
+    Map<String, String>? extraQuery,
+  }) {
+    return _fetchWithOptionalDiscover(
+      mediaType: TmdbMediaType.tv,
+      fallbackPath: '/3/discover/tv', // Always discover for anime
+      sortBy: sortBy,
+      filter: filter,
+      page: page,
+      extraQuery: {
+        'with_genres': '16', // Animation
+        'with_original_language': 'ja', // Japanese
+        ...?extraQuery,
+      },
+      forceDiscover: true,
     );
   }
 
@@ -105,11 +233,12 @@ class TmdbDiscoverService {
     DiscoverFilter? filter,
     Map<String, String>? extraQuery,
     int page = 1,
+    bool forceDiscover = false,
   }) async {
     final key = _key;
     if (key == null) return [];
 
-    final hasFilter = _hasFilter(filter);
+    final hasFilter = _hasFilter(filter) || forceDiscover;
     final path = hasFilter
         ? '/3/discover/${mediaType == TmdbMediaType.tv ? 'tv' : 'movie'}'
         : fallbackPath;

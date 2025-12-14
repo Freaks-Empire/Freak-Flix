@@ -8,7 +8,8 @@ import 'screens/discover_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/auth/auth_screen.dart';
 import 'screens/setup_screen.dart';
-import 'widgets/side_rail.dart';
+import 'widgets/navigation_dock.dart';
+import 'services/tmdb_discover_service.dart';
 
 class FreakFlixApp extends StatefulWidget {
   const FreakFlixApp({super.key});
@@ -20,8 +21,11 @@ class FreakFlixApp extends StatefulWidget {
 class _FreakFlixAppState extends State<FreakFlixApp> {
   int _index = 0;
   final _pages = const [
-    DiscoverScreen(), // New Homepage
-    SettingsScreen(),
+    DiscoverScreen(type: DiscoverType.all), // Home
+    DiscoverScreen(type: DiscoverType.movie), // Movies
+    DiscoverScreen(type: DiscoverType.tv), // TV
+    DiscoverScreen(type: DiscoverType.anime), // Anime
+    SettingsScreen(), // Settings
   ];
 
   @override
@@ -47,52 +51,76 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
       ),
       home: auth.isAuthenticated
           ? Scaffold(
+              extendBodyBehindAppBar: true, // Allow content to go behind
               body: Stack(
                 children: [
-                  if (!settings.hasTmdbKey)
-                    const SetupScreen()
-                  else ...[
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SideRail(index: _index, onTap: (i) => setState(() => _index = i)),
-                        Expanded(child: _pages[_index]),
-                      ],
-                    ),
+                   // Main Content
+                   Positioned.fill(
+                     child: AnimatedSwitcher(
+                       duration: const Duration(milliseconds: 300),
+                       switchInCurve: Curves.easeOut,
+                       switchOutCurve: Curves.easeIn,
+                       transitionBuilder: (child, animation) {
+                         return FadeTransition(
+                           opacity: animation,
+                           child: ScaleTransition(
+                             scale: Tween<double>(begin: 0.98, end: 1.0).animate(animation),
+                             child: child,
+                           ),
+                         );
+                       },
+                       child: KeyedSubtree(
+                         key: ValueKey<int>(_index),
+                         child: _pages[_index],
+                       ),
+                     ),
+                   ),
+                   
+                   // Navigation Dock (Top Center)
+                   Align(
+                     alignment: Alignment.topCenter,
+                     child: SafeArea(
+                       child: NavigationDock(
+                         index: _index,
+                         onTap: (i) => setState(() => _index = i),
+                       ),
+                     ),
+                   ),
+
+                   // Scanning Indicator
                     if (library.isLoading)
                       Positioned(
-                        top: 24,
-                        left: 84,
-                        right: 12,
-                        child: Material(
-                          elevation: 4,
-                          borderRadius: BorderRadius.circular(8),
-                          color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            child: Row(
-                              children: [
-                                const SizedBox(
-                                  height: 18,
-                                  width: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2.2),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
+                        top: 24+60, // Push down below dock
+                        left: 24,
+                        right: 24,
+                        child: Center(
+                          child: Material(
+                            elevation: 4,
+                            borderRadius: BorderRadius.circular(20),
+                            color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const SizedBox(
+                                    height: 16,
+                                    width: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
                                     library.scanningStatus.isNotEmpty
                                         ? library.scanningStatus
-                                        : 'Scanning library in background... You can keep browsing.',
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
+                                        : 'Scanning library...',
+                                    style: const TextStyle(fontSize: 12),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),
                       ),
-                  ]
                 ],
               ),
             )
