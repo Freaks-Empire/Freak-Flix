@@ -141,26 +141,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
             ),
           ),
 
-          // Back Button
-          Positioned(
-            top: 24,
-            left: 24,
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ),
 
-          // Mute Button (if video playing)
-          if (!_trailerLoading)
-             Positioned(
-              top: 24,
-              right: 24,
-              child: IconButton(
-                icon: Icon(_muted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
-                onPressed: _toggleMute,
-              ),
-            ),
 
           // Content Layer
           Positioned.fill(
@@ -329,6 +310,27 @@ class _DetailsScreenState extends State<DetailsScreen> {
               ),
             ),
           ),
+
+          // Back Button
+          Positioned(
+            top: 24,
+            left: 24,
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+
+          // Mute Button (if video playing)
+          if (!_trailerLoading)
+             Positioned(
+              top: 24,
+              right: 24,
+              child: IconButton(
+                icon: Icon(_muted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
+                onPressed: _toggleMute,
+              ),
+            ),
         ],
       ),
     );
