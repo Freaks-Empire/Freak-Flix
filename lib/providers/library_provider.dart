@@ -92,8 +92,7 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-    super.dispose();
-  }
+
 
   void _updateScanningStatus() {
     if (!isScanning) {
