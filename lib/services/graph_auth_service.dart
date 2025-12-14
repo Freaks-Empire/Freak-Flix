@@ -384,13 +384,19 @@ class GraphAuthService {
       );
 
   /// Connects the account using device-code flow and returns user info.
-  Future<GraphUser> connectWithDeviceCode() async {
+  Future<GraphUser> connectWithDeviceCode({
+    void Function(DeviceCodeSession session)? onUserCode,
+  }) async {
     final session = await requestDeviceCode();
 
-    print('========== Microsoft Login =========');
-    print('Go to: ${session.verificationUri}');
-    print('Enter code: ${session.userCode}');
-    print('====================================');
+    if (onUserCode != null) {
+      onUserCode(session);
+    } else {
+      print('========== Microsoft Login =========');
+      print('Go to: ${session.verificationUri}');
+      print('Enter code: ${session.userCode}');
+      print('====================================');
+    }
 
     var interval = session.interval;
     while (DateTime.now().isBefore(session.expiresAt)) {

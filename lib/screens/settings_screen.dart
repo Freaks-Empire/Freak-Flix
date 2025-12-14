@@ -1,6 +1,7 @@
 // ignore_for_file: use_build_context_synchronously
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/library_folder.dart';
@@ -274,9 +275,89 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           : () async {
                               final messenger = ScaffoldMessenger.of(context);
                               setState(() => _oneDriveLoading = true);
+                              BuildContext? dialogContext;
                               try {
-                                final user =
-                                    await _graphAuth.connectWithDeviceCode();
+                                final user = await _graphAuth.connectWithDeviceCode(
+                                  onUserCode: (session) {
+                                    showDialog(
+                                      context: context,
+                                      barrierDismissible: false,
+                                      builder: (ctx) {
+                                        dialogContext = ctx;
+                                        return AlertDialog(
+                                          title: const Text('Connect Microsoft Account'),
+                                          content: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Text('1. Visit the link below:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                              const SizedBox(height: 8),
+                                              InkWell(
+                                                onTap: () => launchUrl(Uri.parse(session.verificationUri)),
+                                                child: Text(
+                                                  session.verificationUri,
+                                                  style: const TextStyle(
+                                                    color: Colors.blue,
+                                                    decoration: TextDecoration.underline,
+                                                  ),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 16),
+                                              const Text('2. Enter this code:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                              const SizedBox(height: 8),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                decoration: BoxDecoration(
+                                                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      session.userCode,
+                                                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                                            fontFamily: 'monospace',
+                                                            letterSpacing: 2,
+                                                          ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    IconButton(
+                                                      icon: const Icon(Icons.copy),
+                                                      tooltip: 'Copy Code',
+                                                      onPressed: () {
+                                                        Clipboard.setData(ClipboardData(text: session.userCode));
+                                                        ScaffoldMessenger.of(context).showSnackBar(
+                                                          const SnackBar(content: Text('Code copied to clipboard!')),
+                                                        );
+                                                      },
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              const SizedBox(height: 24),
+                                              const CircularProgressIndicator(),
+                                              const SizedBox(height: 8),
+                                              const Text('Waiting for approval...'),
+                                            ],
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.of(ctx).pop(),
+                                              child: const Text('Cancel'),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    );
+                                  },
+                                );
+                                
+                                // Close dialog on success
+                                if (dialogContext != null && dialogContext!.mounted) {
+                                  Navigator.of(dialogContext!).pop();
+                                }
+
                                 if (!mounted) return;
                                 setState(() {});
                                 messenger.showSnackBar(
