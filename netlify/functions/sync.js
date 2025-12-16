@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
+const zlib = require('zlib');
 
 const connectionString =
   process.env.NETLIFY_DB_CONNECTION ||
@@ -31,7 +32,15 @@ exports.handler = async (event) => {
   }
 
   // 1. Authenticate Request
-  const authHeader = event.headers?.authorization || '';
+  // Headers are case-insensitive in Netlify? Usually normalized to lowercase keys.
+  // Accessing event.headers directly might be case-sensitive depending on env.
+  // We'll try lowercase lookup.
+  const headers = {};
+  for (const k in event.headers) {
+    headers[k.toLowerCase()] = event.headers[k];
+  }
+
+  const authHeader = headers['authorization'] || '';
   if (!authHeader.startsWith('Bearer ')) {
     return { statusCode: 401, body: JSON.stringify({ error: 'Missing token' }) };
   }
@@ -39,14 +48,9 @@ exports.handler = async (event) => {
 
   let userId;
   try {
-    // Ideally verify signature here. For now, trusting Auth0 to have validated it 
-    // on the client side is insecure but "okay" for a personal MVP.
-    // Better: Validate against Auth0 issuer.
-    // Given the constraints and existing code (users.js uses explicit secret), 
-    // we'll decode to get 'sub'.
     const decoded = jwt.decode(token);
     if (!decoded || !decoded.sub) {
-        return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token payload' }) };
+      return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token payload' }) };
     }
     userId = decoded.sub;
   } catch (e) {
@@ -61,19 +65,57 @@ exports.handler = async (event) => {
         'SELECT data FROM user_data WHERE user_id = $1',
         [userId]
       );
-      if (result.rows.length === 0) {
-        return { statusCode: 200, body: JSON.stringify({}) };
+
+      const data = result.rows.length > 0 ? result.rows[0].data : {};
+      const jsonStr = JSON.stringify(data);
+
+      // Check for gzip support
+      const acceptEncoding = headers['accept-encoding'] || '';
+      if (acceptEncoding.includes('gzip')) {
+        const compressed = zlib.gzipSync(jsonStr);
+        return {
+          statusCode: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Encoding': 'gzip',
+          },
+          body: compressed.toString('base64'),
+          isBase64Encoded: true,
+        };
+      } else {
+        return {
+          statusCode: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: jsonStr,
+        };
       }
-      return {
-        statusCode: 200,
-        body: JSON.stringify(result.rows[0].data),
-      };
     }
 
     if (event.httpMethod === 'POST') {
+      let rawBody = event.body;
+
+      // Handle Base64 encoding (Netlify often base64 encodes binary or sometimes text)
+      if (event.isBase64Encoded) {
+        rawBody = Buffer.from(event.body, 'base64');
+      }
+
+      // Handle Gzip
+      const contentEncoding = headers['content-encoding'] || '';
+      if (contentEncoding === 'gzip') {
+        try {
+          // If rawBody is a string here, Buffer.from might handle it if not base64'd above
+          if (typeof rawBody === 'string') {
+            rawBody = Buffer.from(rawBody); // Should match encoding
+          }
+          rawBody = zlib.gunzipSync(rawBody).toString('utf-8');
+        } catch (err) {
+          return { statusCode: 400, body: JSON.stringify({ error: 'Decompression failed', details: err.message }) };
+        }
+      }
+
       let body;
       try {
-        body = JSON.parse(event.body);
+        body = JSON.parse(rawBody.toString());
       } catch (_) {
         return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) };
       }

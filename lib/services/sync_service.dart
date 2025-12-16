@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:archive/archive.dart';
 
 class SyncService {
   final Future<String?> Function() getAccessToken;
@@ -34,19 +35,24 @@ class SyncService {
 
     try {
       final uri = Uri.parse(_endpoint);
+      final jsonStr = jsonEncode(data);
+      final bytes = utf8.encode(jsonStr);
+      final compressed = GZipEncoder().encode(bytes); 
+
       final res = await http.post(
         uri,
         headers: {
           'Content-Type': 'application/json',
+          'Content-Encoding': 'gzip',
           'Authorization': 'Bearer $token',
         },
-        body: jsonEncode(data),
+        body: compressed,
       );
 
       if (res.statusCode != 200) {
         throw Exception('Sync failed: ${res.statusCode} ${res.body}');
       } else {
-        debugPrint('SyncService push success.');
+        debugPrint('SyncService push success. Payload size: ${compressed?.length ?? 0} bytes');
       }
     } catch (e) {
       debugPrint('SyncService push error: $e');
@@ -66,11 +72,20 @@ class SyncService {
         uri,
         headers: {
           'Authorization': 'Bearer $token',
+          'Accept-Encoding': 'gzip',
         },
       );
 
       if (res.statusCode == 200) {
-        final body = jsonDecode(res.body);
+        String bodyStr = res.body; 
+        // Dart http client often auto-decompresses if Content-Encoding is gzip 
+        // AND the platform supports it (native). 
+        // On Web, browser handles it.
+        // However, if we manually verify content encoding or want to be safe:
+        // If the body looks like garbage/binary or header is still gzip, we decompress.
+        // But usually res.body decodes utf8.
+        
+        final body = jsonDecode(bodyStr);
         if (body is Map<String, dynamic> && body.isNotEmpty) {
            debugPrint('SyncService pull success.');
            return body;
