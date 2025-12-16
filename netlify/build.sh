@@ -4,6 +4,12 @@ set -euo pipefail
 # Optional audience may be unset in Netlify; default to empty string so set -u does not fail
 AUTH0_AUDIENCE=${AUTH0_AUDIENCE:-}
 AUTH0_LOGOUT_URL=${AUTH0_LOGOUT_URL:-}
+AUTH0_DOMAIN=${AUTH0_DOMAIN:-}
+AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID:-}
+AUTH0_CALLBACK_URL=${AUTH0_CALLBACK_URL:-}
+GRAPH_CLIENT_ID=${GRAPH_CLIENT_ID:-}
+GRAPH_TENANT_ID=${GRAPH_TENANT_ID:-}
+TMDB_API_KEY=${TMDB_API_KEY:-}
 
 # Configure desired Flutter version
 FLUTTER_VERSION="3.24.3"

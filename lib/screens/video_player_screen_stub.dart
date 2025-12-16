@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
+import '../models/media_item.dart';
 
 class VideoPlayerScreen extends StatelessWidget {
-  final String filePath;
-  const VideoPlayerScreen({required this.filePath, super.key});
+  final MediaItem item;
+  final List<MediaItem>? playlist;
+  
+  const VideoPlayerScreen({
+    required this.item,
+    this.playlist,
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
