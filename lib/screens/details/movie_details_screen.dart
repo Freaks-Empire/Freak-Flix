@@ -209,8 +209,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                            Navigator.of(context).push(
                              MaterialPageRoute(
                                builder: (_) => VideoPlayerScreen(
-                                   filePath: _current.streamUrl ?? _current.filePath,
-                                   title: _current.title ?? _current.fileName,
+                                   item: _current,
                                ),
                              ),
                            );

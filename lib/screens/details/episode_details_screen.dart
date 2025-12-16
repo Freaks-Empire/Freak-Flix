@@ -8,12 +8,14 @@ class EpisodeDetailsScreen extends StatelessWidget {
   final TmdbEpisode episode;
   final MediaItem? matchedFile;
   final String showTitle;
+  final List<MediaItem>? playlist;
 
   const EpisodeDetailsScreen({
     super.key,
     required this.episode,
     required this.showTitle,
     this.matchedFile,
+    this.playlist,
   });
 
   @override
@@ -111,8 +113,8 @@ class EpisodeDetailsScreen extends StatelessWidget {
                          Navigator.of(context).push(
                            MaterialPageRoute(
                              builder: (_) => VideoPlayerScreen(
-                               filePath: matchedFile!.filePath,
-                               title: '${episode.name} • $showTitle',
+                               item: matchedFile!,
+                               playlist: playlist,
                              ),
                            ),
                          );

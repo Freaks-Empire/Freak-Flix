@@ -330,6 +330,7 @@ class _TvDetailsScreenState extends State<TvDetailsScreen> {
           episode: ep,
           showTitle: _current.title ?? _current.fileName,
           matchedFile: mediaMatch,
+          playlist: _localEpisodes, // Pass context for later
         ),
       ),
     );

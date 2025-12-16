@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../services/sync_service.dart';
 import '../services/graph_auth_service.dart';
@@ -42,13 +43,46 @@ class SyncProvider extends ChangeNotifier {
     library.onConfigChanged.listen((_) => pushSync());
     
     // Listen to Auth for initial PULL
+    // Listen to Auth for initial PULL and background sync management
     auth.addListener(_onAuthChanged);
+    
+    // Check initial state
+    if (auth.isAuthenticated) {
+      _onAuthChanged();
+    }
   }
 
+  Timer? _pollingTimer;
+
   void _onAuthChanged() {
-    if (auth.isAuthenticated && _lastSyncTime == null) {
-      pullSync();
+    if (auth.isAuthenticated) {
+      if (_lastSyncTime == null) {
+        pullSync();
+      }
+      _startPolling();
+    } else {
+      _stopPolling();
     }
+  }
+
+  void _startPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      pullSync();
+    });
+  }
+
+  void _stopPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+  }
+
+  @override
+  void dispose() {
+    _stopPolling();
+    settings.removeListener(_onSettingsChanged);
+    auth.removeListener(_onAuthChanged);
+    super.dispose();
   }
 
   void _onSettingsChanged() {
