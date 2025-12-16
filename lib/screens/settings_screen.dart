@@ -438,6 +438,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const Divider(height: 32),
+        Text('Maintenance', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            FilledButton.icon(
+              onPressed: library.isLoading
+                  ? null
+                  : () async {
+                      await library.rescanAll(
+                        auth: _graphAuth,
+                        metadata: metadata,
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Library scan completed')),
+                        );
+                      }
+                    },
+              icon: const Icon(Icons.sync),
+              label: const Text('Rescan All Libraries'),
+            ),
+            OutlinedButton.icon(
+              onPressed: library.isLoading
+                  ? null
+                  : () async {
+                      await library.refetchAllMetadata(metadata);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Metadata refresh completed')),
+                        );
+                      }
+                    },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Refresh All Metadata'),
+            ),
+          ],
+        ),
+        const Divider(height: 32),
         Text('Preferences', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
         Text('Metadata', style: Theme.of(context).textTheme.titleMedium),

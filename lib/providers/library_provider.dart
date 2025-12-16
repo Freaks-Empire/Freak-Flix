@@ -212,17 +212,70 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> rescanAll({MetadataService? metadata}) async {
-    for (final folder in libraryFolders) {
-      if (folder.accountId.isEmpty) {
-        // Local folder
-        await _scanLocalFolder(folder.path, metadata: metadata);
-      } else {
-        // Cloud folder (OneDrive)
-        // We'll need access to Auth service here, but it's not passed.
-        // For now, we'll skip cloud folders in "Rescan All" or we need to refactor.
-        // Assuming user mainly wants to rescan local for now based on "files on disk" context.
+  Future<void> rescanAll({
+    required graph_auth.GraphAuthService auth,
+    MetadataService? metadata,
+  }) async {
+    error = null;
+    isLoading = true;
+    notifyListeners();
+
+    try {
+      for (final folder in libraryFolders) {
+        if (folder.accountId.isNotEmpty) {
+          // Cloud folder (OneDrive)
+          await rescanOneDriveFolder(
+            auth: auth,
+            folder: folder,
+            metadata: metadata,
+          );
+        } else {
+          // Local folder
+          await _scanLocalFolder(folder.path, metadata: metadata);
+        }
       }
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      finishScan();
+      await saveLibrary();
+    }
+  }
+
+  Future<void> refetchAllMetadata(MetadataService metadata) async {
+    isLoading = true;
+    scanningStatus = 'Refreshing metadata for all items...';
+    notifyListeners();
+
+    try {
+      // Parallelize metadata enrichment with a concurrency limit
+      const batchSize = 5;
+      for (int i = 0; i < items.length; i += batchSize) {
+        final batch = items.skip(i).take(batchSize).toList();
+        scanningStatus =
+            'Refreshing metadata (${i + 1}/${items.length}) ${batch.first.title ?? batch.first.fileName}';
+        notifyListeners();
+        
+        final enrichedBatch = await Future.wait(batch.map((item) => metadata.enrich(item)));
+        
+        for (int j = 0; j < batch.length; j++) {
+          final index = items.indexWhere((e) => e.id == batch[j].id);
+          if (index != -1) {
+            items[index] = enrichedBatch[j];
+          }
+        }
+        notifyListeners();
+      }
+
+      await saveLibrary();
+      scanningStatus = 'Metadata refresh complete.';
+      notifyListeners();
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      isLoading = false;
+      // Clear status after a delay? For now, leave it or clear it.
+      // _setScanStatus(''); 
     }
   }
 
@@ -585,6 +638,7 @@ class LibraryProvider extends ChangeNotifier {
   Map<String, dynamic> exportState() {
     return {
       'folders': libraryFolders.map((f) => f.toJson()).toList(),
+      'items': MediaItem.listToJson(items),
     };
   }
 
@@ -651,6 +705,24 @@ class LibraryProvider extends ChangeNotifier {
       // Maybe not immediately to avoid blasting network on startup. User can click "Rescan".
       // But user expects to see items. 
       // We'll leave auto-scan for now, user can click "Rescan".
+    }
+
+
+    // Import Items
+    final rawItems = data['items'];
+    if (rawItems != null) {
+      final cloudItems = MediaItem.listFromJson(rawItems);
+      
+      final map = {for (var i in items) i.id: i};
+      for (final i in cloudItems) {
+        // Overwrite local with cloud version to ensure metadata sync
+        map[i.id] = i; 
+      }
+      items = map.values.toList()
+        ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+      
+      await saveLibrary();
+      notifyListeners();
     }
   }
 }

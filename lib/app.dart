@@ -32,6 +32,19 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
     SearchScreen(), // Search
     SettingsScreen(), // Settings
   ];
+  late final PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _index);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,23 +74,10 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
                 children: [
                    // Main Content
                    Positioned.fill(
-                     child: AnimatedSwitcher(
-                       duration: const Duration(milliseconds: 300),
-                       switchInCurve: Curves.easeOut,
-                       switchOutCurve: Curves.easeIn,
-                       transitionBuilder: (child, animation) {
-                         return FadeTransition(
-                           opacity: animation,
-                           child: ScaleTransition(
-                             scale: Tween<double>(begin: 0.98, end: 1.0).animate(animation),
-                             child: child,
-                           ),
-                         );
-                       },
-                       child: KeyedSubtree(
-                         key: ValueKey<int>(_index),
-                         child: _pages[_index],
-                       ),
+                     child: PageView(
+                       controller: _pageController,
+                       onPageChanged: (index) => setState(() => _index = index),
+                       children: _pages,
                      ),
                    ),
                    
@@ -87,7 +87,14 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
                      child: SafeArea(
                        child: NavigationDock(
                          index: _index,
-                         onTap: (i) => setState(() => _index = i),
+                         onTap: (i) {
+                            setState(() => _index = i);
+                            _pageController.animateToPage(
+                              i,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                            );
+                         },
                        ),
                      ),
                    ),

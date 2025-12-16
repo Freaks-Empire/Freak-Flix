@@ -94,7 +94,7 @@ class Auth0Service {
     await _auth0?.webAuthentication().login(
           audience: audience,
           scopes: {'openid', 'profile', 'email'},
-          redirectUrl: callbackUrl,
+          redirectUrl: 'freakflix://$domain/android/com.freak.freakflix/callback',
           parameters: signup ? {'screen_hint': 'signup'} : const {},
         );
   }
@@ -114,7 +114,7 @@ class Auth0Service {
     }
 
     await _auth0?.webAuthentication().logout(
-          returnTo: logoutUrl ?? callbackUrl,
+          returnTo: 'freakflix://$domain/android/com.freak.freakflix/callback',
         );
   }
 

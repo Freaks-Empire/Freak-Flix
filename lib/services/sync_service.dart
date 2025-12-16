@@ -44,7 +44,7 @@ class SyncService {
       );
 
       if (res.statusCode != 200) {
-        debugPrint('SyncService push failed: ${res.statusCode} ${res.body}');
+        throw Exception('Sync failed: ${res.statusCode} ${res.body}');
       } else {
         debugPrint('SyncService push success.');
       }
@@ -76,7 +76,7 @@ class SyncService {
            return body;
         }
       } else {
-        debugPrint('SyncService pull failed: ${res.statusCode} ${res.body}');
+        throw Exception('Sync pull failed: ${res.statusCode} ${res.body}');
       }
     } catch (e) {
       debugPrint('SyncService pull error: $e');
