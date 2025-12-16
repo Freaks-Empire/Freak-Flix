@@ -30,35 +30,25 @@ import 'models/discover_filter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  bool envLoaded = false;
+  // Load environment variables
   try {
-    // Try loading from file first (local dev)
-    await dotenv.load(fileName: '.env');
-    envLoaded = true;
+    // defaults to '.env' which matches pubspec assets.
+    await dotenv.load(fileName: '.env'); 
   } catch (e) {
-    debugPrint('Native .env load failed, resolving from assets: $e');
-    try {
-      // Fallback to asset bundle (production builds)
-      // Note: In release, assets are often just in 'assets/.env' or root.
-      // Trying generic 'assets/.env' if root failed.
-      await dotenv.load(fileName: 'resources/.env'); // try common alternative?
-      // Actually standard 'load' usually defaults to root bundle.
-      // Let's try 'assets/.env' explicitly just in case.
-    } catch (_) {
-       // Ignore
-    }
-    // Check if anything loaded
-    // if (dotenv.env.isNotEmpty) envLoaded = true; // Unsafe if not initialized
+    debugPrint('Warning: dotenv.load failed: $e');
+    // Fallback: try reading from asset bundle manually if package fails
+    // (though dotenv 5.x should handle this)
   }
 
-  // Critical check logic remains, but let's make reading simpler.
-  // If envLoaded is false, dotenv.env might still be empty map, safe to read.
-  
   MediaKit.ensureInitialized();
+  
+  // Initialize GraphAuthService
   try {
     GraphAuthService.instance.configureFromEnv();
   } catch (e) {
-    debugPrint('GraphAuthService init warning: $e');
+    // Logs the warning but app continues. 
+    // The 'NotInitializedError' will be thrown later if user attempts to use OneDrive.
+    debugPrint('GraphAuthService init failed: $e');
   }
 
   final settingsProvider = SettingsProvider();
