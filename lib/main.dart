@@ -51,6 +51,9 @@ void main() async {
     debugPrint('GraphAuthService init failed: $e');
   }
 
+  // Load saved Graph accounts
+  await GraphAuthService.instance.loadFromPrefs();
+
   final settingsProvider = SettingsProvider();
   await settingsProvider.load();
   final tmdbService = TmdbService(settingsProvider);
