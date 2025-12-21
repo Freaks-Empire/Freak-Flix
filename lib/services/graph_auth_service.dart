@@ -114,11 +114,15 @@ class GraphAuthService {
 
   bool get isConfigured => _clientId != null && _clientId!.isNotEmpty;
 
+  String? _configError;
+
   void configureFromEnv() {
-    final String? clientIdRaw =
-        dotenv.env['GRAPH_CLIENT_ID'] ?? dotenv.env['AZURE_CLIENT_ID'];
-    final String? tenantIdRaw =
-        dotenv.env['GRAPH_TENANT_ID'] ?? dotenv.env['AZURE_TENANT_ID'];
+    final String? clientIdRaw = dotenv.env['GRAPH_CLIENT_ID'] ??
+        dotenv.env['AZURE_CLIENT_ID'] ??
+        const String.fromEnvironment('GRAPH_CLIENT_ID');
+    final String? tenantIdRaw = dotenv.env['GRAPH_TENANT_ID'] ??
+        dotenv.env['AZURE_TENANT_ID'] ??
+        const String.fromEnvironment('GRAPH_TENANT_ID');
 
     final String clientId = clientIdRaw?.trim() ?? '';
     final String tenant = (tenantIdRaw?.trim().isNotEmpty ?? false)
@@ -126,11 +130,15 @@ class GraphAuthService {
         : 'common';
 
     if (clientId.isEmpty) {
-      throw NotInitializedError('GRAPH_CLIENT_ID must be set in .env');
+      _configError = 'GRAPH_CLIENT_ID missing. Env keys found: ${dotenv.env.keys.toList()}';
+      debugPrint('GraphAuthService: $_configError');
+      return;
     }
 
     _clientId = clientId;
     _tenant = tenant;
+    _configError = null; // Success
+    
     _deviceCodeEndpoint = Uri.parse(
         'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/devicecode');
     _tokenEndpoint = Uri.parse(
@@ -140,7 +148,7 @@ class GraphAuthService {
   void _ensureConfigured() {
     if (!isConfigured) {
       throw NotInitializedError(
-          'GraphAuthService not configured. Call configureFromEnv() during startup.');
+          _configError ?? 'GraphAuthService not configured. Call configureFromEnv() during startup.');
     }
   }
 

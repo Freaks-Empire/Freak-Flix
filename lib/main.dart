@@ -43,13 +43,7 @@ void main() async {
   MediaKit.ensureInitialized();
   
   // Initialize GraphAuthService
-  try {
-    GraphAuthService.instance.configureFromEnv();
-  } catch (e) {
-    // Logs the warning but app continues. 
-    // The 'NotInitializedError' will be thrown later if user attempts to use OneDrive.
-    debugPrint('GraphAuthService init failed: $e');
-  }
+  GraphAuthService.instance.configureFromEnv();
 
   // Load saved Graph accounts
   await GraphAuthService.instance.loadFromPrefs();
