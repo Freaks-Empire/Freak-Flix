@@ -140,10 +140,22 @@ class GraphAuthService {
     _tenant = tenant;
     _configError = null; // Success
     
-    _deviceCodeEndpoint = Uri.parse(
-        'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/devicecode');
-    _tokenEndpoint = Uri.parse(
-        'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/token');
+    if (kIsWeb) {
+      // Use local proxy to avoid CORS on web
+      // Configured in netlify.toml: /api/ms_auth/* -> https://login.microsoftonline.com/:splat
+      // Note: We use the same path structure.
+      final baseUrl = Uri.base.origin; // e.g. https://freak-flix.netlify.app
+      // Construct absolute URL to the proxy (optional, relative path usually works with http package but safer to be explicit or just relative)
+      // Actually http package on web supports relative URIs but let's use the path directly.
+      const proxyPrefix = '/api/ms_auth';
+      _deviceCodeEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/devicecode');
+      _tokenEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/token');
+    } else {
+      _deviceCodeEndpoint = Uri.parse(
+          'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/devicecode');
+      _tokenEndpoint = Uri.parse(
+          'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/token');
+    }
   }
 
   void _ensureConfigured() {

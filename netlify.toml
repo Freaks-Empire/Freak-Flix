@@ -2,6 +2,12 @@
   command = "bash ./netlify/build.sh"
   publish = "build/web"
 
+[[redirects]]
+  from = "/api/ms_auth/*"
+  to = "https://login.microsoftonline.com/:splat"
+  status = 200
+  force = true
+
 [[plugins]]
   package = "@netlify/plugin-functions-install-core"
 
