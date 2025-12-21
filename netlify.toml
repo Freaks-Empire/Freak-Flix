@@ -4,7 +4,7 @@
 
 [[redirects]]
   from = "/api/ms_auth/*"
-  to = "https://login.microsoftonline.com/:splat"
+  to = "/.netlify/functions/ms_auth_proxy"
   status = 200
   force = true
 
