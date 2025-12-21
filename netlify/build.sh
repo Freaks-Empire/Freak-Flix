@@ -63,4 +63,7 @@ flutter build web --release \
   --dart-define=AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID} \
   --dart-define=AUTH0_AUDIENCE=${AUTH0_AUDIENCE} \
   --dart-define=AUTH0_CALLBACK_URL=${AUTH0_CALLBACK_URL} \
-  --dart-define=AUTH0_LOGOUT_URL=${AUTH0_LOGOUT_URL}
+  --dart-define=AUTH0_LOGOUT_URL=${AUTH0_LOGOUT_URL} \
+  --dart-define=GRAPH_CLIENT_ID=${GRAPH_CLIENT_ID} \
+  --dart-define=GRAPH_TENANT_ID=${GRAPH_TENANT_ID} \
+  --dart-define=TMDB_API_KEY=${TMDB_API_KEY}

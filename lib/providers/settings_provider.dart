@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 enum TmdbKeyStatus {
   unknown,
   valid,
@@ -26,13 +28,28 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
-    if (raw == null) return;
+    
+    if (raw == null) {
+      // First run or no saved settings: try env vars
+      tmdbApiKey = dotenv.env['TMDB_API_KEY'] ?? 
+                   const String.fromEnvironment('TMDB_API_KEY');
+      return;
+    }
+
     final data = jsonDecode(raw) as Map<String, dynamic>;
     isDarkMode = data['isDarkMode'] as bool? ?? true;
     preferAniListForAnime = data['preferAniListForAnime'] as bool? ?? true;
     autoFetchAfterScan = data['autoFetchAfterScan'] as bool? ?? true;
     lastScannedFolder = data['lastScannedFolder'] as String?;
-    tmdbApiKey = data['tmdbApiKey'] as String? ?? '';
+    
+    // Load saved key, fallback to env if empty
+    String? savedKey = data['tmdbApiKey'] as String?;
+    if (savedKey == null || savedKey.trim().isEmpty) {
+      savedKey = dotenv.env['TMDB_API_KEY'] ?? 
+                 const String.fromEnvironment('TMDB_API_KEY');
+    }
+    tmdbApiKey = savedKey;
+
     final statusIndex = data[_tmdbStatusKey] as int?;
     if (statusIndex != null && statusIndex >= 0 && statusIndex < TmdbKeyStatus.values.length) {
       tmdbStatus = TmdbKeyStatus.values[statusIndex];
