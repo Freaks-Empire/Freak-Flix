@@ -467,6 +467,32 @@ class GraphAuthService {
     );
   }
 
+  /// Fetches a fresh download URL for a specific drive item.
+  Future<String?> getDownloadUrl(String accountId, String itemId) async {
+    try {
+      final token = await getFreshAccessToken(accountId);
+      // itemId might come in as "onedrive:{accountId}:{realItemId}" or just "{realItemId}"
+      // Logic in LibraryProvider and MediaItem construction usually separates them.
+      // If we store just the ID in MediaItem.id, we use that.
+      // NOTE: MediaItem.id for OneDrive items is usually the actual saved ID.
+      // Let's assume itemId is the Graph ID.
+      
+      final url = Uri.parse('https://graph.microsoft.com/v1.0/me/drive/items/$itemId');
+      final res = await http.get(url, headers: {'Authorization': 'Bearer $token'});
+      
+      if (res.statusCode != 200) {
+        debugPrint('getDownloadUrl failed: ${res.statusCode} ${res.body}');
+        return null;
+      }
+      
+      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      return json['@microsoft.graph.downloadUrl'] as String?;
+    } catch (e) {
+      debugPrint('getDownloadUrl error: $e');
+      return null;
+    }
+  }
+
   /// Returns an access token, performing device-code login if needed.
   Future<String> getOrLoginWithDeviceCode() async {
     final active = activeAccount;

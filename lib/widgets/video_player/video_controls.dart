@@ -25,7 +25,12 @@ class VideoControls extends StatefulWidget {
     this.onNext,
     this.onPrevious,
     this.onJump,
+    required this.fit,
+    required this.onFitChanged,
   });
+
+  final BoxFit fit;
+  final ValueChanged<BoxFit> onFitChanged;
 
   @override
   State<VideoControls> createState() => _VideoControlsState();
@@ -35,8 +40,10 @@ class _VideoControlsState extends State<VideoControls> {
   bool _visible = true;
   Timer? _hideTimer;
   bool _isPlaying = true;
+  bool _buffering = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+  Duration _buffer = Duration.zero;
   double _volume = 100.0;
 
   // Gestures
@@ -46,8 +53,10 @@ class _VideoControlsState extends State<VideoControls> {
   double? _dragStartBrightness;
 
   late final StreamSubscription<bool> _playingSub;
+  late final StreamSubscription<bool> _bufferingSub;
   late final StreamSubscription<Duration> _posSub;
   late final StreamSubscription<Duration> _durSub;
+  late final StreamSubscription<Duration> _bufferSub;
   final FocusNode _focusNode = FocusNode();
 
   @override
@@ -63,12 +72,20 @@ class _VideoControlsState extends State<VideoControls> {
       if (mounted) setState(() => _isPlaying = playing);
     });
     
+    _bufferingSub = widget.player.stream.buffering.listen((buffering) {
+      if (mounted) setState(() => _buffering = buffering);
+    });
+
     _posSub = widget.player.stream.position.listen((pos) {
       if (mounted) setState(() => _position = pos);
     });
     
     _durSub = widget.player.stream.duration.listen((dur) {
       if (mounted) setState(() => _duration = dur);
+    });
+
+    _bufferSub = widget.player.stream.buffer.listen((buffer) {
+      if (mounted) setState(() => _buffer = buffer);
     });
     
     _volume = widget.player.state.volume;
@@ -86,8 +103,10 @@ class _VideoControlsState extends State<VideoControls> {
   void dispose() {
     _focusNode.dispose();
     _playingSub.cancel();
+    _bufferingSub.cancel();
     _posSub.cancel();
     _durSub.cancel();
+    _bufferSub.cancel();
     _hideTimer?.cancel();
     super.dispose();
   }
@@ -402,9 +421,11 @@ class _VideoControlsState extends State<VideoControls> {
                     ),
     
                     // Center Play/Pause & Seek Indicators
-                    if (_visible)
+                    if (_visible || _buffering)
                       Center(
-                        child: Row(
+                        child: _buffering 
+                          ? const CircularProgressIndicator(color: Colors.redAccent)
+                          : Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                               // Previous
@@ -468,13 +489,31 @@ class _VideoControlsState extends State<VideoControls> {
                                       inactiveTrackColor: Colors.white24,
                                       thumbColor: Colors.redAccent,
                                     ),
-                                    child: Slider(
-                                      value: _position.inSeconds.toDouble().clamp(0, _duration.inSeconds.toDouble()),
-                                      min: 0,
-                                      max: _duration.inSeconds.toDouble(),
-                                      onChanged: (val) {
-                                        _seek(Duration(seconds: val.toInt()));
-                                      },
+                                    child: Stack(
+                                      alignment: Alignment.centerLeft,
+                                      children: [
+                                        LayoutBuilder(
+                                          builder: (ctx, constraints) {
+                                            final double total = _duration.inMilliseconds.toDouble();
+                                            final double buffered = _buffer.inMilliseconds.toDouble();
+                                            if (total <= 0) return const SizedBox();
+                                            final double width = constraints.maxWidth * (buffered / total).clamp(0.0, 1.0);
+                                            return Container(
+                                              width: width,
+                                              height: 4,
+                                              color: Colors.white38,
+                                            );
+                                          },
+                                        ),
+                                        Slider(
+                                          value: _position.inSeconds.toDouble().clamp(0, _duration.inSeconds.toDouble()),
+                                          min: 0,
+                                          max: _duration.inSeconds.toDouble(),
+                                          onChanged: (val) {
+                                            _seek(Duration(seconds: val.toInt()));
+                                          },
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -489,13 +528,36 @@ class _VideoControlsState extends State<VideoControls> {
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
                                 IconButton(
+                                  icon: Icon(
+                                    _volume == 0 ? Icons.volume_off : Icons.volume_up,
+                                    color: Colors.white
+                                  ),
+                                  onPressed: () {
+                                     final newVol = _volume > 0 ? 0.0 : 100.0;
+                                     widget.player.setVolume(newVol);
+                                     setState(() => _volume = newVol);
+                                  },
+                                ),
+                                IconButton(
                                   icon: const Icon(Icons.subtitles, color: Colors.white),
                                   onPressed: _showTracksDialog,
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.aspect_ratio, color: Colors.white), 
+                                  icon: switch (widget.fit) {
+                                    BoxFit.contain => const Icon(Icons.aspect_ratio, color: Colors.white),
+                                    BoxFit.cover => const Icon(Icons.crop_free, color: Colors.white),
+                                    BoxFit.fill => const Icon(Icons.fit_screen, color: Colors.white),
+                                    _ => const Icon(Icons.aspect_ratio, color: Colors.white),
+                                  },
+                                  tooltip: 'Aspect Ratio: ${widget.fit.name}',
                                   onPressed: () {
-                                      // Can toggle fit modes
+                                      final next = switch(widget.fit) {
+                                          BoxFit.contain => BoxFit.cover,
+                                          BoxFit.cover => BoxFit.fill,
+                                          BoxFit.fill => BoxFit.contain,
+                                          _ => BoxFit.contain,
+                                      };
+                                      widget.onFitChanged(next);
                                   },
                                 ),
                               ],

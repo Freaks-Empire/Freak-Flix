@@ -14,6 +14,7 @@ import '../services/metadata_service.dart';
 import 'settings_provider.dart';
 import '../utils/filename_parser.dart';
 import 'package:collection/collection.dart';
+import 'package:archive/archive.dart';
 
 class LibraryProvider extends ChangeNotifier {
   static const _prefsKey = 'library_v1';
@@ -139,7 +140,22 @@ class LibraryProvider extends ChangeNotifier {
 
     final raw = prefs.getString(_prefsKey);
     if (raw != null) {
-      items = MediaItem.listFromJson(raw);
+      try {
+        if (raw.trim().startsWith('[')) {
+          // FAST PATH: Legacy uncompressed JSON
+           items = MediaItem.listFromJson(raw);
+        } else {
+          // COMPRESSED PATH: Base64 -> GZip -> UTF8 -> JSON
+          final bytes = base64Decode(raw);
+          final decompressed = GZipDecoder().decodeBytes(bytes);
+          final jsonStr = utf8.decode(decompressed);
+          items = MediaItem.listFromJson(jsonStr);
+        }
+      } catch (e) {
+        debugPrint('LibraryProvider load error: $e');
+        // If load fails, keep empty items or maybe backup?
+        // items = []; 
+      }
 
       // Reclassify with updated rules (anime flag + tv/movie only).
       bool updated = false;
@@ -171,7 +187,14 @@ class LibraryProvider extends ChangeNotifier {
 
   Future<void> saveLibrary() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsKey, MediaItem.listToJson(items));
+    // Compress to save space (QuotaExceededError on Web)
+    final jsonStr = MediaItem.listToJson(items);
+    final bytes = utf8.encode(jsonStr);
+    final compressed = GZipEncoder().encode(bytes);
+    if (compressed != null) {
+       final base64Str = base64Encode(compressed);
+       await prefs.setString(_prefsKey, base64Str);
+    }
   }
 
   Future<void> _saveLibraryFolders() async {
@@ -239,6 +262,7 @@ class LibraryProvider extends ChangeNotifier {
     } finally {
       finishScan();
       await saveLibrary();
+	  _configChangedController.add(null);
     }
   }
 
@@ -276,6 +300,7 @@ class LibraryProvider extends ChangeNotifier {
       isLoading = false;
       // Clear status after a delay? For now, leave it or clear it.
       // _setScanStatus(''); 
+      _configChangedController.add(null); 
     }
   }
 
@@ -411,6 +436,7 @@ class LibraryProvider extends ChangeNotifier {
     } finally {
       isLoading = false;
       // Let the finished message linger briefly; UI may clear it after delay.
+      _configChangedController.add(null); 
     }
   }
 
@@ -457,6 +483,7 @@ class LibraryProvider extends ChangeNotifier {
       isLoading = false;
       _setScanStatus('');
       await saveLibrary();
+	  _configChangedController.add(null);
     }
   }
 
@@ -546,6 +573,7 @@ class LibraryProvider extends ChangeNotifier {
       isLoading = false;
       _setScanStatus('');
       await saveLibrary();
+	  _configChangedController.add(null);
     }
   }
 
