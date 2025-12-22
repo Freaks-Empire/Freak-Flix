@@ -2,18 +2,7 @@
   command = "bash ./netlify/build.sh"
   publish = "build/web"
 
-[[redirects]]
-  from = "/api/ms_auth/*"
-  to = "https://login.microsoftonline.com/:splat"
-  status = 200
-  force = true
 
-[[headers]]
-  for = "/api/ms_auth/*"
-  [headers.values]
-    Access-Control-Allow-Origin = "*"
-    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
-    Access-Control-Allow-Headers = "Content-Type, Authorization"
 
 [[redirects]]
   from = "/*"
