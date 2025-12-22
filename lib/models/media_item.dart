@@ -158,6 +158,7 @@ class MediaItem {
     bool? isWatched,
     int? lastPositionSeconds,
     int? totalDurationSeconds,
+    bool? isAdult,
     List<CastMember>? cast,
   }) {
     return MediaItem(

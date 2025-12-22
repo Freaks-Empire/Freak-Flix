@@ -246,8 +246,8 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                              posterUrl: item.posterUrl,
                              overview: item.overview,
                              voteAverage: 0,
-                             releaseDate: item.year?.toString(),
-                             mediaType: TmdbMediaType.movie, // Treat as movie
+                             releaseYear: item.year,
+                             type: TmdbMediaType.movie, // Treat as movie
                            );
                            return DiscoverCard(item: tmdbItem);
                         },

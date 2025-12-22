@@ -2,7 +2,7 @@ import 'dart:convert';
 import '../utils/platform/platform.dart';
 import 'dart:async';
 import 'dart:isolate';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart' hide PlatformFile;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
