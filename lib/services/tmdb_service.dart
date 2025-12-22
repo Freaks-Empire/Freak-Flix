@@ -48,7 +48,7 @@ class TmdbService {
         'api_key': key,
         'query': item.title!,
         if (item.year != null) 'year': item.year.toString(),
-        'include_adult': 'false',
+        'include_adult': settings.enableAdultContent.toString(),
       },
     );
 
@@ -216,7 +216,7 @@ class TmdbService {
     final uri = Uri.https(_baseHost, '/3/search/multi', {
       'api_key': key,
       'query': query,
-      'include_adult': 'false',
+      'include_adult': settings.enableAdultContent.toString(),
       'language': 'en-US',
     });
 
