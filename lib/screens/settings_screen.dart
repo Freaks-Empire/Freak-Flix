@@ -586,104 +586,108 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: (v) => settings.toggleDarkMode(v),
         ),
         const Divider(height: 32),
-        Text('Advanced Settings', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-        SwitchListTile(
-          title: const Text('Enable Adult Content'),
-          subtitle: const Text('Show adult content features and integrations (e.g. StashDB)'),
-          value: settings.enableAdultContent,
-          onChanged: (v) => settings.toggleAdultContent(v),
-        ),
-        if (settings.enableAdultContent) ...[
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.lock_person, size: 20),
-                      const SizedBox(width: 8),
-                      Text('StashDB Integration', style: Theme.of(context).textTheme.titleMedium),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Use StashDB.org metadata for matching file names. Does NOT provide streaming.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _stashKeyController,
-                    obscureText: _obscureStash,
-                    decoration: InputDecoration(
-                      labelText: 'StashDB API Key',
-                      hintText: 'Paste your API Key from stashdb.org',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            tooltip: _obscureStash ? 'Show key' : 'Hide key',
-                            icon: Icon(
-                                _obscureStash ? Icons.visibility : Icons.visibility_off),
-                            onPressed: () => setState(() => _obscureStash = !_obscureStash),
-                          ),
-                          IconButton(
-                            tooltip: 'Visit StashDB',
-                            icon: const Icon(Icons.open_in_new),
-                            onPressed: () async {
-                              final uri = Uri.parse('https://stashdb.org');
-                              if (await canLaunchUrl(uri)) {
-                                await launchUrl(uri,
-                                    mode: LaunchMode.externalApplication);
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    onChanged: (value) => settings.setStashApiKey(value),
-                    onSubmitted: (value) => settings.setStashApiKey(value),
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: ElevatedButton.icon(
-                      onPressed: _isTestingStash || settings.stashApiKey.isEmpty
-                          ? null
-                          : () async {
-                              setState(() => _isTestingStash = true);
-                              final ok = await _stashService.testConnection(settings.stashApiKey);
-                              if (!mounted) return;
-                              setState(() => _isTestingStash = false);
-                              
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(ok
-                                      ? 'StashDB Connection Successful!'
-                                      : 'Connection Failed. Check your API Key.'),
-                                  backgroundColor: ok ? Colors.green : Colors.red,
-                                ),
-                              );
-                            },
-                      icon: _isTestingStash
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.check),
-                      label: const Text('Test Connection'),
-                    ),
-                  ),
-                ],
-              ),
+        ExpansionTile(
+          title: Text('Advanced Settings', style: Theme.of(context).textTheme.titleLarge),
+          children: [
+            SwitchListTile(
+              title: const Text('Enable Adult Content'),
+              subtitle: const Text('Show adult content features and integrations (e.g. StashDB)'),
+              value: settings.enableAdultContent,
+              onChanged: (v) => settings.toggleAdultContent(v),
             ),
-          ),
-        ],
+            if (settings.enableAdultContent)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.lock_person, size: 20),
+                            const SizedBox(width: 8),
+                            Text('StashDB Integration', style: Theme.of(context).textTheme.titleMedium),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Use StashDB.org metadata for matching file names. Does NOT provide streaming.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _stashKeyController,
+                          obscureText: _obscureStash,
+                          decoration: InputDecoration(
+                            labelText: 'StashDB API Key',
+                            hintText: 'Paste your API Key from stashdb.org',
+                            border: const OutlineInputBorder(),
+                            suffixIcon: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: _obscureStash ? 'Show key' : 'Hide key',
+                                  icon: Icon(
+                                      _obscureStash ? Icons.visibility : Icons.visibility_off),
+                                  onPressed: () => setState(() => _obscureStash = !_obscureStash),
+                                ),
+                                IconButton(
+                                  tooltip: 'Visit StashDB',
+                                  icon: const Icon(Icons.open_in_new),
+                                  onPressed: () async {
+                                    final uri = Uri.parse('https://stashdb.org');
+                                    if (await canLaunchUrl(uri)) {
+                                      await launchUrl(uri,
+                                          mode: LaunchMode.externalApplication);
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          onChanged: (value) => settings.setStashApiKey(value),
+                          onSubmitted: (value) => settings.setStashApiKey(value),
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: ElevatedButton.icon(
+                            onPressed: _isTestingStash || settings.stashApiKey.isEmpty
+                                ? null
+                                : () async {
+                                    setState(() => _isTestingStash = true);
+                                    final ok = await _stashService.testConnection(settings.stashApiKey);
+                                    if (!mounted) return;
+                                    setState(() => _isTestingStash = false);
+                                    
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(ok
+                                            ? 'StashDB Connection Successful!'
+                                            : 'Connection Failed. Check your API Key.'),
+                                        backgroundColor: ok ? Colors.green : Colors.red,
+                                      ),
+                                    );
+                                  },
+                            icon: _isTestingStash
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.check),
+                            label: const Text('Test Connection'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ],
     );
   }
