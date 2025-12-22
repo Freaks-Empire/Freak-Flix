@@ -117,6 +117,15 @@ class GraphAuthService {
 
   String? _configError;
 
+  /// Returns the base URL for Graph API calls (e.g. https://graph.microsoft.com/v1.0 or /api/graph/v1.0 on web)
+  String get graphBaseUrl {
+    if (kIsWeb) {
+      // Use local proxy defined in netlify.toml
+      return '/api/graph/v1.0';
+    }
+    return 'https://graph.microsoft.com/v1.0';
+  }
+
   void configureFromEnv() {
     final String? clientIdRaw = dotenv.env['GRAPH_CLIENT_ID'] ??
         dotenv.env['AZURE_CLIENT_ID'] ??
@@ -449,7 +458,7 @@ class GraphAuthService {
 
   Future<GraphUser> _fetchMe(String token) async {
     final res = await http.get(
-      Uri.parse('https://graph.microsoft.com/v1.0/me'),
+      Uri.parse('$graphBaseUrl/me'),
       headers: {'Authorization': 'Bearer $token'},
     );
     if (res.statusCode != 200) {
@@ -477,7 +486,7 @@ class GraphAuthService {
       // NOTE: MediaItem.id for OneDrive items is usually the actual saved ID.
       // Let's assume itemId is the Graph ID.
       
-      final url = Uri.parse('https://graph.microsoft.com/v1.0/me/drive/items/$itemId');
+      final url = Uri.parse('$graphBaseUrl/me/drive/items/$itemId');
       final res = await http.get(url, headers: {'Authorization': 'Bearer $token'});
       
       if (res.statusCode != 200) {
