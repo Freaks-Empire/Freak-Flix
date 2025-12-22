@@ -13,7 +13,7 @@
 
 [[redirects]]
   from = "/api/graph/*"
-  to = "https://graph.microsoft.com/*"
+  to = "https://graph.microsoft.com/:splat"
   status = 200
   force = true
 
