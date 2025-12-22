@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/tmdb_item.dart';
+import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
+import '../providers/library_provider.dart';
 import '../widgets/discover_card.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -51,15 +53,42 @@ class _SearchScreenState extends State<SearchScreen> {
 
     setState(() => _loading = true);
     try {
-      final service = context.read<TmdbService>();
-      final results = await service.searchMulti(query);
+      final library = context.read<LibraryProvider>();
+      final tmdb = context.read<TmdbService>();
+
+      // Parallel execution
+      final results = await Future.wait([
+        Future.sync(() => library.search(query)),
+        tmdb.searchMulti(query),
+      ]);
+
+      final localItems = results[0] as List<MediaItem>;
+      final tmdbItems = results[1] as List<TmdbItem>;
+
+      // Convert local items to display format
+      final localTmdbItems = localItems
+          .map((m) => TmdbItem.fromMediaItem(m))
+          .toList();
+
+      // Deduplicate: If a TMDB item is already covered by a local item (same TMDB ID), use the local one.
+      // (Actually, we just show the local one and filter it out from TMDB list if needed)
+      final localIds = localTmdbItems.map((i) => i.id).toSet();
+      
+      final filteredTmdbItems = tmdbItems.where((i) {
+        // Keep if not in local set. 
+        // Note: Local items from Stash might calculate a fake ID or usually have a hash code as ID if no TMDB ID.
+        // If local item HAS a valid TMDB ID, we want to hide the generic TMDB result to avoid duplicates.
+        return !localIds.contains(i.id);
+      }).toList();
+
       if (mounted) {
         setState(() {
-          _results = results;
+          _results = [...localTmdbItems, ...filteredTmdbItems];
           _loading = false;
         });
       }
     } catch (e) {
+      debugPrint('Search error: $e');
       if (mounted) setState(() => _loading = false);
     }
   }

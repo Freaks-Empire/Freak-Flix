@@ -619,6 +619,16 @@ class LibraryProvider extends ChangeNotifier {
     return items.firstWhereOrNull((i) => i.tmdbId == tmdbId);
   }
 
+  List<MediaItem> search(String query) {
+    if (query.trim().isEmpty) return [];
+    final q = query.toLowerCase().trim();
+    return items.where((i) {
+      if (!settings.enableAdultContent && i.isAdult) return false;
+      return (i.title ?? i.fileName).toLowerCase().contains(q) ||
+             (i.seriesName ?? '').toLowerCase().contains(q); // Also search series name
+    }).toList();
+  }
+
   // --- Sync Methods ---
 
   Future<void> rescanItem(MediaItem item, {MetadataService? metadata}) async {

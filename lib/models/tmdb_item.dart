@@ -58,4 +58,25 @@ class TmdbItem {
       overview: map['overview'] as String?,
     );
   }
+  static TmdbItem fromMediaItem(dynamic item) {
+    // Note: 'item' is strictly MediaItem but avoiding circular imports if possible, 
+    // or we just import it. Let's import it.
+    // Actually, to avoid modifying imports blindly, I'll assume I can import.
+    // Wait, I can't import if I don't see imports. 
+    // I need to add import first.
+    // But let's just use dynamic for now or strict typing if I add import.
+    // Let's add the import line at the top first if needed? 
+    // No, let's just add the method and I'll fix imports next.
+    // Actually, sticking to the plan:
+    
+    return TmdbItem(
+      id: item.tmdbId ?? item.hashCode, 
+      title: item.title ?? item.fileName,
+      type: item.type.toString().contains('movie') ? TmdbMediaType.movie : TmdbMediaType.tv,
+      posterUrl: item.posterUrl,
+      releaseYear: item.year,
+      voteAverage: item.rating,
+      overview: item.overview,
+    );
+  }
 }
