@@ -25,7 +25,7 @@ import 'services/tmdb_service.dart';
 import 'services/graph_auth_service.dart';
 import 'services/tmdb_discover_service.dart';
 import 'services/auth0_service.dart';
-import 'providers/sync_provider.dart';
+
 import 'models/discover_filter.dart';
 
 void main() async {
@@ -128,13 +128,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => playbackProvider),
         ChangeNotifierProvider(create: (_) => DiscoverFilterNotifier()),
         ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
-        ChangeNotifierProvider(
-          create: (_) => SyncProvider(
-            auth: authProvider,
-            settings: settingsProvider,
-            library: libraryProvider,
-          ),
-        ),
+
         Provider<TmdbService>.value(value: tmdbService),
         Provider<TmdbDiscoverService>.value(value: tmdbDiscoverService),
         Provider<MetadataService>.value(value: metadataService),
