@@ -237,8 +237,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: const Text('Select / Rescan Folder(s)'),
             ),
             const SizedBox(width: 12),
-            if (settings.lastScannedFolder != null)
-              Expanded(child: Text('Last: ${settings.lastScannedFolder}')),
           ],
         ),
         if (library.isLoading && library.scanningStatus.isNotEmpty)

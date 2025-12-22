@@ -341,6 +341,7 @@ class LibraryProvider extends ChangeNotifier {
     } finally {
       finishScan();
       await saveLibrary(); // Redundant but safe
+      _configChangedController.add(null);
     }
   }
 
@@ -660,6 +661,7 @@ class LibraryProvider extends ChangeNotifier {
     } finally {
       finishScan();
       await saveLibrary();
+	  _configChangedController.add(null);
     }
   }
 

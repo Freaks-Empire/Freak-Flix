@@ -220,6 +220,15 @@ class SyncProvider extends ChangeNotifier {
   Future<void> forceSync() async {
     // Always PUSH local state first so we don't lose it.
     await pushSync();
+    
+    // If push failed, DO NOT pull (to avoid overwriting local changes with stale cloud data).
+    // The UI should show the error from pushSync.
+    if (_lastError != null) {
+      debugPrint('SyncProvider: Push failed with "$_lastError". Aborting Pull.');
+      notifyListeners(); // Ensure UI sees error
+      return;
+    }
+    
     // Then pull to get updates from other devices.
     await pullSync(); 
   }
