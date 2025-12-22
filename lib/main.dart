@@ -19,12 +19,12 @@ import 'app.dart';
 import 'providers/library_provider.dart';
 import 'providers/playback_provider.dart';
 import 'providers/settings_provider.dart';
-import 'providers/auth_provider.dart';
+
 import 'services/metadata_service.dart';
 import 'services/tmdb_service.dart';
 import 'services/graph_auth_service.dart';
 import 'services/tmdb_discover_service.dart';
-import 'services/auth0_service.dart';
+
 
 import 'models/discover_filter.dart';
 
@@ -57,64 +57,7 @@ void main() async {
   final metadataService = MetadataService(settingsProvider, tmdbService);
   final playbackProvider = PlaybackProvider(libraryProvider);
   
-  const auth0Domain = String.fromEnvironment('AUTH0_DOMAIN');
-  const auth0ClientId = String.fromEnvironment('AUTH0_CLIENT_ID');
-  const auth0Audience = String.fromEnvironment('AUTH0_AUDIENCE');
-  const auth0Callback = String.fromEnvironment('AUTH0_CALLBACK_URL');
-  const auth0Logout = String.fromEnvironment('AUTH0_LOGOUT_URL');
-  
-  // Just read directly; if not loaded, returns null.
-  // Just read directly; if not loaded, returns null.
-  String? envDomain;
-  if (dotenv.isInitialized) {
-    envDomain = dotenv.env['AUTH0_DOMAIN']?.trim();
-  }
-  String? envClientId;
-  String? envAudience;
-  String? envCallback;
-  String? envLogout;
 
-  if (dotenv.isInitialized) {
-    envClientId = dotenv.env['AUTH0_CLIENT_ID']?.trim();
-    envAudience = dotenv.env['AUTH0_AUDIENCE']?.trim();
-    envCallback = dotenv.env['AUTH0_CALLBACK_URL']?.trim();
-    envLogout = dotenv.env['AUTH0_LOGOUT_URL']?.trim();
-  }
-  final audienceRaw = auth0Audience.isNotEmpty ? auth0Audience : envAudience;
-  final audience = (audienceRaw?.isEmpty ?? true) ? null : audienceRaw;
-  final resolvedDomain = auth0Domain.isNotEmpty ? auth0Domain : (envDomain ?? '');
-  final resolvedClientId =
-      auth0ClientId.isNotEmpty ? auth0ClientId : (envClientId ?? '');
-  final resolvedCallback =
-      auth0Callback.isNotEmpty ? auth0Callback : (envCallback ?? '');
-
-  if (resolvedDomain.isEmpty || resolvedClientId.isEmpty) {
-    _runErrorApp(
-      'Missing Auth0 configuration. Set AUTH0_DOMAIN and AUTH0_CLIENT_ID.',
-    );
-    return;
-  }
-
-  if (resolvedCallback.isEmpty) {
-    _runErrorApp(
-      'Missing Auth0 callback URL. Set AUTH0_CALLBACK_URL in env/dart-define.',
-    );
-    return;
-  }
-
-  if (!GraphAuthService.instance.isConfigured) {
-    debugPrint('Graph not configured: set GRAPH_CLIENT_ID (and optional TENANT).');
-  }
-
-  final auth0Service = Auth0Service(
-    domain: resolvedDomain,
-    clientId: resolvedClientId,
-    audience: audience,
-    callbackUrl: resolvedCallback,
-    logoutUrl: auth0Logout.isNotEmpty ? auth0Logout : envLogout,
-  );
-  final authProvider = AuthProvider(auth0Service);
-  await authProvider.restoreSession();
 
   // --- Cloud Sync Integration ---
   // Managed by SyncProvider inside MultiProvider
@@ -127,7 +70,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => libraryProvider),
         ChangeNotifierProvider(create: (_) => playbackProvider),
         ChangeNotifierProvider(create: (_) => DiscoverFilterNotifier()),
-        ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+
 
         Provider<TmdbService>.value(value: tmdbService),
         Provider<TmdbDiscoverService>.value(value: tmdbDiscoverService),

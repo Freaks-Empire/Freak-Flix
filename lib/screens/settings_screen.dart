@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/library_folder.dart';
-import '../providers/auth_provider.dart';
+
 import '../providers/library_provider.dart';
 import '../providers/settings_provider.dart';
 
@@ -99,91 +99,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // User Profile Section
-        Consumer<AuthProvider>(
-          builder: (context, authProvider, _) {
-            final user = authProvider.user;
-            if (user != null) {
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Account',
-                          style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: 12),
-                      if (user.name != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.person, size: 20),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('Name',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall),
-                                    Text(user.name!,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (user.email != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.email, size: 20),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('Email',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall),
-                                    Text(user.email!,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: FilledButton.icon(
-                          onPressed: () async {
-                            await authProvider.logout();
-                            if (context.mounted) {
-                              Navigator.of(context).popUntil((route) => route.isFirst);
-                            }
-                          },
-                          icon: const Icon(Icons.logout),
-                          label: const Text('Logout'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
-            return const SizedBox.shrink();
-          },
-        ),
+
         const SizedBox(height: 16),
         // Sync Section
 

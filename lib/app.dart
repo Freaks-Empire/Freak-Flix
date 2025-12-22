@@ -3,10 +3,10 @@ import 'dart:ui'; // Required for PointerDeviceKind
 import 'package:provider/provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/library_provider.dart';
-import 'providers/auth_provider.dart';
+
 import 'screens/discover_screen.dart';
 import 'screens/settings_screen.dart';
-import 'screens/auth/auth_screen.dart';
+
 import 'screens/search_screen.dart';
 import 'widgets/navigation_dock.dart';
 import 'services/tmdb_discover_service.dart';
@@ -50,7 +50,7 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     final library = context.watch<LibraryProvider>();
-    final auth = context.watch<AuthProvider>();
+
     final dark = settings.isDarkMode;
     return MaterialApp(
       title: 'Freak-Flix',
@@ -67,8 +67,7 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
         colorSchemeSeed: Colors.redAccent,
         useMaterial3: true,
       ),
-      home: auth.isAuthenticated
-          ? Scaffold(
+      home: Scaffold(
               extendBodyBehindAppBar: true, // Allow content to go behind
               body: Stack(
                 children: [
@@ -139,7 +138,7 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
                 ],
               ),
             )
-          : const AuthScreen(),
+
     );
   }
 }
