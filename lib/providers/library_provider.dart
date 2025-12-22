@@ -624,8 +624,7 @@ class LibraryProvider extends ChangeNotifier {
     final q = query.toLowerCase().trim();
     return items.where((i) {
       if (!settings.enableAdultContent && i.isAdult) return false;
-      return (i.title ?? i.fileName).toLowerCase().contains(q) ||
-             (i.seriesName ?? '').toLowerCase().contains(q); // Also search series name
+      return (i.title ?? i.fileName).toLowerCase().contains(q); // Title usually contains series name for TV
     }).toList();
   }
 
