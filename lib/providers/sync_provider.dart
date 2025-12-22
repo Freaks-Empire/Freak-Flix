@@ -13,12 +13,19 @@ class SyncProvider extends ChangeNotifier {
   late final SyncService _service;
 
   bool _isSyncing = false;
+  bool _pendingPush = false; // Queue a push if one happens while syncing
   String? _lastError;
   DateTime? _lastSyncTime;
 
   bool get isSyncing => _isSyncing;
   String? get lastError => _lastError;
   DateTime? get lastSyncTime => _lastSyncTime;
+  
+  // Simple heuristic: do we have ANY data locally that might need pushing?
+  bool get _hasLocalData => 
+      library.libraryFolders.isNotEmpty 
+      || settings.apiKeys.isNotEmpty
+      || library.items.isNotEmpty; // check items just in case
 
   SyncProvider({
     required this.auth,
@@ -56,8 +63,17 @@ class SyncProvider extends ChangeNotifier {
 
   void _onAuthChanged() {
     if (auth.isAuthenticated) {
+      // SMART INIT:
+      // If we have local data, assume we want to KEEP it and push it (e.g. offline changes).
+      // If we have NOTHING, assume it's a fresh install/login and we want to PULL.
       if (_lastSyncTime == null) {
-        pullSync();
+        if (_hasLocalData) {
+          debugPrint('SyncProvider: Local data detected. Pushing to cloud.');
+          pushSync();
+        } else {
+          debugPrint('SyncProvider: No local data. Pulling from cloud (Restore).');
+          pullSync();
+        }
       }
       _startPolling();
     } else {
@@ -96,12 +112,15 @@ class SyncProvider extends ChangeNotifier {
 
   Future<void> pushSync() async {
     if (!auth.isAuthenticated) return;
-    if (_isSyncing) return; // Basic mutex
+    // If already syncing, queue another push for immediately after 
+    // so we don't lose the latest state.
+    if (_isSyncing) {
+      _pendingPush = true;
+      return; 
+    }
 
-    // Don't show "syncing" UI for background pushes to avoid flicker? 
-    // Or do show small indicator?
-    // Let's just do background work, maybe setting a "saving" flag if really needed.
-    // _isSyncing = true; notifyListeners(); 
+    _isSyncing = true;
+    notifyListeners(); 
 
     try {
       final data = {
@@ -115,12 +134,19 @@ class SyncProvider extends ChangeNotifier {
     } catch (e) {
       _lastError = e.toString();
     } finally {
-      // _isSyncing = false; notifyListeners();
+      _isSyncing = false;
+      notifyListeners();
+      _checkPendingPush();
     }
   }
 
   Future<void> pullSync() async {
     if (!auth.isAuthenticated) return;
+    
+    // If syncing, we can probably skip a background pull.
+    // But if it was a push, maybe we want to pull after?
+    // Let's protect broadly.
+    if (_isSyncing) return;
     
     _isSyncing = true;
     _lastError = null;
@@ -145,12 +171,24 @@ class SyncProvider extends ChangeNotifier {
     } finally {
       _isSyncing = false;
       notifyListeners();
+      // If a push was requested while we were pulling, do it now.
+      _checkPendingPush();
+    }
+  }
+  
+  void _checkPendingPush() {
+    if (_pendingPush) {
+      _pendingPush = false;
+      // Schedule slightly later to unwind stack? No need, async is fine.
+      pushSync();
     }
   }
   
   // Manual trigger
   Future<void> forceSync() async {
-    await pullSync(); 
+    // Always PUSH local state first so we don't lose it.
     await pushSync();
+    // Then pull to get updates from other devices.
+    await pullSync(); 
   }
 }
