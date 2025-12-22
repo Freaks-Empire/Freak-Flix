@@ -117,13 +117,19 @@ class GraphAuthService {
 
   String? _configError;
 
+  bool get _isLocalhost {
+    if (!kIsWeb) return false;
+    final host = Uri.base.host;
+    return host == 'localhost' || host == '127.0.0.1';
+  }
+
   /// Returns the base URL for Graph API calls (e.g. https://graph.microsoft.com/v1.0 or /api/graph/v1.0 on web)
   String get graphBaseUrl {
-    if (kIsWeb && !kDebugMode) {
-      // Use local proxy defined in netlify.toml (Production/Netlify Preview)
-      return '/api/graph/v1.0';
+    // If web and NOT localhost (i.e. production/preview), use proxy
+    if (kIsWeb && !_isLocalhost) {
+       return '/api/graph/v1.0';
     }
-    // Debug mode or Desktop -> Direct URL
+    // Debug mode, Localhost, or Desktop -> Direct URL
     return 'https://graph.microsoft.com/v1.0';
   }
 
@@ -150,14 +156,16 @@ class GraphAuthService {
     _tenant = tenant;
     _configError = null; // Success
     
-    // Only use Netlify proxies in release mode (or non-debug web)
-    if (kIsWeb && !kDebugMode) {
+    // Check if we are running on localhost to bypass proxy
+    if (kIsWeb && !_isLocalhost) {
+      debugPrint('GraphAuthService: Configuring for Web Proxy (Production)');
       // Use local proxy to avoid CORS on web
       // Configured in netlify.toml: /api/ms_auth/* -> https://login.microsoftonline.com/:splat
       const proxyPrefix = '/api/ms_auth';
       _deviceCodeEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/devicecode');
       _tokenEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/token');
     } else {
+      debugPrint('GraphAuthService: Configuring for Direct Connection (Local/Desktop)');
       _deviceCodeEndpoint = Uri.parse(
           'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/devicecode');
       _tokenEndpoint = Uri.parse(
