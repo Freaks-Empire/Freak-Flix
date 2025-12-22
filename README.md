@@ -68,6 +68,63 @@ flutter run -d chrome
     *   Enable "Adult Content"
     *   Enter your StashDB Endpoint & API Key for pro-level adult metadata.
 
+5.  **(Optional) OneDrive (Developer Setup)**:
+    If you want to build the app yourself and use OneDrive, you need an Azure App ID.
+    *   **Register an App**: Go to [Azure Portal](https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade).
+    *   **Platform**: Select "Mobile and desktop applications".
+    *   **Permissions**: Add `User.Read`, `Files.Read`, `offline_access`.
+    *   **Tenant**: Support "Accounts in any organizational directory (Any Azure AD directory - Multitenant) and personal Microsoft accounts".
+    *   **Env Variables**:
+        *   Create a `.env` file at the root.
+        *   Add `GRAPH_CLIENT_ID=your_client_id`.
+        *   Add `GRAPH_TENANT_ID=common` (usually 'common').
+
+---
+
+## 📂 File Naming & Organization
+
+Freak-Flix detects content based on folder structure and filenames. Use these conventions for best results:
+
+### 🎬 Movies
+Place movies in your **Movies** library folder.
+```text
+Movies/
+├── Inception (2010)/
+│   └── Inception.2010.1080p.mkv
+├── The Dark Knight.mp4
+└── Avatar.2009.mkv
+```
+*   **Best Practice**: `Title (Year).ext` or `Title.Year.ext`.
+*   The scanner extracts the Title and Year to find the correct poster and details.
+
+### 📺 TV Shows & Anime
+Place shows in your **TV** or **Anime** library folders.
+```text
+TV Shows/
+├── Breaking Bad/
+│   ├── Season 1/
+│   │   ├── Breaking Bad S01E01.mkv
+│   │   └── Breaking Bad S01E02.mkv
+│   └── Season 2/
+└── Arcane/
+    └── Arcane S01E01.mp4
+```
+*   **Required**: `SxxExx` pattern (e.g., `S01E01`) in the filename.
+*   **Alternative**: `Ep 01` or `- 01` (often used for Anime).
+*   Files in the same folder are grouped together as a series.
+
+### 🔞 Adult Content
+Place adult scenes in your **Adult** library folder (if enabled).
+```text
+Adult/
+├── Studio Name/
+│   └── Scene Title (2023).mp4
+└── Performer Name/
+    └── Scene Title.mp4
+```
+*   **StashDB**: Scans based on the exact scene title or filename hash.
+*   Enable **Adult Content** in settings to see this section.
+
 ---
 
 ## 📁 Project Structure
