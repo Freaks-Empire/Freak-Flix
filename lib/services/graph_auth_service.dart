@@ -457,9 +457,10 @@ class GraphAuthService {
   }
 
   Future<GraphUser> _fetchMe(String token) async {
+    // Force exact URL to prevent 'Invalid version' errors (avoiding Uri.https constructor nuances)
     final uri = kIsWeb
         ? Uri.parse('$graphBaseUrl/me')
-        : Uri.https('graph.microsoft.com', '/v1.0/me');
+        : Uri.parse('https://graph.microsoft.com/v1.0/me');
 
     debugPrint('GraphAuthService: Fetching user profile from $uri');
 
