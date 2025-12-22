@@ -55,9 +55,9 @@ class StashDbService {
     }
 
     const query = '''
-      query FindScenes(\$term: String!) {
-        findScenes(scene_filter: {
-          search: \$term,
+      query SearchScenes(\$term: String!) {
+        searchScene(input: {
+          term: \$term
           limit: 1
         }) {
           scenes {
@@ -65,9 +65,6 @@ class StashDbService {
             title
             details
             date
-            tags {
-              name
-            }
             images {
               url
             }
@@ -105,11 +102,11 @@ class StashDbService {
           print('[StashDB] GraphQL Errors: ${body['errors']}');
           return null;
         }
-        final scenes = body['data']?['findScenes']?['scenes'] as List?;
+        final scenes = body['data']?['searchScene']?['scenes'] as List?;
         
         if (scenes != null && scenes.isNotEmpty) {
           final scene = scenes.first;
-          return _mapSceneToMediaItem(scene, title); // Pass original title/filename
+          return _mapSceneToMediaItem(scene, title); 
         }
       } else {
         print('[StashDB] Search Failed: ${response.statusCode}');
