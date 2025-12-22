@@ -882,6 +882,8 @@ MediaType _typeForFolder(LibraryFolder folder, bool hasTvHints) {
     case LibraryType.tv:
     case LibraryType.anime:
       return MediaType.tv;
+    case LibraryType.adult:
+      return MediaType.movie;
     case LibraryType.other:
       return hasTvHints ? MediaType.tv : MediaType.movie;
   }
