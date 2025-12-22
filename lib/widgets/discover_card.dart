@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/tmdb_item.dart';
 import '../models/media_item.dart';
 import '../providers/library_provider.dart';
+import '../providers/settings_provider.dart';
 import '../screens/details_screen.dart';
 
 class DiscoverCard extends StatelessWidget {
@@ -61,10 +62,17 @@ class DiscoverCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     if (item.posterUrl != null)
-                      Image.network(
-                        item.posterUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _PosterFallback(type: item.type),
+                      Builder(
+                        builder: (context) {
+                          final settings = context.read<SettingsProvider>();
+                          final isStash = item.posterUrl!.contains('stashdb.org');
+                          return Image.network(
+                            item.posterUrl!,
+                            fit: BoxFit.cover,
+                            headers: isStash ? {'ApiKey': settings.stashApiKey} : null,
+                            errorBuilder: (_, __, ___) => _PosterFallback(type: item.type),
+                          );
+                        }
                       )
                     else
                       _PosterFallback(type: item.type),

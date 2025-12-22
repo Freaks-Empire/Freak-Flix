@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/settings_provider.dart';
 
 /// Network image that fails gracefully and shows a placeholder on 404/other errors.
 class SafeNetworkImage extends StatelessWidget {
@@ -26,30 +28,39 @@ class SafeNetworkImage extends StatelessWidget {
       return _buildPlaceholder(radius);
     }
 
-    final image = Image.network(
-      url!,
-      width: width,
-      height: height,
-      fit: fit,
-      loadingBuilder: (context, child, progress) {
-        if (progress == null) return child;
-        return Center(
-          child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              value: progress.expectedTotalBytes != null
-                  ? progress.cumulativeBytesLoaded /
-                      (progress.expectedTotalBytes ?? 1)
-                  : null,
-            ),
-          ),
+    final safeUrl = url!;
+    
+    return Consumer<SettingsProvider>(
+      builder: (context, settings, _) {
+        final isStash = safeUrl.contains('stashdb.org');
+        
+        return Image.network(
+          safeUrl,
+          width: width,
+          height: height,
+          fit: fit,
+          headers: isStash ? {'ApiKey': settings.stashApiKey} : null,
+          loadingBuilder: (context, child, progress) {
+            if (progress == null) return child;
+            return Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  value: progress.expectedTotalBytes != null
+                      ? progress.cumulativeBytesLoaded /
+                          (progress.expectedTotalBytes ?? 1)
+                      : null,
+                ),
+              ),
+            );
+          },
+          errorBuilder: (context, error, stackTrace) {
+            return _buildPlaceholder(radius);
+          },
         );
-      },
-      errorBuilder: (context, error, stackTrace) {
-        return _buildPlaceholder(radius);
-      },
+      }
     );
 
     return ClipRRect(

@@ -267,7 +267,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
                                     child: actor.profileUrl != null
-                                       ? Image.network(actor.profileUrl!, width: 60, height: 90, fit: BoxFit.cover)
+                                       ? SafeNetworkImage(url: actor.profileUrl, width: 60, height: 90, fit: BoxFit.cover)
                                        : Container(width: 60, height: 90, color: Colors.grey, child: const Icon(Icons.person, color: Colors.white54)),
                                   ),
                                   const SizedBox(width: 12),
