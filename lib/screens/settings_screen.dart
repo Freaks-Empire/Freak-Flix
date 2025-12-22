@@ -634,10 +634,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   onPressed: () => setState(() => _obscureStash = !_obscureStash),
                                 ),
                                 IconButton(
-                                  tooltip: 'Visit StashDB',
+                                  tooltip: 'Get API Key',
                                   icon: const Icon(Icons.open_in_new),
                                   onPressed: () async {
-                                    final uri = Uri.parse('https://stashdb.org');
+                                    final uri = Uri.parse('https://stashdb.org/users/');
                                     if (await canLaunchUrl(uri)) {
                                       await launchUrl(uri,
                                           mode: LaunchMode.externalApplication);
