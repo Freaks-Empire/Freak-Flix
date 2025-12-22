@@ -20,6 +20,7 @@ class DiscoverCard extends StatelessWidget {
         if (local != null) {
           Navigator.of(context).push(
             MaterialPageRoute(
+              settings: RouteSettings(name: '/details/${_slugify(item.title)}'),
               builder: (ctx) => DetailsScreen(item: local),
             ),
           );
@@ -44,6 +45,7 @@ class DiscoverCard extends StatelessWidget {
           
           Navigator.of(context).push(
             MaterialPageRoute(
+              settings: RouteSettings(name: '/details/${_slugify(item.title)}'),
               builder: (ctx) => DetailsScreen(item: stub),
             ),
           );
@@ -152,6 +154,13 @@ class DiscoverCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _slugify(String text) {
+    return text.toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9\s-]'), '') // Remove special chars
+      .trim()
+      .replaceAll(RegExp(r'\s+'), '-'); // Replace spaces with -
   }
 }
 

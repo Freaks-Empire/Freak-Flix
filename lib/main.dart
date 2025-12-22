@@ -28,8 +28,11 @@ import 'services/tmdb_discover_service.dart';
 
 import 'models/discover_filter.dart';
 
+import 'package:flutter_web_plugins/url_strategy.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  usePathUrlStrategy();
   // Load environment variables
   try {
     // defaults to '.env' which matches pubspec assets.

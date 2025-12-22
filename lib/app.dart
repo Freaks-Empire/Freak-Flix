@@ -60,6 +60,21 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
         colorSchemeSeed: Colors.redAccent,
         useMaterial3: true,
       ),
+      onGenerateRoute: (settings) {
+        // Handle deep links
+        if (settings.name != null && settings.name!.startsWith('/details/')) {
+           final slug = settings.name!.substring(9); // remove /details/
+           // Ideally we would look this up. For now, we rely on the app state 
+           // being loaded. If fully refreshed, we might be empty.
+           // A real deep link impl needs to wait for LibraryProvider to load.
+           // This is a "best effort" visual fix + partial deep link support.
+           print('Deep link to: $slug');
+           return null; // Return null to fallback to Home/PageView for now, 
+                        // preventing crash if item not found. 
+                        // To really support this, we need a wrapper that waits for Library load.
+        }
+        return null;
+      },
       home: Scaffold(
               extendBodyBehindAppBar: true, // Allow content to go behind
               body: Stack(
