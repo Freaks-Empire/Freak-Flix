@@ -30,42 +30,40 @@ class SafeNetworkImage extends StatelessWidget {
 
     final safeUrl = url!;
     
-    return Consumer<SettingsProvider>(
-      builder: (context, settings, _) {
-        final isStash = safeUrl.contains('stashdb.org');
-        
-        return Image.network(
-          safeUrl,
-          width: width,
-          height: height,
-          fit: fit,
-          headers: isStash ? {'ApiKey': settings.stashApiKey} : null,
-          loadingBuilder: (context, child, progress) {
-            if (progress == null) return child;
-            return Center(
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  value: progress.expectedTotalBytes != null
-                      ? progress.cumulativeBytesLoaded /
-                          (progress.expectedTotalBytes ?? 1)
-                      : null,
-                ),
-              ),
-            );
-          },
-          errorBuilder: (context, error, stackTrace) {
-            return _buildPlaceholder(radius);
-          },
-        );
-      }
-    );
-
     return ClipRRect(
       borderRadius: radius,
-      child: image,
+      child: Consumer<SettingsProvider>(
+        builder: (context, settings, _) {
+          final isStash = safeUrl.contains('stashdb.org');
+          
+          return Image.network(
+            safeUrl,
+            width: width,
+            height: height,
+            fit: fit,
+            headers: isStash ? {'ApiKey': settings.stashApiKey} : null,
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    value: progress.expectedTotalBytes != null
+                        ? progress.cumulativeBytesLoaded /
+                            (progress.expectedTotalBytes ?? 1)
+                        : null,
+                  ),
+                ),
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return _buildPlaceholder(radius);
+            },
+          );
+        }
+      ),
     );
   }
 

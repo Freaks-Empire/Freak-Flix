@@ -523,24 +523,73 @@ class _VideoControlsState extends State<VideoControls> {
                             ),
                             const SizedBox(height: 8),
                             
-                            // Action Buttons Row (Tracks, etc.)
+                            // Action Buttons Row
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
                               children: [
+                                // Play/Pause Button
                                 IconButton(
-                                  icon: Icon(
-                                    _volume == 0 ? Icons.volume_off : Icons.volume_up,
-                                    color: Colors.white
-                                  ),
-                                  onPressed: () {
-                                     final newVol = _volume > 0 ? 0.0 : 100.0;
-                                     widget.player.setVolume(newVol);
-                                     setState(() => _volume = newVol);
-                                  },
+                                  icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white),
+                                  onPressed: _togglePlay,
                                 ),
+                                const SizedBox(width: 8),
+                                
+                                // Volume Controls
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(
+                                        _volume == 0 ? Icons.volume_off : Icons.volume_up,
+                                        color: Colors.white,
+                                      ),
+                                      onPressed: () {
+                                         final newVol = _volume > 0 ? 0.0 : 100.0;
+                                         widget.player.setVolume(newVol);
+                                         setState(() => _volume = newVol);
+                                      },
+                                    ),
+                                    SizedBox(
+                                      width: 100,
+                                      child: SliderTheme(
+                                        data: SliderTheme.of(context).copyWith(
+                                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+                                          activeTrackColor: Colors.white,
+                                          inactiveTrackColor: Colors.white24,
+                                          thumbColor: Colors.white,
+                                          trackHeight: 2,
+                                        ),
+                                        child: Slider(
+                                          value: _volume,
+                                          min: 0,
+                                          max: 100,
+                                          onChanged: (val) {
+                                            widget.player.setVolume(val);
+                                            setState(() => _volume = val);
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                
+                                const Spacer(),
+                                
+                                // Right side controls
                                 IconButton(
                                   icon: const Icon(Icons.subtitles, color: Colors.white),
                                   onPressed: _showTracksDialog,
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.picture_in_picture_alt, color: Colors.white),
+                                  tooltip: 'Picture in Picture',
+                                  onPressed: () {
+                                    // Basic PIP implementation hint - requires platform setup
+                                    // For now we just print/show placeholder
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('PiP mode not fully configured yet'))
+                                    );
+                                  },
                                 ),
                                 IconButton(
                                   icon: switch (widget.fit) {
