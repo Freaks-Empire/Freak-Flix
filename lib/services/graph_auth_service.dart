@@ -119,10 +119,11 @@ class GraphAuthService {
 
   /// Returns the base URL for Graph API calls (e.g. https://graph.microsoft.com/v1.0 or /api/graph/v1.0 on web)
   String get graphBaseUrl {
-    if (kIsWeb) {
-      // Use local proxy defined in netlify.toml
+    if (kIsWeb && !kDebugMode) {
+      // Use local proxy defined in netlify.toml (Production/Netlify Preview)
       return '/api/graph/v1.0';
     }
+    // Debug mode or Desktop -> Direct URL
     return 'https://graph.microsoft.com/v1.0';
   }
 
@@ -149,13 +150,10 @@ class GraphAuthService {
     _tenant = tenant;
     _configError = null; // Success
     
-    if (kIsWeb) {
+    // Only use Netlify proxies in release mode (or non-debug web)
+    if (kIsWeb && !kDebugMode) {
       // Use local proxy to avoid CORS on web
       // Configured in netlify.toml: /api/ms_auth/* -> https://login.microsoftonline.com/:splat
-      // Note: We use the same path structure.
-      final baseUrl = Uri.base.origin; // e.g. https://freak-flix.netlify.app
-      // Construct absolute URL to the proxy (optional, relative path usually works with http package but safer to be explicit or just relative)
-      // Actually http package on web supports relative URIs but let's use the path directly.
       const proxyPrefix = '/api/ms_auth';
       _deviceCodeEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/devicecode');
       _tokenEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/token');
