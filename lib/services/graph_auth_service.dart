@@ -457,11 +457,23 @@ class GraphAuthService {
   }
 
   Future<GraphUser> _fetchMe(String token) async {
+    final uri = kIsWeb
+        ? Uri.parse('$graphBaseUrl/me')
+        : Uri.https('graph.microsoft.com', '/v1.0/me');
+
+    debugPrint('GraphAuthService: Fetching user profile from $uri');
+
     final res = await http.get(
-      Uri.parse('$graphBaseUrl/me'),
-      headers: {'Authorization': 'Bearer $token'},
+      uri,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
     );
+
     if (res.statusCode != 200) {
+      debugPrint('GraphAuthService: Failed to fetch me. Status: ${res.statusCode}');
+      debugPrint('GraphAuthService: Response: ${res.body}');
       throw Exception(
           'Failed to fetch user profile: ${res.statusCode} ${res.body}');
     }
