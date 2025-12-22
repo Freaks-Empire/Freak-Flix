@@ -4,6 +4,8 @@ import '../models/media_item.dart';
 import '../models/tmdb_item.dart';
 import '../models/tmdb_episode.dart';
 import '../models/tmdb_extended_details.dart';
+import '../models/tmdb_person.dart';
+import '../models/cast_member.dart';
 import '../providers/settings_provider.dart';
 
 class TmdbService {
@@ -134,7 +136,16 @@ class TmdbService {
     final credits = data['credits'] as Map<String, dynamic>?;
     final castList = (credits?['cast'] as List<dynamic>? ?? [])
         .take(15) // Limit to top 15
-        .map((c) => TmdbCast.fromMap(c, _imageBase))
+        .map((c) {
+          final path = c['profile_path'] as String?;
+          return CastMember(
+            id: (c['id'] as int).toString(),
+            name: c['name'] as String? ?? 'Unknown',
+            character: c['character'] as String? ?? '',
+            profileUrl: path != null ? '$_imageBase$path' : null,
+            source: CastSource.tmdb,
+          );
+        })
         .where((c) => c.profileUrl != null) // Only show cast with photos? Optional.
         .toList();
 
@@ -227,6 +238,22 @@ class TmdbService {
             ))
         .where((i) => i.posterUrl != null) // Filter items without posters
         .toList();
+  }
+
+  Future<TmdbPerson?> getPersonDetails(String tmdbId) async {
+    final key = _key;
+    if (key == null) return null;
+
+    final uri = Uri.https(_baseHost, '/3/person/$tmdbId', {
+      'api_key': key,
+      'append_to_response': 'combined_credits',
+    });
+
+    final res = await _client.get(uri);
+    if (res.statusCode != 200) return null;
+
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return TmdbPerson.fromMap(data, _imageBase);
   }
 }
 

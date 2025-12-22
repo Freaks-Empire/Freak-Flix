@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'cast_member.dart';
 
 enum MediaType { movie, tv, unknown }
 
@@ -103,7 +104,10 @@ class MediaItem {
   bool isWatched;
   int lastPositionSeconds;
   int? totalDurationSeconds;
+  int lastPositionSeconds;
+  int? totalDurationSeconds;
   bool isAdult;
+  List<CastMember> cast;
 
   MediaItem({
     required this.id,
@@ -133,6 +137,7 @@ class MediaItem {
     this.totalDurationSeconds,
     this.streamUrl,
     this.isAdult = false,
+    this.cast = const [],
   });
 
   MediaItem copyWith({
@@ -156,7 +161,9 @@ class MediaItem {
     int? lastPositionSeconds,
     int? totalDurationSeconds,
     String? streamUrl,
+    String? streamUrl,
     bool? isAdult,
+    List<CastMember>? cast,
   }) {
     return MediaItem(
       id: id,
@@ -183,9 +190,9 @@ class MediaItem {
       episodes: episodes ?? this.episodes,
       isWatched: isWatched ?? this.isWatched,
       lastPositionSeconds: lastPositionSeconds ?? this.lastPositionSeconds,
-      totalDurationSeconds: totalDurationSeconds ?? this.totalDurationSeconds,
       streamUrl: streamUrl ?? this.streamUrl,
       isAdult: isAdult ?? this.isAdult,
+      cast: cast ?? this.cast,
     );
   }
 
@@ -217,6 +224,9 @@ class MediaItem {
         'totalDurationSeconds': totalDurationSeconds,
         'streamUrl': streamUrl,
         'isAdult': isAdult,
+        'streamUrl': streamUrl,
+        'isAdult': isAdult,
+        'cast': cast.map((c) => c.toJson()).toList(),
       };
 
   factory MediaItem.fromJson(Map<String, dynamic> json) {
@@ -251,6 +261,9 @@ class MediaItem {
       totalDurationSeconds: json['totalDurationSeconds'] as int?,
       streamUrl: json['streamUrl'] as String?,
       isAdult: json['isAdult'] as bool? ?? false,
+      cast: (json['cast'] as List<dynamic>? ?? [])
+          .map((c) => CastMember.fromJson(c as Map<String, dynamic>))
+          .toList(),
     );
   }
 

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/media_item.dart';
+import '../models/cast_member.dart';
 
 class StashDbService {
   static const String _endpoint = 'https://stashdb.org/graphql';
@@ -59,6 +60,9 @@ class StashDbService {
             title
             details
             date
+            tags {
+              name
+            }
             images {
               url
             }
@@ -67,7 +71,9 @@ class StashDbService {
             }
             performers {
               performer {
+                id
                 name
+                image_path
               }
             }
           }
@@ -116,9 +122,27 @@ class StashDbService {
         ?.map((p) => p['performer']?['name'] as String?)
         .where((n) => n != null)
         .join(', ');
+        
+    final cast = (scene['performers'] as List?)?.map((p) {
+        final perf = p['performer'];
+        if (perf == null) return null;
+        return CastMember(
+          id: perf['id'] as String? ?? '',
+          name: perf['name'] as String? ?? 'Unknown',
+          character: 'Performer', // Stash doesn't really have characters usually
+          profileUrl: perf['image_path'] as String?,
+          source: CastSource.stashDb,
+        );
+    }).whereType<CastMember>().toList() ?? [];
 
     // Extract Studio
     final studio = scene['studio']?['name'];
+
+    // Extract Tags
+    final tags = (scene['tags'] as List?)
+        ?.map((t) => t['name'] as String?)
+        .whereType<String>()
+        .toList() ?? [];
 
     // Construct Overview
     String overview = scene['details'] ?? '';
@@ -143,8 +167,75 @@ class StashDbService {
       type: MediaType.movie, // Treat as movie
       posterUrl: poster,
       overview: overview.trim(),
+      cast: cast,
+      genres: tags,
       isAdult: true,
-      backdropUrl: poster, // Use poster as backdrop for now
     );
+  }
+
+  Future<List<MediaItem>> getPerformerScenes(String performerId, String apiKey) async {
+    if (apiKey.isEmpty) return [];
+
+    const query = '''
+      query FindScenes(\$performerId: ID!) {
+        findScenes(scene_filter: {
+          performers: {
+            value: \$performerId
+            modifier: EQUALS
+          }
+        }) {
+          scenes {
+            id
+            title
+            details
+            date
+            tags {
+              name
+            }
+            images {
+              url
+            }
+            studio {
+              name
+            }
+            performers {
+              performer {
+                id
+                name
+                image_path
+              }
+            }
+          }
+        }
+      }
+    ''';
+
+    try {
+      final response = await http.post(
+        Uri.parse(_endpoint),
+        headers: {
+          'Content-Type': 'application/json',
+          'ApiKey': apiKey,
+        },
+        body: jsonEncode({
+          'query': query,
+          'variables': {'performerId': performerId},
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final scenes = body['data']?['findScenes']?['scenes'] as List?;
+        
+        if (scenes != null) {
+          return scenes
+              .map((s) => _mapSceneToMediaItem(s, s['title'] ?? 'Unknown'))
+              .toList();
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    return [];
   }
 }

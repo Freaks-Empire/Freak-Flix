@@ -12,7 +12,10 @@ import '../../services/tmdb_service.dart';
 import '../../models/tmdb_extended_details.dart';
 import '../../widgets/discover_card.dart';
 import '../../widgets/safe_network_image.dart';
+import '../../widgets/safe_network_image.dart';
 import '../video_player_screen.dart';
+import 'actor_details_screen.dart';
+import '../../models/cast_member.dart';
 
 class MovieDetailsScreen extends StatefulWidget {
   final MediaItem item;
@@ -238,44 +241,49 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                   const SizedBox(height: 64),
                   
                   // Actors Section
-                  if (_details?.cast.isNotEmpty ?? false) ...[
+                  if ((_details?.cast.isNotEmpty ?? false) || _current.cast.isNotEmpty) ...[
                     _SectionHeader(title: 'Actors'),
                     SizedBox(
                       height: 140,
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
-                        itemCount: _details!.cast.length,
+                        itemCount: (_details?.cast ?? _current.cast).length,
                         itemBuilder: (ctx, i) {
-                          final actor = _details!.cast[i];
-                          return Container(
-                            width: 240,
-                            margin: const EdgeInsets.only(right: 12),
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.white10,
-                              borderRadius: BorderRadius.circular(8),
+                          final actor = (_details?.cast ?? _current.cast)[i];
+                          return GestureDetector(
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => ActorDetailsScreen(actor: actor)),
                             ),
-                            child: Row(
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: actor.profileUrl != null
-                                     ? Image.network(actor.profileUrl!, width: 60, height: 90, fit: BoxFit.cover)
-                                     : Container(width: 60, height: 90, color: Colors.grey),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(actor.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 2),
-                                      const SizedBox(height: 4),
-                                      Text(actor.character, style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 2),
-                                    ],
+                            child: Container(
+                              width: 240,
+                              margin: const EdgeInsets.only(right: 12),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white10,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: actor.profileUrl != null
+                                       ? Image.network(actor.profileUrl!, width: 60, height: 90, fit: BoxFit.cover)
+                                       : Container(width: 60, height: 90, color: Colors.grey, child: const Icon(Icons.person, color: Colors.white54)),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text(actor.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 2),
+                                        const SizedBox(height: 4),
+                                        Text(actor.character, style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 2),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           );
                         },

@@ -12,6 +12,8 @@ import '../video_player_screen.dart';
 import 'episode_details_screen.dart';
 import '../../services/metadata_service.dart';
 import '../../models/tmdb_extended_details.dart';
+import 'actor_details_screen.dart';
+import '../../models/cast_member.dart';
 
 class TvDetailsScreen extends StatefulWidget {
   final MediaItem item;
@@ -302,7 +304,66 @@ class _TvDetailsScreenState extends State<TvDetailsScreen> {
                     ),
                   ),
                   
-                const SliverPadding(padding: EdgeInsets.only(bottom: 64)),
+                // Actors Section
+                if ((_details?.cast.isNotEmpty ?? false) || _current.cast.isNotEmpty) ...[
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+                      child: Text('Actors', style: theme.textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: 140,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 48),
+                        scrollDirection: Axis.horizontal,
+                        itemCount: (_details?.cast ?? _current.cast).length,
+                        itemBuilder: (ctx, i) {
+                          final actor = (_details?.cast ?? _current.cast)[i];
+                          return GestureDetector(
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => ActorDetailsScreen(actor: actor)),
+                            ),
+                            child: Container(
+                              width: 240,
+                              margin: const EdgeInsets.only(right: 12),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white10,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: actor.profileUrl != null
+                                       ? Image.network(actor.profileUrl!, width: 60, height: 90, fit: BoxFit.cover)
+                                       : Container(width: 60, height: 90, color: Colors.grey, child: const Icon(Icons.person, color: Colors.white54)),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text(actor.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 2),
+                                        const SizedBox(height: 4),
+                                        Text(actor.character, style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 2),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  const SliverPadding(padding: EdgeInsets.only(bottom: 64)),
+                ],
+
               ],
             ),
           ),

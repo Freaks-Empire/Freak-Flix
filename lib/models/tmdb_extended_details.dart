@@ -1,8 +1,9 @@
 
 import 'tmdb_item.dart';
+import 'cast_member.dart';
 
 class TmdbExtendedDetails {
-  final List<TmdbCast> cast;
+  final List<CastMember> cast;
   final List<TmdbVideo> videos;
   final List<TmdbItem> recommendations;
   final List<TmdbSeason> seasons;
@@ -44,22 +45,7 @@ class TmdbSeason {
   }
 }
 
-class TmdbCast {
-  final String name;
-  final String character;
-  final String? profileUrl;
 
-  const TmdbCast({required this.name, required this.character, this.profileUrl});
-
-  factory TmdbCast.fromMap(Map<String, dynamic> map, String validImageBase) {
-    final path = map['profile_path'] as String?;
-    return TmdbCast(
-      name: map['name'] as String? ?? 'Unknown',
-      character: map['character'] as String? ?? '',
-      profileUrl: path != null ? '$validImageBase$path' : null,
-    );
-  }
-}
 
 class TmdbVideo {
   final String key;
