@@ -42,3 +42,20 @@ jobs:
           --dart-define=GRAPH_CLIENT_ID=${{ env.GRAPH_CLIENT_ID }}
           --dart-define=GRAPH_TENANT_ID=${{ env.GRAPH_TENANT_ID }}
           --dart-define=TRAKT_CLIENT_ID=${{ env.TRAKT_CLIENT_ID }}
+
+      - name: Compress Build Output
+        run: tar -czf Freak-Flix-Windows.tar.gz -C build/windows/x64/runner/Release .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-build
+          path: Freak-Flix-Windows.tar.gz
+
+      - name: Publish Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: Freak-Flix-Windows.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
