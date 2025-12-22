@@ -49,6 +49,11 @@ class StashDbService {
 
     // Query to find scene by title
     // Using a broad search first
+    if (cleanTitle.isEmpty) {
+      print('[StashDB] Skipped search: Empty title after cleaning "$title"');
+      return null;
+    }
+
     const query = '''
       query SearchScenes(\$term: String!) {
         searchScene(input: {
@@ -96,15 +101,22 @@ class StashDbService {
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
+        if (body['errors'] != null) {
+          print('[StashDB] GraphQL Errors: ${body['errors']}');
+          return null;
+        }
         final scenes = body['data']?['searchScene']?['scenes'] as List?;
         
         if (scenes != null && scenes.isNotEmpty) {
           final scene = scenes.first;
           return _mapSceneToMediaItem(scene, title); // Pass original title/filename
         }
+      } else {
+        print('[StashDB] Search Failed: ${response.statusCode}');
+        print('[StashDB] Body: ${response.body}');
       }
     } catch (e) {
-      // ignore error
+      print('[StashDB] Exception: $e');
     }
     return null;
   }
