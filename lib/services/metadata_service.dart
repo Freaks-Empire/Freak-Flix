@@ -2,12 +2,14 @@
 
 import '../models/media_item.dart';
 import '../providers/settings_provider.dart';
+import 'stash_db_service.dart';
 import 'anilist_service.dart';
 import 'trakt_service.dart';
 import 'tmdb_service.dart';
 import '../utils/filename_parser.dart';
 
 class MetadataService {
+  final StashDbService _stash = StashDbService();
   final AniListService _ani = AniListService();
   AniListService get aniListService => _ani;
   final TraktService _trakt = TraktService();
@@ -19,6 +21,25 @@ class MetadataService {
 
   Future<MediaItem> enrich(MediaItem item) async {
     final parsed = FilenameParser.parse(item.fileName);
+    
+    // 1. StashDB Lookup (if enabled)
+    if (settings.enableAdultContent && settings.stashApiKey.isNotEmpty) {
+      // Use parsed title or original filename
+      final stashItem = await _stash.searchScene(parsed.seriesTitle, settings.stashApiKey);
+      if (stashItem != null) {
+        // Merge with original file info
+        return stashItem.copyWith(
+          id: item.id, // Keep original ID (hash/path based)
+          filePath: item.filePath,
+          fileName: item.fileName,
+          folderPath: item.folderPath,
+          sizeBytes: item.sizeBytes,
+          lastModified: item.lastModified,
+          streamUrl: item.streamUrl, // Keep existing stream URL if present
+        );
+      }
+    }
+
     var working = item.copyWith(
       title: parsed.seriesTitle,
       year: item.year ?? parsed.year,

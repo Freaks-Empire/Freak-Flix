@@ -20,6 +20,10 @@ class SettingsProvider extends ChangeNotifier {
   String? lastScannedFolder;
   String tmdbApiKey = '';
   TmdbKeyStatus tmdbStatus = TmdbKeyStatus.unknown;
+  
+  bool enableAdultContent = false;
+  String stashApiKey = '';
+
   bool _isTestingTmdbKey = false;
 
   bool get isTestingTmdbKey => _isTestingTmdbKey;
@@ -56,6 +60,10 @@ class SettingsProvider extends ChangeNotifier {
     } else {
       tmdbStatus = TmdbKeyStatus.unknown;
     }
+
+    enableAdultContent = data['enableAdultContent'] as bool? ?? false;
+    stashApiKey = data['stashApiKey'] as String? ?? '';
+    
     notifyListeners();
   }
 
@@ -70,6 +78,8 @@ class SettingsProvider extends ChangeNotifier {
         'lastScannedFolder': lastScannedFolder,
         'tmdbApiKey': tmdbApiKey,
         _tmdbStatusKey: tmdbStatus.index,
+        'enableAdultContent': enableAdultContent,
+        'stashApiKey': stashApiKey,
       }),
     );
   }
@@ -88,6 +98,18 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> toggleAutoFetch(bool value) async {
     autoFetchAfterScan = value;
+    await save();
+    notifyListeners();
+  }
+
+  Future<void> toggleAdultContent(bool value) async {
+    enableAdultContent = value;
+    await save();
+    notifyListeners();
+  }
+
+  Future<void> setStashApiKey(String value) async {
+    stashApiKey = value.trim();
     await save();
     notifyListeners();
   }
@@ -138,6 +160,8 @@ class SettingsProvider extends ChangeNotifier {
       'lastScannedFolder': lastScannedFolder,
       'tmdbApiKey': tmdbApiKey,
       'tmdbStatus': tmdbStatus.index,
+      'enableAdultContent': enableAdultContent,
+      'stashApiKey': stashApiKey,
     };
   }
 
@@ -158,6 +182,12 @@ class SettingsProvider extends ChangeNotifier {
       if (idx >= 0 && idx < TmdbKeyStatus.values.length) {
         tmdbStatus = TmdbKeyStatus.values[idx];
       }
+    }
+    if (data.containsKey('enableAdultContent')) {
+      enableAdultContent = data['enableAdultContent'] ?? false;
+    }
+    if (data.containsKey('stashApiKey')) {
+      stashApiKey = data['stashApiKey'] ?? '';
     }
     await save();
     notifyListeners();

@@ -12,6 +12,7 @@ import '../providers/sync_provider.dart';
 import '../services/graph_auth_service.dart';
 import '../services/metadata_service.dart';
 import '../services/tmdb_service.dart';
+import '../services/stash_db_service.dart';
 import 'onedrive_folder_picker.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -27,12 +28,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   LibraryType _pendingType = LibraryType.movies;
   late final TextEditingController _tmdbController;
   bool _initializedTmdb = false;
+  bool _initializedTmdb = false;
   bool _obscureTmdb = true;
+
+  late final TextEditingController _stashKeyController;
+  bool _initializedStash = false;
+  bool _obscureStash = true;
+  bool _isTestingStash = false;
+  final StashDbService _stashService = StashDbService();
 
   @override
   void initState() {
     super.initState();
     _tmdbController = TextEditingController();
+    _stashKeyController = TextEditingController();
     _graphAuth.loadFromPrefs().then((_) {
       if (mounted) setState(() {});
     });
@@ -41,6 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     _tmdbController.dispose();
+    _stashKeyController.dispose();
     super.dispose();
   }
 
@@ -51,12 +61,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final metadata = Provider.of<MetadataService>(context, listen: false);
     final tmdb = Provider.of<TmdbService>(context, listen: false);
 
-    if (!_initializedTmdb || _tmdbController.text != settings.tmdbApiKey) {
       _tmdbController
         ..text = settings.tmdbApiKey
         ..selection =
             TextSelection.collapsed(offset: settings.tmdbApiKey.length);
       _initializedTmdb = true;
+    }
+
+    if (!_initializedStash || _stashKeyController.text != settings.stashApiKey) {
+      _stashKeyController
+        ..text = settings.stashApiKey
+        ..selection =
+            TextSelection.collapsed(offset: settings.stashApiKey.length);
+      _initializedStash = true;
     }
 
     Widget _tmdbStatusChip() {
@@ -568,6 +585,105 @@ class _SettingsScreenState extends State<SettingsScreen> {
           value: settings.isDarkMode,
           onChanged: (v) => settings.toggleDarkMode(v),
         ),
+        const Divider(height: 32),
+        Text('Advanced Settings', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        SwitchListTile(
+          title: const Text('Enable Adult Content'),
+          subtitle: const Text('Show adult content features and integrations (e.g. StashDB)'),
+          value: settings.enableAdultContent,
+          onChanged: (v) => settings.toggleAdultContent(v),
+        ),
+        if (settings.enableAdultContent) ...[
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.lock_person, size: 20),
+                      const SizedBox(width: 8),
+                      Text('StashDB Integration', style: Theme.of(context).textTheme.titleMedium),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Use StashDB.org metadata for matching file names. Does NOT provide streaming.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _stashKeyController,
+                    obscureText: _obscureStash,
+                    decoration: InputDecoration(
+                      labelText: 'StashDB API Key',
+                      hintText: 'Paste your API Key from stashdb.org',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: _obscureStash ? 'Show key' : 'Hide key',
+                            icon: Icon(
+                                _obscureStash ? Icons.visibility : Icons.visibility_off),
+                            onPressed: () => setState(() => _obscureStash = !_obscureStash),
+                          ),
+                          IconButton(
+                            tooltip: 'Visit StashDB',
+                            icon: const Icon(Icons.open_in_new),
+                            onPressed: () async {
+                              final uri = Uri.parse('https://stashdb.org');
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri,
+                                    mode: LaunchMode.externalApplication);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    onChanged: (value) => settings.setStashApiKey(value),
+                    onSubmitted: (value) => settings.setStashApiKey(value),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: ElevatedButton.icon(
+                      onPressed: _isTestingStash || settings.stashApiKey.isEmpty
+                          ? null
+                          : () async {
+                              setState(() => _isTestingStash = true);
+                              final ok = await _stashService.testConnection(settings.stashApiKey);
+                              if (!mounted) return;
+                              setState(() => _isTestingStash = false);
+                              
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(ok
+                                      ? 'StashDB Connection Successful!'
+                                      : 'Connection Failed. Check your API Key.'),
+                                  backgroundColor: ok ? Colors.green : Colors.red,
+                                ),
+                              );
+                            },
+                      icon: _isTestingStash
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.check),
+                      label: const Text('Test Connection'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -587,12 +703,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           content: DropdownButton<LibraryType>(
             value: localType,
             isExpanded: true,
-            items: const [
-              DropdownMenuItem(
+            items: [
+              const DropdownMenuItem(
                   value: LibraryType.movies, child: Text('Movies')),
-              DropdownMenuItem(value: LibraryType.tv, child: Text('TV Shows')),
-              DropdownMenuItem(value: LibraryType.anime, child: Text('Anime')),
-              DropdownMenuItem(value: LibraryType.other, child: Text('Other')),
+              const DropdownMenuItem(value: LibraryType.tv, child: Text('TV Shows')),
+              const DropdownMenuItem(value: LibraryType.anime, child: Text('Anime')),
+              // Only show Adult option if enabled in settings
+              if (Provider.of<SettingsProvider>(context, listen: false).enableAdultContent)
+                const DropdownMenuItem(value: LibraryType.adult, child: Text('Adult Content')),
+              const DropdownMenuItem(value: LibraryType.other, child: Text('Other')),
             ],
             onChanged: (val) {
               if (val != null) {
@@ -666,6 +785,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return const Icon(Icons.tv);
       case LibraryType.anime:
         return const Icon(Icons.animation_outlined);
+      case LibraryType.adult:
+        return const Icon(Icons.lock_outline);
       case LibraryType.other:
         return const Icon(Icons.folder);
     }
@@ -756,6 +877,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return 'TV';
       case LibraryType.anime:
         return 'Anime';
+      case LibraryType.adult:
+        return 'Adult';
       case LibraryType.other:
       default:
         return 'Other';

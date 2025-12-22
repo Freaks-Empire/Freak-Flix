@@ -1,4 +1,4 @@
-enum LibraryType { movies, tv, anime, other }
+enum LibraryType { movies, tv, anime, adult, other }
 
 String libraryTypeToString(LibraryType type) {
   switch (type) {
@@ -8,6 +8,8 @@ String libraryTypeToString(LibraryType type) {
       return 'tv';
     case LibraryType.anime:
       return 'anime';
+    case LibraryType.adult:
+      return 'adult';
     case LibraryType.other:
       return 'other';
   }
@@ -21,6 +23,8 @@ LibraryType libraryTypeFromString(String? value) {
       return LibraryType.tv;
     case 'anime':
       return LibraryType.anime;
+    case 'adult':
+      return LibraryType.adult;
     case 'other':
       return LibraryType.other;
     default:

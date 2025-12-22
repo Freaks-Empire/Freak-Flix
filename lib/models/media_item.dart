@@ -103,6 +103,7 @@ class MediaItem {
   bool isWatched;
   int lastPositionSeconds;
   int? totalDurationSeconds;
+  bool isAdult;
 
   MediaItem({
     required this.id,
@@ -131,6 +132,7 @@ class MediaItem {
     this.lastPositionSeconds = 0,
     this.totalDurationSeconds,
     this.streamUrl,
+    this.isAdult = false,
   });
 
   MediaItem copyWith({
@@ -154,6 +156,7 @@ class MediaItem {
     int? lastPositionSeconds,
     int? totalDurationSeconds,
     String? streamUrl,
+    bool? isAdult,
   }) {
     return MediaItem(
       id: id,
@@ -182,6 +185,7 @@ class MediaItem {
       lastPositionSeconds: lastPositionSeconds ?? this.lastPositionSeconds,
       totalDurationSeconds: totalDurationSeconds ?? this.totalDurationSeconds,
       streamUrl: streamUrl ?? this.streamUrl,
+      isAdult: isAdult ?? this.isAdult,
     );
   }
 
@@ -212,6 +216,7 @@ class MediaItem {
         'lastPositionSeconds': lastPositionSeconds,
         'totalDurationSeconds': totalDurationSeconds,
         'streamUrl': streamUrl,
+        'isAdult': isAdult,
       };
 
   factory MediaItem.fromJson(Map<String, dynamic> json) {
@@ -245,6 +250,7 @@ class MediaItem {
       lastPositionSeconds: json['lastPositionSeconds'] as int? ?? 0,
       totalDurationSeconds: json['totalDurationSeconds'] as int?,
       streamUrl: json['streamUrl'] as String?,
+      isAdult: json['isAdult'] as bool? ?? false,
     );
   }
 
