@@ -15,6 +15,10 @@ class NavigationDock extends StatelessWidget {
     final theme = Theme.of(context);
     final settings = context.watch<SettingsProvider>();
     final isDark = theme.brightness == Brightness.dark;
+    
+    // Calculate indices dynamically
+    final searchIndex = settings.enableAdultContent ? 5 : 4;
+    final settingsIndex = settings.enableAdultContent ? 6 : 5;
 
     return Center(
       heightFactor: 1.0,
@@ -89,16 +93,16 @@ class NavigationDock extends StatelessWidget {
                   _DockItem(
                     icon: Icons.search,
                     label: 'Search',
-                    isSelected: index == 5,
-                    onTap: () => onTap(5),
+                    isSelected: index == searchIndex,
+                    onTap: () => onTap(searchIndex),
                     theme: theme,
                   ),
                   const SizedBox(width: 8),
                   _DockItem(
                     icon: Icons.settings_outlined,
                     label: 'Settings',
-                    isSelected: index == 6,
-                    onTap: () => onTap(6),
+                    isSelected: index == settingsIndex,
+                    onTap: () => onTap(settingsIndex),
                     theme: theme,
                   ),
                 ],

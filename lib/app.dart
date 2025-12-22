@@ -25,15 +25,6 @@ class FreakFlixApp extends StatefulWidget {
 
 class _FreakFlixAppState extends State<FreakFlixApp> {
   int _index = 0;
-  final _pages = const [
-    DiscoverScreen(type: DiscoverType.all), // Home
-    MoviesScreen(), // Movies (Library)
-    TvScreen(), // TV (Library)
-    AnimeScreen(), // Anime (Library)
-    AdultScreen(), // Adult (Library)
-    SearchScreen(), // Search
-    SettingsScreen(), // Settings
-  ];
   late final PageController _pageController;
 
   @override
@@ -78,7 +69,15 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
                      child: PageView(
                        controller: _pageController,
                        onPageChanged: (index) => setState(() => _index = index),
-                       children: _pages,
+                       children: [
+                         const DiscoverScreen(type: DiscoverType.all),
+                         const MoviesScreen(),
+                         const TvScreen(),
+                         const AnimeScreen(),
+                         if (settings.enableAdultContent) const AdultScreen(),
+                         const SearchScreen(),
+                         const SettingsScreen(),
+                       ],
                      ),
                    ),
                    
