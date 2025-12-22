@@ -4,20 +4,17 @@
 
 [[redirects]]
   from = "/api/ms_auth/*"
-  to = "/.netlify/functions/ms_auth_proxy"
+  to = "https://login.microsoftonline.com/:splat"
   status = 200
   force = true
 
-[[plugins]]
-  package = "@netlify/plugin-functions-install-core"
+[[headers]]
+  for = "/api/ms_auth/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
 
-[[redirects]]
-  from = "/api/graph/*"
-  to = "https://graph.microsoft.com/:splat"
-  status = 200
-  force = true
-
-# Route all paths to the SPA entry so client-side routing works.
 [[redirects]]
   from = "/*"
   to = "/index.html"
