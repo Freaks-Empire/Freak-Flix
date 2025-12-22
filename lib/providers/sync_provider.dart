@@ -110,8 +110,40 @@ class SyncProvider extends ChangeNotifier {
     pushSync();
   }
 
-  Future<void> pushSync() async {
+  Timer? _debounceTimer;
+
+  Completer<void>? _pushCompleter;
+
+  Future<void> pushSync() {
+    if (!auth.isAuthenticated) return Future.value();
+    
+    // If we are already waiting for a push (debounce phase), reuse the completer.
+    // If the previous one finished, create a new one.
+    if (_pushCompleter == null || _pushCompleter!.isCompleted) {
+      _pushCompleter = Completer<void>();
+    }
+    
+    // Debounce to ensure multiple rapid changes (like deleting accounts + settings update)
+    // are grouped into one solid push, and gives the UI/State time to settle.
+    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
+    
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
+       try {
+         await _performPush();
+       } finally {
+         // Only complete if not already completed (though distinct completers prevent this usually)
+         if (!(_pushCompleter?.isCompleted ?? true)) {
+           _pushCompleter?.complete();
+         }
+       }
+    });
+
+    return _pushCompleter!.future;
+  }
+
+  Future<void> _performPush() async {
     if (!auth.isAuthenticated) return;
+
     // If already syncing, queue another push for immediately after 
     // so we don't lose the latest state.
     if (_isSyncing) {
