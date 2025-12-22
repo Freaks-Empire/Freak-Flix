@@ -104,8 +104,6 @@ class MediaItem {
   bool isWatched;
   int lastPositionSeconds;
   int? totalDurationSeconds;
-  int lastPositionSeconds;
-  int? totalDurationSeconds;
   bool isAdult;
   List<CastMember> cast;
 
@@ -160,9 +158,6 @@ class MediaItem {
     bool? isWatched,
     int? lastPositionSeconds,
     int? totalDurationSeconds,
-    String? streamUrl,
-    String? streamUrl,
-    bool? isAdult,
     List<CastMember>? cast,
   }) {
     return MediaItem(
@@ -220,11 +215,6 @@ class MediaItem {
         'anilistId': anilistId,
         'episodes': episodes.map((e) => e.toJson()).toList(),
         'isWatched': isWatched,
-        'lastPositionSeconds': lastPositionSeconds,
-        'totalDurationSeconds': totalDurationSeconds,
-        'streamUrl': streamUrl,
-        'isAdult': isAdult,
-        'streamUrl': streamUrl,
         'isAdult': isAdult,
         'cast': cast.map((c) => c.toJson()).toList(),
       };

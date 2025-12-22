@@ -244,7 +244,6 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                              id: 0, // Placeholder
                              title: item.title,
                              posterUrl: item.posterUrl,
-                             backdropUrl: item.backdropUrl, 
                              overview: item.overview,
                              voteAverage: 0,
                              releaseDate: item.year?.toString(),
