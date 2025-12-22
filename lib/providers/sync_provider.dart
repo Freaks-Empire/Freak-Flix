@@ -24,7 +24,7 @@ class SyncProvider extends ChangeNotifier {
   // Simple heuristic: do we have ANY data locally that might need pushing?
   bool get _hasLocalData => 
       library.libraryFolders.isNotEmpty 
-      || settings.apiKeys.isNotEmpty
+      || settings.tmdbApiKey.isNotEmpty
       || library.items.isNotEmpty; // check items just in case
 
   SyncProvider({
