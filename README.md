@@ -3,6 +3,7 @@
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.0%2B-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Android%20%7C%20Web-blue?style=for-the-badge)](https://flutter.dev)
+[![Build Status](https://github.com/MNDL-27/Freak-Flix/actions/workflows/flutter-windows.yml/badge.svg)](https://github.com/MNDL-27/Freak-Flix/actions/workflows/flutter-windows.yml)
 [![License](https://img.shields.io/badge/License-Open%20Source-green?style=for-the-badge)]()
 
 Freak-Flix organizes your video library into a stunning, immersive interface. Whether it's your local collection or cloud favorites, experience them with rich metadata and a premium UI.
