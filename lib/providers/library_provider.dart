@@ -535,16 +535,16 @@ class LibraryProvider extends ChangeNotifier {
       items.where((i) => i.type == MediaType.tv && i.isAnime));
 
   List<MediaItem> get continueWatching =>
-      items.where((i) => i.lastPositionSeconds > 0 && !i.isWatched).toList();
+      items.where((i) => i.lastPositionSeconds > 0 && !i.isWatched && !i.isAdult).toList();
 
   List<MediaItem> get recentlyAdded {
-    final sorted = [...items]
+    final sorted = items.where((i) => !i.isAdult).toList()
       ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
     return sorted.take(20).toList();
   }
 
   List<MediaItem> get topRated {
-    final sorted = [...items]
+    final sorted = items.where((i) => !i.isAdult).toList()
       ..sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
     return sorted.take(20).toList();
   }
