@@ -23,11 +23,11 @@ class MetadataService {
     final parsed = FilenameParser.parse(item.fileName);
     
     // 1. StashDB Lookup (if enabled)
+    // 1. StashDB Lookup (if enabled)
     if (settings.enableAdultContent && settings.stashApiKey.isNotEmpty) {
       // Use parsed title or original filename
       final stashItem = await _stash.searchScene(parsed.seriesTitle, settings.stashApiKey);
       if (stashItem != null) {
-        // Merge with original file info
         // Merge with original file info
         return item.copyWith(
           title: stashItem.title,
@@ -39,6 +39,13 @@ class MetadataService {
           type: MediaType.movie,
         );
       }
+    }
+
+    // Optimization: If it's explicitly marked as adult (from folder type) and we either 
+    // didn't find Stash metadata or Stash wasn't enabled, STOP here.
+    // Adult content shouldn't be enriched by AniList/TMDB as it leads to false positives.
+    if (item.isAdult) {
+      return item;
     }
 
     var working = item.copyWith(
