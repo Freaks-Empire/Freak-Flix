@@ -55,9 +55,9 @@ class StashDbService {
     }
 
     const query = '''
-      query SearchScenes(\$term: String!) {
-        searchScene(input: {
-          term: \$term,
+      query FindScenes(\$term: String!) {
+        findScenes(scene_filter: {
+          search: \$term,
           limit: 1
         }) {
           scenes {
@@ -105,7 +105,7 @@ class StashDbService {
           print('[StashDB] GraphQL Errors: ${body['errors']}');
           return null;
         }
-        final scenes = body['data']?['searchScene']?['scenes'] as List?;
+        final scenes = body['data']?['findScenes']?['scenes'] as List?;
         
         if (scenes != null && scenes.isNotEmpty) {
           final scene = scenes.first;
