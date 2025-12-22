@@ -101,6 +101,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
 
         const SizedBox(height: 16),
+        // Support Section
+        Card(
+          color: Theme.of(context).colorScheme.tertiaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.volunteer_activism, 
+                      color: Theme.of(context).colorScheme.onTertiaryContainer),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'This project is free & open source. Your support keeps it alive!',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onTertiaryContainer,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFf6c915), // Liberapay yellow/gold
+                      foregroundColor: Colors.black,
+                    ),
+                    onPressed: () => launchUrl(
+                      Uri.parse('https://liberapay.com/MNDL-27/donate'),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                    icon: const Icon(Icons.favorite),
+                    label: const Text('Donate via Liberapay'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
         // Sync Section
 
         const SizedBox(height: 16),
