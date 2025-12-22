@@ -858,6 +858,7 @@ Future<void> _walkOneDrivePage({
         parsed.season != null || parsed.episode != null || animeHint;
     final mediaType = _typeForFolder(libraryFolder, hasTvHints);
     final isAnime = libraryFolder.type == LibraryType.anime || animeHint;
+    final isAdult = libraryFolder.type == LibraryType.adult;
     final accountScopedFolderPath = '$accountPrefix$currentPath';
     final accountScopedFilePath = '$accountPrefix$nextPath';
     final showKey = mediaType == MediaType.tv
@@ -878,6 +879,7 @@ Future<void> _walkOneDrivePage({
       season: parsed.season,
       episode: parsed.episode,
       isAnime: isAnime,
+      isAdult: isAdult,
       showKey: showKey,
     );
 
