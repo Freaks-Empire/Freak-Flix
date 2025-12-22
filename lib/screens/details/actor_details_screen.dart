@@ -242,7 +242,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                            // Let's create a TmdbItem from MediaItem
                            final tmdbItem = TmdbItem(
                              id: 0, // Placeholder
-                             title: item.title,
+                             title: item.title ?? item.fileName,
                              posterUrl: item.posterUrl,
                              overview: item.overview,
                              voteAverage: 0,

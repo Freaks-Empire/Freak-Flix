@@ -771,7 +771,7 @@ Future<void> _walkOneDriveFolder({
   required LibraryFolder libraryFolder,
   _ProgressCallback? onProgress,
 }) async {
-  final baseUrl = GraphAuthService.instance.graphBaseUrl;
+  final baseUrl = graph_auth.GraphAuthService.instance.graphBaseUrl;
   final url = Uri.parse(
       '$baseUrl/me/drive/items/$folderId/children');
   await _walkOneDrivePage(
