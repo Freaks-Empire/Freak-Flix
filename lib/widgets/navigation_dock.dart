@@ -1,6 +1,8 @@
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/settings_provider.dart';
 
 class NavigationDock extends StatelessWidget {
   final int index;
@@ -11,6 +13,7 @@ class NavigationDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final settings = context.watch<SettingsProvider>();
     final isDark = theme.brightness == Brightness.dark;
 
     return Center(
@@ -73,19 +76,29 @@ class NavigationDock extends StatelessWidget {
                     theme: theme,
                   ),
                   const SizedBox(width: 8),
+                  if (settings.enableAdultContent) ...[
+                    _DockItem(
+                      icon: Icons.lock_outline,
+                      label: 'Adult',
+                      isSelected: index == 4,
+                      onTap: () => onTap(4),
+                      theme: theme,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   _DockItem(
                     icon: Icons.search,
                     label: 'Search',
-                    isSelected: index == 4,
-                    onTap: () => onTap(4),
+                    isSelected: index == 5,
+                    onTap: () => onTap(5),
                     theme: theme,
                   ),
                   const SizedBox(width: 8),
                   _DockItem(
                     icon: Icons.settings_outlined,
                     label: 'Settings',
-                    isSelected: index == 5,
-                    onTap: () => onTap(5),
+                    isSelected: index == 6,
+                    onTap: () => onTap(6),
                     theme: theme,
                   ),
                 ],

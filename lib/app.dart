@@ -14,6 +14,7 @@ import 'services/tmdb_discover_service.dart';
 import 'screens/movies_screen.dart';
 import 'screens/tv_screen.dart';
 import 'screens/anime_screen.dart';
+import 'screens/adult_screen.dart';
 
 class FreakFlixApp extends StatefulWidget {
   const FreakFlixApp({super.key});
@@ -29,6 +30,7 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
     MoviesScreen(), // Movies (Library)
     TvScreen(), // TV (Library)
     AnimeScreen(), // Anime (Library)
+    AdultScreen(), // Adult (Library)
     SearchScreen(), // Search
     SettingsScreen(), // Settings
   ];

@@ -503,18 +503,21 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   List<MediaItem> get movies =>
-      items.where((i) => i.type == MediaType.movie).toList();
+      items.where((i) => i.type == MediaType.movie && !i.isAdult).toList();
+
+  List<MediaItem> get adult =>
+      items.where((i) => i.isAdult).toList();
 
   // Group TV/anime by showKey and aggregate episodes under one show card.
   // TV tab excludes anime; Anime tab shows only anime.
   List<MediaItem> get tv =>
-      _groupShows(items.where((i) => i.type == MediaType.tv && !i.isAnime));
+      _groupShows(items.where((i) => i.type == MediaType.tv && !i.isAnime && !i.isAdult));
 
   List<MediaItem> get anime =>
       _groupShows(items.where((i) => i.type == MediaType.tv && i.isAnime));
 
   List<TvShowGroup> get groupedTvShows => _groupShowsToGroups(
-      items.where((i) => i.type == MediaType.tv && !i.isAnime));
+      items.where((i) => i.type == MediaType.tv && !i.isAnime && !i.isAdult));
 
   List<TvShowGroup> get groupedAnimeShows => _groupShowsToGroups(
       items.where((i) => i.type == MediaType.tv && i.isAnime));
