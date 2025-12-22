@@ -117,7 +117,7 @@ class GraphAuthService {
 
   String? _configError;
 
-  /// Returns the base URL for Graph API calls (e.g. https://graph.microsoft.com/v1.0 or /api/graph/v1.0 on web)
+  /// Returns the base URL for Graph API calls
   String get graphBaseUrl {
     return 'https://graph.microsoft.com/v1.0';
   }
@@ -145,6 +145,7 @@ class GraphAuthService {
     _tenant = tenant;
     _configError = null; // Success
     
+    debugPrint('GraphAuthService: Configured (Direct)');
     _deviceCodeEndpoint = Uri.parse(
         'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/devicecode');
     _tokenEndpoint = Uri.parse(
