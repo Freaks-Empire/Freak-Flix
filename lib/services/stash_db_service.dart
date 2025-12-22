@@ -129,17 +129,20 @@ class StashDbService {
       overview = 'Studio: $studio\n\n$overview';
     }
 
+    final date = DateTime.tryParse(scene['date'] ?? '');
+    
     return MediaItem(
       id: "stashdb:${scene['id']}",
-      title: scene['title'] ?? originalFileName, // Prefer StashDB title
+      title: scene['title'] ?? originalFileName,
       fileName: originalFileName,
-      path: '', // Will be filled by LibraryProvider
-      size: 0, // Will be filled by LibraryProvider
-      modified: DateTime.tryParse(scene['date'] ?? '') ?? DateTime.now(),
+      filePath: '', // Will be filled by LibraryProvider
+      folderPath: '', // Will be filled by LibraryProvider
+      sizeBytes: 0, // Will be filled by LibraryProvider
+      lastModified: date ?? DateTime.now(),
+      year: date?.year,
       type: MediaType.movie, // Treat as movie
       posterUrl: poster,
       overview: overview.trim(),
-      studio: studio,
       isAdult: true,
       backdropUrl: poster, // Use poster as backdrop for now
     );

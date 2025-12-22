@@ -28,7 +28,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   LibraryType _pendingType = LibraryType.movies;
   late final TextEditingController _tmdbController;
   bool _initializedTmdb = false;
-  bool _initializedTmdb = false;
   bool _obscureTmdb = true;
 
   late final TextEditingController _stashKeyController;
@@ -61,6 +60,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final metadata = Provider.of<MetadataService>(context, listen: false);
     final tmdb = Provider.of<TmdbService>(context, listen: false);
 
+    if (!_initializedTmdb || _tmdbController.text != settings.tmdbApiKey) {
       _tmdbController
         ..text = settings.tmdbApiKey
         ..selection =

@@ -28,14 +28,15 @@ class MetadataService {
       final stashItem = await _stash.searchScene(parsed.seriesTitle, settings.stashApiKey);
       if (stashItem != null) {
         // Merge with original file info
-        return stashItem.copyWith(
-          id: item.id, // Keep original ID (hash/path based)
-          filePath: item.filePath,
-          fileName: item.fileName,
-          folderPath: item.folderPath,
-          sizeBytes: item.sizeBytes,
-          lastModified: item.lastModified,
-          streamUrl: item.streamUrl, // Keep existing stream URL if present
+        // Merge with original file info
+        return item.copyWith(
+          title: stashItem.title,
+          year: stashItem.year,
+          overview: stashItem.overview,
+          posterUrl: stashItem.posterUrl,
+          backdropUrl: stashItem.backdropUrl,
+          isAdult: true,
+          type: MediaType.movie,
         );
       }
     }
