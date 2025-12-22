@@ -286,6 +286,21 @@ class _VideoControlsState extends State<VideoControls> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (tracks.video.length > 1) ...[
+                  const Text('Video Quality', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  ...tracks.video.map((t) => RadioListTile<VideoTrack>(
+                    title: Text('${t.w ?? '?'}x${t.h ?? '?'} ${t.title ?? ''}', style: const TextStyle(color: Colors.white)),
+                    value: t,
+                    groupValue: widget.player.state.track.video,
+                    onChanged: (val) {
+                      if (val != null) widget.player.setVideoTrack(val);
+                      Navigator.pop(ctx);
+                    },
+                    activeColor: Colors.redAccent,
+                  )),
+                  const SizedBox(height: 16),
+                ],
                 if (tracks.audio.length > 1) ...[
                   const Text('Audio', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
@@ -353,7 +368,21 @@ class _VideoControlsState extends State<VideoControls> {
           onKeyEvent: _onKeyEvent,
           child: GestureDetector(
             onTap: _onUserInteraction,
-            onDoubleTap: _togglePlay, 
+            onDoubleTapDown: (details) {
+                 final width = MediaQuery.of(context).size.width;
+                 if (details.globalPosition.dx < width * 0.4) {
+                     // Left side: rewind
+                     _seek(_position - const Duration(seconds: 10));
+                     // Visual feedback could be added here
+                 } else if (details.globalPosition.dx > width * 0.6) {
+                     // Right side: forward
+                     _seek(_position + const Duration(seconds: 10));
+                 } else {
+                     // Center: Toggle Play/Pause
+                     _togglePlay();
+                 }
+                 _onUserInteraction();
+            }, 
             onVerticalDragStart: _handleVerticalDragStart,
             onVerticalDragUpdate: _handleVerticalDragUpdate,
             behavior: HitTestBehavior.translucent,
@@ -526,10 +555,18 @@ class _VideoControlsState extends State<VideoControls> {
                             // Action Buttons Row
                             Row(
                               children: [
-                                // Play/Pause Button
+                                // Play/Pause & Seek Buttons
+                                IconButton(
+                                  icon: const Icon(Icons.replay_10, color: Colors.white),
+                                  onPressed: () => _seek(_position - const Duration(seconds: 10)),
+                                ),
                                 IconButton(
                                   icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white),
                                   onPressed: _togglePlay,
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.forward_10, color: Colors.white),
+                                  onPressed: () => _seek(_position + const Duration(seconds: 10)),
                                 ),
                                 const SizedBox(width: 8),
                                 
