@@ -473,10 +473,22 @@ class LibraryProvider extends ChangeNotifier {
         onProgress: (path, count) {
           _setScanStatus('OneDrive · $path ($count files)');
         },
+        onBatchFound: (items) async {
+             // Realtime ingest!
+             // We pass 'metadata' here if we want auto-fetch immediately.
+             // But note: _ingestItems triggers 'saveLibrary' only if autoFetch is OFF or if it finishes fetching.
+             // Actually _ingestItems doesn't call saveLibrary at all unless autoFetch happens?
+             // Let's check _ingestItems again.
+             // It calls notifyListeners().
+             // It does NOT call saveLibrary().
+             // It calls metadata.enrich if enabled.
+             await _ingestItems(items, metadata);
+        },
       );
 
         _setScanStatus(
           'Merging ${collected.length} items from $folderLabel...');
+      // Final merge to ensure consistency and sort everything
       await _ingestItems(collected, metadata);
     } catch (e) {
       error = 'Rescan failed for $folderLabel: $e';
@@ -760,7 +772,7 @@ class LibraryProvider extends ChangeNotifier {
   }
 }
 
-typedef _ProgressCallback = void Function(String path, int filesFound);
+typedef _ItemsFoundCallback = Future<void> Function(List<MediaItem> items);
 
 Future<void> _walkOneDriveFolder({
   required String token,
@@ -770,6 +782,7 @@ Future<void> _walkOneDriveFolder({
   required String accountPrefix,
   required LibraryFolder libraryFolder,
   _ProgressCallback? onProgress,
+  _ItemsFoundCallback? onBatchFound,
 }) async {
   final baseUrl = graph_auth.GraphAuthService.instance.graphBaseUrl;
   final url = Uri.parse(
@@ -782,6 +795,7 @@ Future<void> _walkOneDriveFolder({
     accountPrefix: accountPrefix,
     libraryFolder: libraryFolder,
     onProgress: onProgress,
+    onBatchFound: onBatchFound,
   );
 }
 
@@ -793,6 +807,7 @@ Future<void> _walkOneDrivePage({
   required String accountPrefix,
   required LibraryFolder libraryFolder,
   _ProgressCallback? onProgress,
+  _ItemsFoundCallback? onBatchFound,
 }) async {
   final res = await http.get(url, headers: {'Authorization': 'Bearer $token'});
   if (res.statusCode != 200) {
@@ -801,6 +816,8 @@ Future<void> _walkOneDrivePage({
 
   final body = jsonDecode(res.body) as Map<String, dynamic>;
   final values = body['value'] as List<dynamic>? ?? <dynamic>[];
+
+  final pageItems = <MediaItem>[];
 
   for (final raw in values) {
     final m = raw as Map<String, dynamic>;
@@ -820,6 +837,7 @@ Future<void> _walkOneDrivePage({
         accountPrefix: accountPrefix,
         libraryFolder: libraryFolder,
         onProgress: onProgress,
+        onBatchFound: onBatchFound,
       );
       continue;
     }
@@ -845,7 +863,7 @@ Future<void> _walkOneDrivePage({
         ? '$accountPrefix:${currentPath.toLowerCase()}'
         : null;
 
-    out.add(MediaItem(
+    final item = MediaItem(
       id: 'onedrive_${libraryFolder.accountId}_$id',
       filePath: accountScopedFilePath,
       streamUrl: downloadUrl,
@@ -860,9 +878,17 @@ Future<void> _walkOneDrivePage({
       episode: parsed.episode,
       isAnime: isAnime,
       showKey: showKey,
-    ));
+    );
+
+    out.add(item);
+    pageItems.add(item);
 
     onProgress?.call(nextPath, out.length);
+  }
+
+  // Realtime update: Ingest items found so far on this page
+  if (pageItems.isNotEmpty && onBatchFound != null) {
+    await onBatchFound(pageItems);
   }
 
   final nextLink = body['@odata.nextLink'] as String?;
@@ -875,6 +901,7 @@ Future<void> _walkOneDrivePage({
       accountPrefix: accountPrefix,
       libraryFolder: libraryFolder,
       onProgress: onProgress,
+      onBatchFound: onBatchFound,
     );
   }
 }
