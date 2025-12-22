@@ -616,7 +616,7 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   MediaItem? findByTmdbId(int tmdbId) {
-    return items.firstWhereOrNull((i) => i.tmdbId == tmdbId);
+    return items.firstWhereOrNull((i) => i.tmdbId == tmdbId && !i.isAdult);
   }
 
   // --- Sync Methods ---
