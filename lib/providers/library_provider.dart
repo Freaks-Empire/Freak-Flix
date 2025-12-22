@@ -772,6 +772,7 @@ class LibraryProvider extends ChangeNotifier {
   }
 }
 
+typedef _ProgressCallback = void Function(String path, int filesFound);
 typedef _ItemsFoundCallback = Future<void> Function(List<MediaItem> items);
 
 Future<void> _walkOneDriveFolder({
