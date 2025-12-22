@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import 'library_provider.dart';
@@ -46,6 +45,4 @@ class PlaybackProvider extends ChangeNotifier {
       library.saveLibrary();
     }
   }
-
-  File? get currentFile => current == null ? null : File(current!.filePath);
 }

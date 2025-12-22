@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+import '../utils/platform/platform.dart';
 import 'dart:async';
 import 'dart:isolate';
 import 'package:file_picker/file_picker.dart';
@@ -317,7 +317,7 @@ class LibraryProvider extends ChangeNotifier {
           allowedExtensions: ['mp4', 'mkv', 'avi', 'mov', 'webm'],
         );
         if (result == null) return;
-        final files = result.paths.whereType<String>().map(File.new).toList();
+        final files = result.paths.whereType<String>().map(PlatformFile.new).toList();
         await _ingestFiles(files, metadata);
       } else {
         final path = await FilePicker.platform.getDirectoryPath();
@@ -345,7 +345,7 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _ingestFiles(List<File> files, MetadataService? metadata) async {
+  Future<void> _ingestFiles(List<PlatformFile> files, MetadataService? metadata) async {
     final newItems = <MediaItem>[];
     for (final f in files) {
       if (_isVideo(f.path)) {
@@ -613,7 +613,7 @@ class LibraryProvider extends ChangeNotifier {
     bool targetSpecificFolder = false;
     String? scanPath;
     
-    if (item.folderPath.isNotEmpty && Directory(item.folderPath).existsSync()) {
+    if (item.folderPath.isNotEmpty && PlatformDirectory(item.folderPath).existsSync()) {
       scanPath = item.folderPath;
       targetSpecificFolder = true;
     }
@@ -901,7 +901,7 @@ class _ScanRequest {
 
 // Top-level function for background isolate
 void _scanDirectoryInIsolate(_ScanRequest request) {
-  final dir = Directory(request.path);
+  final dir = PlatformDirectory(request.path);
   if (!dir.existsSync()) {
     request.sendPort.send(<MediaItem>[]);
     return;
@@ -935,7 +935,7 @@ void _scanDirectoryInIsolate(_ScanRequest request) {
           if (!match) continue;
       }
 
-      if (f is File && _isVideo(f.path)) {
+      if (f is PlatformFile && _isVideo(f.path)) {
         items.add(_parseFile(f));
         count++;
         if (count % 10 == 0) {
@@ -958,7 +958,7 @@ bool _isVideo(String path) {
   return exts.contains(ext);
 }
 
-MediaItem _parseFile(FileSystemEntity f) {
+MediaItem _parseFile(PlatformFileSystemEntity f) {
   final stat = f.statSync();
   final filePath = f.path;
   final fileName = p.basename(filePath);
