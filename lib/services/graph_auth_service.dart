@@ -314,6 +314,8 @@ class GraphAuthService {
     );
 
     if (dcRes.statusCode != 200) {
+      debugPrint('Device code request failed: ${dcRes.statusCode}');
+      debugPrint('Body: ${dcRes.body}');
       throw Exception(
           'Device code request failed: ${dcRes.statusCode} ${dcRes.body}');
     }
@@ -563,6 +565,8 @@ class GraphAuthService {
     );
 
     if (res.statusCode != 200) {
+      debugPrint('Token refresh failed: ${res.statusCode}');
+      debugPrint('Body: ${res.body}');
       throw Exception(
           'Failed to refresh token (${res.statusCode}): ${res.body}');
     }

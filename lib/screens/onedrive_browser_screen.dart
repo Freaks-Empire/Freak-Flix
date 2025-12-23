@@ -97,15 +97,14 @@ class _OneDriveBrowserScreenState extends State<OneDriveBrowserScreen> {
   }
 
   Uri _buildChildrenUrl(String path) {
+    final baseUrl = widget.auth.graphBaseUrl;
     final trimmed = path.trim();
     if (trimmed.isEmpty || trimmed == '/') {
-      return Uri.parse(
-          'https://graph.microsoft.com/v1.0/me/drive/root/children');
+      return Uri.parse('$baseUrl/me/drive/root/children');
     }
     final normalized = trimmed.startsWith('/') ? trimmed.substring(1) : trimmed;
     final encodedPath = Uri.encodeComponent(normalized).replaceAll('%2F', '/');
-    return Uri.parse(
-        'https://graph.microsoft.com/v1.0/me/drive/root:/$encodedPath:/children');
+    return Uri.parse('$baseUrl/me/drive/root:/$encodedPath:/children');
   }
 
   bool _isVideo(String name) {
