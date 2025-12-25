@@ -10,8 +10,8 @@ class MediaGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(12, 100, 12, 12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 5,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 150,
         childAspectRatio: 2 / 3,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,

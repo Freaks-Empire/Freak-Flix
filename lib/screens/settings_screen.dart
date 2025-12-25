@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../models/library_folder.dart';
 
 import '../providers/library_provider.dart';
@@ -44,6 +45,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _graphAuth.loadFromPrefs().then((_) {
       if (mounted) setState(() {});
     });
+    _loadVersion();
+  }
+
+  String _version = '';
+
+  Future<void> _loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() => _version = info.version);
+    }
   }
 
   @override
@@ -97,10 +108,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 90, 16, 16),
+      padding: EdgeInsets.fromLTRB(
+        16, 
+        90, // Top padding for custom nav bar
+        16, 
+        16 + MediaQuery.of(context).padding.bottom + 20 // Bottom safe area
+      ),
       children: [
-
+        // Header
+        Text('Settings', style: Theme.of(context).textTheme.headlineMedium),
         const SizedBox(height: 16),
+
         // Support Section
         Card(
           color: Theme.of(context).colorScheme.tertiaryContainer,
@@ -590,6 +608,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ),
+            ListTile(
+              title: const Text('App Version'),
+              subtitle: Text(_version.isNotEmpty ? _version : 'Loading...'),
+              leading: const Icon(Icons.info_outline),
+            ),
           ],
         ),
       ],
@@ -605,39 +628,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final type = await showDialog<LibraryType>(
       context: context,
       builder: (context) {
-        var localType = _pendingType;
-        return AlertDialog(
-          title: const Text('Select library type'),
-          content: DropdownButton<LibraryType>(
-            value: localType,
-            isExpanded: true,
-            items: [
-              const DropdownMenuItem(
-                  value: LibraryType.movies, child: Text('Movies')),
-              const DropdownMenuItem(value: LibraryType.tv, child: Text('TV Shows')),
-              const DropdownMenuItem(value: LibraryType.anime, child: Text('Anime')),
-              // Only show Adult option if enabled in settings
-              if (Provider.of<SettingsProvider>(context, listen: false).enableAdultContent)
-                const DropdownMenuItem(value: LibraryType.adult, child: Text('Adult Content')),
-              const DropdownMenuItem(value: LibraryType.other, child: Text('Other')),
-            ],
-            onChanged: (val) {
-              if (val != null) {
-                localType = val;
-                setState(() => _pendingType = val);
-              }
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(localType),
-              child: const Text('Continue'),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Select library type'),
+              content: DropdownButtonHideUnderline(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: DropdownButton<LibraryType>(
+                    value: _pendingType,
+                    isExpanded: true,
+                    icon: const Icon(Icons.arrow_drop_down),
+                    borderRadius: BorderRadius.circular(8),
+                    dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    items: [
+                      const DropdownMenuItem(
+                          value: LibraryType.movies, child: Text('Movies')),
+                      const DropdownMenuItem(
+                          value: LibraryType.tv, child: Text('TV Shows')),
+                      const DropdownMenuItem(
+                          value: LibraryType.anime, child: Text('Anime')),
+                      // Only show Adult option if enabled in settings
+                      if (Provider.of<SettingsProvider>(context, listen: false)
+                          .enableAdultContent)
+                        const DropdownMenuItem(
+                            value: LibraryType.adult, child: Text('Adult Content')),
+                      const DropdownMenuItem(
+                          value: LibraryType.other, child: Text('Other')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        setDialogState(() => _pendingType = val);
+                      }
+                    },
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(_pendingType),
+                  child: const Text('Continue'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -666,7 +708,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         await library.addLibraryFolder(folder);
         messenger.showSnackBar(
           SnackBar(
-              content: Text('Added ${_typeLabel(type)}: ${selection.path}')),
+            content: Text('Added ${_typeLabel(type)}: ${selection.path}')),
         );
         await library.scanLibraryFolder(
           auth: _graphAuth,
@@ -704,75 +746,102 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final stats = library.getFolderStats(folder);
     final sizeStr = _formatSize(stats.sizeBytes);
     
-    return ListTile(
-      dense: true,
-      leading: _typeIcon(folder.type),
-      title: Text(folder.path),
-      subtitle: Text(
-          '${_typeLabel(folder.type)} • ${stats.count} files • $sizeStr'),
-      trailing: Wrap(
-        spacing: 8,
-        children: [
-          TextButton.icon(
-            icon: const Icon(Icons.autorenew_rounded, size: 18),
-            label: const Text('Rescan library'),
-            onPressed: library.isLoading
-                ? null
-                : () async {
-                    await library.rescanOneDriveFolder(
-                      auth: _graphAuth,
-                      folder: folder,
-                      metadata: metadata,
-                    );
-
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                              'Rescanned ${_typeLabel(folder.type)} library'),
-                          behavior: SnackBarBehavior.floating,
-                          duration: const Duration(seconds: 2),
+    return Card(
+      elevation: 0,
+      color: Theme.of(context).colorScheme.surfaceContainer,
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                _typeIcon(folder.type),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _typeLabel(folder.type).toUpperCase(),
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.0,
                         ),
-                      );
-                    }
+                      ),
+                      Text(
+                        folder.path.isEmpty ? '/' : folder.path,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: 'Remove folder',
+                  onPressed: () async {
+                    await library.removeLibraryFolder(folder);
+                    if (mounted) setState(() {});
                   },
-          ),
-          const SizedBox(width: 4),
-          TextButton.icon(
-            icon: const Icon(Icons.refresh_rounded, size: 18),
-            label: const Text('Refetch metadata'),
-            onPressed: library.isLoading
-                ? null
-                : () async {
-                    final scopedRoot =
-                        'onedrive:${folder.accountId}${folder.path.isEmpty ? '/' : folder.path}';
-                    await library.refetchMetadataForFolder(
-                      scopedRoot,
-                      _typeLabel(folder.type),
-                      metadata,
-                    );
-
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                              'Refreshed ${_typeLabel(folder.type)} metadata'),
-                          behavior: SnackBarBehavior.floating,
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  },
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Remove folder',
-            onPressed: () async {
-              await library.removeLibraryFolder(folder);
-              if (mounted) setState(() {});
-            },
-          ),
-        ],
+                ),
+              ],
+            ),
+            const Divider(),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${stats.count} files', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text(sizeStr, style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    TextButton.icon(
+                      icon: const Icon(Icons.autorenew_rounded, size: 16),
+                      label: const Text('Rescan'),
+                      onPressed: library.isLoading
+                          ? null
+                          : () async {
+                              await library.rescanOneDriveFolder(
+                                auth: _graphAuth,
+                                folder: folder,
+                                metadata: metadata,
+                              );
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Rescanned ${_typeLabel(folder.type)}')),
+                                );
+                              }
+                            },
+                    ),
+                    TextButton.icon(
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: const Text('Refetch'),
+                      onPressed: library.isLoading
+                          ? null
+                          : () async {
+                              final scopedRoot = 'onedrive:${folder.accountId}${folder.path.isEmpty ? '/' : folder.path}';
+                              await library.refetchMetadataForFolder(scopedRoot, _typeLabel(folder.type), metadata);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Refreshed ${_typeLabel(folder.type)} metadata')),
+                                );
+                              }
+                            },
+                    ),
+                  ],
+                )
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

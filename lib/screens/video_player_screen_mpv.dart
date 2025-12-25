@@ -41,42 +41,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _playCurrent();
   }
 
+  bool _isLoadingLink = false;
+
   Future<void> _playCurrent() async {
+    setState(() => _isLoadingLink = true);
     String path = _currentItem.streamUrl ?? _currentItem.filePath;
     
     // Check if this is a OneDrive item that needs a fresh link
     if (_currentItem.streamUrl != null && _currentItem.id.startsWith('onedrive:')) {
-       // Format usually: onedrive:{accountId}:{itemId} or similar
-       // But wait, the ID from scan is just the item ID? 
-       // In LibraryProvider: prefix = 'onedrive:${folder.accountId}'
-       // _walkOneDriveFolder sets valid MediaItem. 
-       // We need to parse accountId and itemId.
-       // The 'id' field is usually the Graph Item ID.
-       // But we need the accountId to know WHICH token to use.
-       // Let's check how we built MediaItem in LibraryProvider.
-       // It seems we put 'onedrive:{accountId}' as prefix? 
-       // Actually LibraryProvider _walkOneDriveFolder doesn't explicitly modify ID to include accountId.
-       // It relies on `folder.accountId`.
-       // Wait, if we sync to another device, we just have list of items.
-       // We need to know which account it belongs to.
-       // MediaItem has `folderPath`. 
-       // LibraryProvider: final prefix = 'onedrive:${folder.accountId}';
-       // check `_walkOneDriveFolder`... it puts `out.add(...)`.
-       // Inspect `_parseFile` or `_ingestItems`. 
-       // Actually `_walkOneDriveFolder` doesn't change the ID from Graph.
-       // BUT `folderPath` logic: `final rootPath = 'onedrive:${folder.accountId}...`
-       // So we can extract accountId from `folderPath`.
-       
        try {
-          // folderPath format: onedrive:{accountId}/path/to/folder
           if (_currentItem.folderPath.startsWith('onedrive:')) {
              final pathAfterPrefix = _currentItem.folderPath.substring('onedrive:'.length);
-             // pathAfterPrefix is now "{accountId}/path/to/folder"
-             // Split by / to isolate accountId
              final accountId = pathAfterPrefix.split('/').first;
              
-             // id format: onedrive_{accountId}_{itemId}
-             // We need to strip "onedrive_{accountId}_" to get the raw Graph ID
              final idPrefix = 'onedrive_${accountId}_';
              if (_currentItem.id.startsWith(idPrefix)) {
                 final realItemId = _currentItem.id.substring(idPrefix.length);
@@ -86,14 +63,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 if (fresh != null) {
                    path = fresh;
                    debugPrint('Got fresh URL: $fresh');
+                } else {
+                   throw Exception('Could not refresh download URL');
                 }
              }
           }
        } catch (e) {
           debugPrint('Error refreshing URL: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error refreshing link: $e'), backgroundColor: Colors.red),
+            );
+          }
        }
     }
 
+    setState(() => _isLoadingLink = false);
     await player.open(Media(path));
   }
   
@@ -153,6 +138,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             fit: _fit,
             onFitChanged: (v) => setState(() => _fit = v),
           ),
+          if (_isLoadingLink)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Refreshing link...', style: TextStyle(color: Colors.white)),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );

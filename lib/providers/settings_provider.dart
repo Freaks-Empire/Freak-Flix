@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/persistence_service.dart';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -29,24 +30,43 @@ class SettingsProvider extends ChangeNotifier {
   bool get isTestingTmdbKey => _isTestingTmdbKey;
   bool get hasTmdbKey => tmdbApiKey.trim().isNotEmpty;
 
+  static const _storageFile = 'settings.json';
+
   Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_key);
-    
-    if (raw == null) {
-      // First run or no saved settings: try env vars
+    debugPrint('SettingsProvider: Loading settings from file...');
+    try {
+      final jsonStr = await PersistenceService.instance.loadString(_storageFile);
+      if (jsonStr == null) {
+        debugPrint('SettingsProvider: No settings file. Checking legacy prefs...');
+        await _migrateFromPrefs();
+        // Even if migration happens, we fall through to defaults if needed or return
+        // Ideally _migrateFromPrefs sets values.
+        
+        // If still defaults (i.e. first run ever), check env
+        if (tmdbApiKey.isEmpty) {
+             tmdbApiKey = dotenv.env['TMDB_API_KEY'] ?? 
+                   const String.fromEnvironment('TMDB_API_KEY');
+        }
+        return;
+      }
+
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      _loadFromMap(data);
+       debugPrint('SettingsProvider: Settings loaded from file.');
+    } catch (e) {
+      debugPrint('SettingsProvider: Error loading settings: $e');
+      // basic fallback
       tmdbApiKey = dotenv.env['TMDB_API_KEY'] ?? 
                    const String.fromEnvironment('TMDB_API_KEY');
-      return;
     }
+  }
 
-    final data = jsonDecode(raw) as Map<String, dynamic>;
+  void _loadFromMap(Map<String, dynamic> data) {
     isDarkMode = data['isDarkMode'] as bool? ?? true;
     preferAniListForAnime = data['preferAniListForAnime'] as bool? ?? true;
     autoFetchAfterScan = data['autoFetchAfterScan'] as bool? ?? true;
     lastScannedFolder = data['lastScannedFolder'] as String?;
     
-    // Load saved key, fallback to env if empty
     String? savedKey = data['tmdbApiKey'] as String?;
     if (savedKey == null || savedKey.trim().isEmpty) {
       savedKey = dotenv.env['TMDB_API_KEY'] ?? 
@@ -63,15 +83,26 @@ class SettingsProvider extends ChangeNotifier {
 
     enableAdultContent = data['enableAdultContent'] as bool? ?? false;
     stashApiKey = data['stashApiKey'] as String? ?? '';
+  }
+
+  Future<void> _migrateFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
     
-    notifyListeners();
+    if (raw == null) return;
+    
+    try {
+       final data = jsonDecode(raw) as Map<String, dynamic>;
+       _loadFromMap(data);
+       await save();
+       debugPrint('SettingsProvider: Migrated settings from SharedPreferences.');
+    } catch (e) {
+       debugPrint('SettingsProvider: Migration failed: $e');
+    }
   }
 
   Future<void> save() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _key,
-      jsonEncode({
+    final data = {
         'isDarkMode': isDarkMode,
         'preferAniListForAnime': preferAniListForAnime,
         'autoFetchAfterScan': autoFetchAfterScan,
@@ -80,8 +111,8 @@ class SettingsProvider extends ChangeNotifier {
         _tmdbStatusKey: tmdbStatus.index,
         'enableAdultContent': enableAdultContent,
         'stashApiKey': stashApiKey,
-      }),
-    );
+    };
+    await PersistenceService.instance.saveString(_storageFile, jsonEncode(data));
   }
 
   Future<void> toggleDarkMode(bool value) async {

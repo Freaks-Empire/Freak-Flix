@@ -1,0 +1,19 @@
+name = "freak-flix-backend"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "freak-flix-db"
+database_id = "837ec582-de0a-494b-ac43-fd126e3457b5"
+
+# Queues removed (Free Plan doesn't support them)
+# [[queues.consumers]]
+# queue = "library-scan-queue"
+# max_batch_size = 1
+# max_batch_timeout = 30
+
+# [[queues.producers]]
+# queue = "library-scan-queue"
+# binding = "SCAN_QUEUE"

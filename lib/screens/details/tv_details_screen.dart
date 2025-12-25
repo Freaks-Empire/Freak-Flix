@@ -87,6 +87,8 @@ class _TvDetailsScreenState extends State<TvDetailsScreen> {
        if (_current.isAnime && _current.anilistId != null && i.anilistId != null) {
          return i.anilistId == _current.anilistId;
        }
+       // Ensure strictly matching type (TV/Anime) to avoid Movie ID collisions
+       if (i.type != MediaType.tv && !i.isAnime) return false;
        return i.tmdbId == _current.tmdbId;
     }).toList();
 
@@ -198,7 +200,9 @@ class _TvDetailsScreenState extends State<TvDetailsScreen> {
                         
                         // Overview
                         Text(
-                          _current.overview ?? '',
+                          (_current.overview ?? '')
+                              .replaceAll(RegExp(r'<br\s*/?>'), '\n')
+                              .replaceAll(RegExp(r'<[^>]*>'), ''),
                           style: theme.textTheme.bodyLarge?.copyWith(
                             color: Colors.white70,
                             height: 1.5,
@@ -289,7 +293,8 @@ class _TvDetailsScreenState extends State<TvDetailsScreen> {
                         (ctx, i) {
                           final ep = _episodes[i];
                           // Check availability
-                          final isAvailable = _current.episodes.any(
+                          // Check availability using the fresh local items list
+                          final isAvailable = _localEpisodes.any(
                             (e) => e.season == ep.seasonNumber && e.episode == ep.episodeNumber
                           );
                           

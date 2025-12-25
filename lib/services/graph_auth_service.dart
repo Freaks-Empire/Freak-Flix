@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'persistence_service.dart';
 
 class NotInitializedError implements Exception {
   final String message;
@@ -119,11 +120,10 @@ class GraphAuthService {
 
   /// Returns the base URL for Graph API calls (e.g. https://graph.microsoft.com/v1.0 or /api/graph/v1.0 on web)
   String get graphBaseUrl {
-    if (kIsWeb) {
-      // Use local proxy defined in netlify.toml
-      return '/api/graph/v1.0';
-    }
-    return 'https://graph.microsoft.com/v1.0';
+    // Advanced Backend: All traffic currently routed through our Cloudflare proxy
+    // to handle CORS (on web) and allow for centralized logging/interception.
+    // For mobile, we might prefer direct connections for speed, but for migration consistency:
+    return '${dotenv.get('BACKEND_URL', fallback: 'http://localhost:8787')}/microsoft/proxy';
   }
 
   void configureFromEnv() {
@@ -149,22 +149,13 @@ class GraphAuthService {
     _tenant = tenant;
     _configError = null; // Success
     
-    if (kIsWeb) {
-      // Use local proxy to avoid CORS on web
-      // Configured in netlify.toml: /api/ms_auth/* -> https://login.microsoftonline.com/:splat
-      // Note: We use the same path structure.
-      final baseUrl = Uri.base.origin; // e.g. https://freak-flix.netlify.app
-      // Construct absolute URL to the proxy (optional, relative path usually works with http package but safer to be explicit or just relative)
-      // Actually http package on web supports relative URIs but let's use the path directly.
-      const proxyPrefix = '/api/ms_auth';
-      _deviceCodeEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/devicecode');
-      _tokenEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/token');
-    } else {
-      _deviceCodeEndpoint = Uri.parse(
-          'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/devicecode');
-      _tokenEndpoint = Uri.parse(
-          'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/token');
-    }
+    // Configure Endpoints using the new Backend Proxy
+    final backendUrl = dotenv.get('BACKEND_URL', fallback: 'http://localhost:8787');
+    final proxyPrefix = '$backendUrl/microsoft/proxy';
+    
+    // Microsoft Graph endpoints:
+    _deviceCodeEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/devicecode');
+    _tokenEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/token');
   }
 
   void _ensureConfigured() {
@@ -215,41 +206,75 @@ class GraphAuthService {
     await _saveAccounts();
   }
 
-  /// Load saved token and user from SharedPreferences.
+  static const _storageFile = 'graph_auth.json';
+
+  /// Load saved token and user from PersistenceService.
   Future<void> loadFromPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    _activeAccountId = prefs.getString(_activeAccountIdKey);
-    final raw = prefs.getString(_accountsKey);
-    if (raw == null) {
-      _accounts = [];
-      return;
-    }
+    debugPrint('GraphAuthService: Loading from file storage...');
     try {
-      final list = (jsonDecode(raw) as List<dynamic>)
-          .map((e) => GraphAccount.fromJson(e as Map<String, dynamic>))
-          .toList();
-      _accounts = list;
-      if (_activeAccountId != null &&
-          !_accounts.any((a) => a.id == _activeAccountId)) {
-        _activeAccountId = _accounts.isNotEmpty ? _accounts.first.id : null;
+      final jsonStr = await PersistenceService.instance.loadString(_storageFile);
+      
+      if (jsonStr == null) {
+        // Fallback: Try SharedPreferences for migration
+         debugPrint('GraphAuthService: No file found. Checking legacy SharedPreferences...');
+         await _migrateFromPrefs();
+         return;
       }
-    } catch (_) {
+
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      
+      if (data['accounts'] != null) {
+        final list = (data['accounts'] as List<dynamic>)
+            .map((e) => GraphAccount.fromJson(e as Map<String, dynamic>))
+            .toList();
+        _accounts = list;
+      }
+      
+      _activeAccountId = data['activeAccountId'] as String?;
+      
+      if (_activeAccountId != null && !_accounts.any((a) => a.id == _activeAccountId)) {
+         _activeAccountId = null;
+      }
+       debugPrint('GraphAuthService: Successfully loaded ${_accounts.length} accounts from file.');
+
+    } catch (e, stack) {
+      debugPrint('GraphAuthService: ERROR loading accounts from file: $e\n$stack');
       _accounts = [];
       _activeAccountId = null;
     }
   }
 
-  Future<void> _saveAccounts() async {
+  Future<void> _migrateFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _accountsKey,
-      jsonEncode(_accounts.map((a) => a.toJson()).toList()),
-    );
-    if (_activeAccountId != null) {
-      await prefs.setString(_activeAccountIdKey, _activeAccountId!);
-    } else {
-      await prefs.remove(_activeAccountIdKey);
+    final raw = prefs.getString(_accountsKey);
+    final activeId = prefs.getString(_activeAccountIdKey);
+    
+    if (raw == null) {
+       debugPrint('GraphAuthService: No legacy accounts found.');
+       return;
     }
+    
+    try {
+      final list = (jsonDecode(raw) as List<dynamic>)
+          .map((e) => GraphAccount.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _accounts = list;
+      _activeAccountId = activeId;
+      
+      // Save to new storage
+      await _saveAccounts();
+      debugPrint('GraphAuthService: Migrated ${_accounts.length} accounts from SharedPreferences.');
+    } catch (e) {
+      debugPrint('GraphAuthService: Migration failed: $e');
+    }
+  }
+
+  Future<void> _saveAccounts() async {
+    final data = {
+      'accounts': _accounts.map((a) => a.toJson()).toList(),
+      'activeAccountId': _activeAccountId,
+    };
+    await PersistenceService.instance.saveString(_storageFile, jsonEncode(data));
     onStateChanged?.call();
   }
 
