@@ -20,6 +20,16 @@ class MetadataService {
   MetadataService(this.settings, this.tmdbService);
 
   Future<MediaItem> enrich(MediaItem item) async {
+    final parsed = FilenameParser.parse(item.fileName);
+    var working = item.copyWith(
+      title: parsed.seriesTitle,
+      year: item.year ?? parsed.year,
+      season: item.season ?? parsed.season ?? (parsed.episode != null ? 1 : null),
+      episode: item.episode ?? parsed.episode,
+      type: _inferType(item, parsed),
+      showKey: item.showKey ?? _seriesKey(parsed.seriesTitle, item.year ?? parsed.year, null),
+    );
+
     // 1. Strict Rules Check
     
     // Rule A: Adult Content -> StashDB ONLY
