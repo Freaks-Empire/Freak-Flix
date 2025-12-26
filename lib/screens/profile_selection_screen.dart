@@ -156,6 +156,7 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
       MaterialPageRoute(builder: (_) => ManageProfileScreen(profile: profile)),
     );
   }
+}
 
 class _PinDialog extends StatefulWidget {
   final String correctPin;
@@ -220,5 +221,4 @@ class _PinDialogState extends State<_PinDialog> {
       ],
     );
   }
-}
 }

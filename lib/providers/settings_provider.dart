@@ -74,7 +74,6 @@ class SettingsProvider extends ChangeNotifier {
     isDarkMode = data['isDarkMode'] as bool? ?? true;
     preferAniListForAnime = data['preferAniListForAnime'] as bool? ?? true;
     autoFetchAfterScan = data['autoFetchAfterScan'] as bool? ?? true;
-    autoFetchAfterScan = data['autoFetchAfterScan'] as bool? ?? true;
     lastScannedFolder = data['lastScannedFolder'] as String?;
     _hasMigratedProfiles = data['migrated_profiles'] as bool? ?? false;
     
@@ -121,11 +120,8 @@ class SettingsProvider extends ChangeNotifier {
         'tmdbApiKey': tmdbApiKey,
         _tmdbStatusKey: tmdbStatus.index,
         'enableAdultContent': enableAdultContent,
-        'enableAdultContent': enableAdultContent,
         'stashApiKey': stashApiKey,
         'migrated_profiles': _hasMigratedProfiles,
-    };
-        'migrated_profiles': _hasMigratedProfiles, // Save flag
     };
     await PersistenceService.instance.saveString(_storageFile, jsonEncode(data));
   }

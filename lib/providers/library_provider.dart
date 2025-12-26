@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/library_folder.dart';
+import '../models/user_profile.dart'; // Import for UserProfile and UserMediaData
 import '../models/media_item.dart';
 import '../services/graph_auth_service.dart' as graph_auth;
 import '../services/persistence_service.dart';
