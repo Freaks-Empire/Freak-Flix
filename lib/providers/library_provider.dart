@@ -667,7 +667,7 @@ class LibraryProvider extends ChangeNotifier {
       
       // Dispatch to Cloudflare Worker
       await ApiService.instance.triggerScan(
-        folderId: folder.providerId.isNotEmpty ? folder.providerId : folder.id, // Ensure we use the correct ID (provider_id vs local UUID) -> LibraryFolder needs update? 
+        folderId: folder.id, 
         // Wait, LibraryFolder definition: id is local UUID usually, unless we stored provider ID there. 
         // In previous logic: folder.id was used as folderId.
         accessToken: token,

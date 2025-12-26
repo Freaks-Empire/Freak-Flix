@@ -97,8 +97,7 @@ class _ManageProfileScreenState extends State<ManageProfileScreen> {
                 ),
               ],
             ),
-              ],
-            ),
+
             const SizedBox(height: 16),
             TextField(
               controller: _pinController,
