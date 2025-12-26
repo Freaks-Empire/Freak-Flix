@@ -326,11 +326,50 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                   ],
 
                   // 2. Recommendations / Related
-                  if (_details?.recommendations.isNotEmpty ?? false) ...[
-                    _SectionHeader(title: 'Related Movies'),
+                  // Calculate local related items based on tags (genres)
+                  final libraryItems = library.items;
+                  final currentTags = _current.genres.toSet();
+                  
+                  List<MediaItem> relatedItems = [];
+                  if (currentTags.isNotEmpty) {
+                    relatedItems = libraryItems
+                        .where((i) => i.id != _current.id && i.type == _current.type)
+                        .map((item) {
+                          // Calculate score: number of matching tags
+                          int score = item.genres.where((g) => currentTags.contains(g)).length;
+                          return MapEntry(item, score);
+                        })
+                        .where((e) => e.value > 0) // Must share at least one tag
+                        .sorted((a, b) => b.value.compareTo(a.value)) // Sort by score descending
+                        .map((e) => e.key)
+                        .take(15)
+                        .toList();
+                  }
+
+                  // Determine which list to show:
+                  // Prioritize local related items if we found a decent amount (arbitrary > 0 for now to favor local content)
+                  // Otherwise fall back to TMDB recommendations
+                  final hasLocalRelated = relatedItems.isNotEmpty;
+                  final showLocalRelated = hasLocalRelated; // Logic can be improved (e.g. only if > 3 items)
+
+                  if (showLocalRelated) ...[
+                     _SectionHeader(title: _current.isAdult ? 'Related Scenes' : 'Related Movies'),
+                     const SizedBox(height: 16),
+                     SizedBox(
+                      height: 220,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: relatedItems.length,
+                        separatorBuilder: (_,__) => const SizedBox(width: 12),
+                        itemBuilder: (ctx, i) => DiscoverCard(item: relatedItems[i]),
+                      ),
+                    ),
+                    sectionSpacer,
+                  ] else if (_details?.recommendations.isNotEmpty ?? false) ...[
+                    _SectionHeader(title: 'You may like'),
                     const SizedBox(height: 16),
                     SizedBox(
-                      height: 220, // Adjusted height
+                      height: 220,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: _details!.recommendations.length,
