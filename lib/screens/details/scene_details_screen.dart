@@ -297,7 +297,7 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                                 scrollDirection: Axis.horizontal,
                                 itemCount: relatedItems.length,
                                 separatorBuilder: (_,__) => const SizedBox(width: 12),
-                                itemBuilder: (ctx, i) => DiscoverCard(item: relatedItems[i]),
+                                itemBuilder: (ctx, i) => _SceneCard(item: relatedItems[i]),
                               ),
                             ),
                             const SizedBox(height: 32),
@@ -371,6 +371,81 @@ class _MetaTag extends StatelessWidget {
   }
 }
 
+class _SceneCard extends StatelessWidget {
+  final MediaItem item;
+  const _SceneCard({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+      final theme = Theme.of(context);
+      return GestureDetector(
+        onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (ctx) => SceneDetailsScreen(item: item),
+              ),
+            );
+        },
+        child: SizedBox(
+          width: 200, 
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+               Expanded(
+                 child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.network(
+                        item.posterUrl ?? item.backdropUrl ?? '',
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: Colors.grey[900],
+                          child: const Icon(Icons.movie, size: 40),
+                        ),
+                      ),
+                      if (item.runtimeMinutes != null)
+                      Positioned(
+                        bottom: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.7),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            _formatDuration(item.runtimeMinutes!),
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                 ),
+               ),
+               const SizedBox(height: 8),
+               Text(
+                 item.title ?? item.fileName,
+                 maxLines: 2,
+                 overflow: TextOverflow.ellipsis,
+                 style: theme.textTheme.labelLarge,
+               ),
+            ],
+          ),
+        ),
+      );
+  }
+
+  String _formatDuration(int minutes) {
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    if (h > 0) return '${h}h ${m}m';
+    return '${m}m';
+  }
+}
+
 class _DetailsSection extends StatelessWidget {
   final MediaItem item;
   const _DetailsSection({required this.item});
@@ -402,10 +477,10 @@ class _DetailsSection extends StatelessWidget {
     if (item.genres.isNotEmpty) data['Tags'] = item.genres.take(3).join(', '); // Show top tags
     
     // Parse Studio
-    if (item.overview.startsWith('Studio: ')) {
-      final endLine = item.overview.indexOf('\n');
+    if (item.overview != null && item.overview!.startsWith('Studio: ')) {
+      final endLine = item.overview!.indexOf('\n');
       if (endLine != -1) {
-        data['Studio'] = item.overview.substring(8, endLine).trim();
+        data['Studio'] = item.overview!.substring(8, endLine).trim();
       }
     }
 

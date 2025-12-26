@@ -254,10 +254,8 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
 
                   const SizedBox(height: 64),
                   
-                  // Cast Selection Logic
-                  final displayCast = (_details?.cast ?? []).isNotEmpty ? _details!.cast : _current.cast;
+                  // Cast Selection Logic (Defined at top)
 
-                  const sectionSpacer = SizedBox(height: 32);
 
                   // 1. Actors Section
                   if (displayCast.isNotEmpty) ...[
