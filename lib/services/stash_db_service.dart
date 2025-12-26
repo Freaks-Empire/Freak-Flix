@@ -40,6 +40,12 @@ class StashDbService {
           images {
             url
           }
+          paths {
+            screenshot
+          }
+          files {
+            duration
+          }
           studio {
             name
           }
@@ -74,6 +80,12 @@ class StashDbService {
           images {
             url
           }
+          paths {
+            screenshot
+          }
+          files {
+            duration
+          }
           studio {
             name
           }
@@ -100,6 +112,7 @@ class StashDbService {
           title
           details
           date
+          duration
           tags {
             name
           }
@@ -137,6 +150,7 @@ class StashDbService {
           title
           details
           date
+          duration
           tags {
             name
           }
@@ -351,6 +365,36 @@ class StashDbService {
     // StashDB dates are YYYY-MM-DD
     final date = DateTime.tryParse(scene['date'] ?? '');
 
+    // Extract Backdrop (Priority: paths.screenshot -> paths.preview -> poster)
+    String? backdrop;
+    final paths = scene['paths'] as Map<String, dynamic>?;
+    if (paths != null) {
+      if (paths['screenshot'] != null && (paths['screenshot'] as String).isNotEmpty) {
+        backdrop = paths['screenshot'];
+      }
+    }
+    // Fallback to primary poster if no specific backdrop for now
+    backdrop ??= poster;
+
+    // Extract Duration
+    int? durationSeconds;
+    // 1. Scene direct duration (Box)
+    if (scene['duration'] != null) {
+       final d = scene['duration'];
+       if (d is int) durationSeconds = d;
+       else if (d is String) durationSeconds = int.tryParse(d);
+    }
+    // 2. File duration (Stash App)
+    if (durationSeconds == null || durationSeconds == 0) {
+       final files = scene['files'] as List?;
+       if (files != null && files.isNotEmpty) {
+          final f = files.first;
+          final d = f['duration'];
+          if (d is num) durationSeconds = d.toInt();
+          else if (d is String) durationSeconds = int.tryParse(d);
+       }
+    }
+
     return MediaItem(
       id: "stashdb:${scene['id']}",
       title: scene['title'] ?? originalFileName,
@@ -362,6 +406,8 @@ class StashDbService {
       year: date?.year,
       type: MediaType.movie, 
       posterUrl: poster,
+      backdropUrl: backdrop,
+      runtimeMinutes: (durationSeconds != null) ? (durationSeconds / 60).round() : null,
       overview: overview.trim(),
       cast: cast,
       genres: tags,
