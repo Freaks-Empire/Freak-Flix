@@ -113,7 +113,9 @@ class StashDbService {
             performer {
               id
               name
-              image_path
+              images {
+                url
+              }
             }
           }
         }
@@ -148,7 +150,9 @@ class StashDbService {
             performer {
               id
               name
-              image_path
+              images {
+                url
+              }
             }
           }
         }
@@ -312,11 +316,20 @@ class StashDbService {
     final cast = (scene['performers'] as List?)?.map((p) {
         final perf = p['performer'];
         if (perf == null) return null;
+        
+        // Handle both Stash App (image_path) and Stash Box (images list)
+        String? profileUrl;
+        if (perf['image_path'] != null) {
+          profileUrl = perf['image_path'];
+        } else if (perf['images'] != null && (perf['images'] as List).isNotEmpty) {
+          profileUrl = perf['images'][0]['url'];
+        }
+
         return CastMember(
           id: perf['id'] as String? ?? '',
           name: perf['name'] as String? ?? 'Unknown',
           character: 'Performer', 
-          profileUrl: perf['image_path'] as String?,
+          profileUrl: profileUrl,
           source: CastSource.stashDb,
         );
     }).whereType<CastMember>().toList() ?? [];
