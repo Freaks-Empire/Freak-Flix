@@ -106,6 +106,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
     final size = MediaQuery.of(context).size;
     final playback = context.read<PlaybackProvider>();
     final library = context.read<LibraryProvider>();
+    final displayCast = (_details?.cast.isNotEmpty ?? false) ? _details!.cast : _current.cast;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -241,7 +242,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                   const SizedBox(height: 64),
                   
                   // Cast Selection Logic
-                  final displayCast = (_details?.cast.isNotEmpty ?? false) ? _details!.cast : _current.cast;
+
 
                   // Actors Section
                   if (displayCast.isNotEmpty) ...[
