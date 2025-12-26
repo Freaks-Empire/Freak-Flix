@@ -12,6 +12,12 @@
   package = "@netlify/plugin-functions-install-core"
 
 [[redirects]]
+  from = "/api/stash/*"
+  to = "/.netlify/functions/stash_proxy"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/graph/*"
   to = "https://graph.microsoft.com/:splat"
   status = 200
