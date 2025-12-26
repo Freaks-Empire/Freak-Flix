@@ -976,60 +976,101 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _showImportDialog(BuildContext context) async {
     final controller = TextEditingController();
+    bool isValidating = false;
+    String? errorText;
+
     await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Import Data'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Paste your backup JSON string here. WARNING: This will overwrite existing data.'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              maxLines: 5,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: '{"version": 1, ...}',
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Import Data'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                   const Text(
+                     'Paste your backup JSON string here.\n'
+                     'WARNING: This will overwrite ALL existing data (Settings, Profiles, Library).',
+                     style: TextStyle(fontSize: 13),
+                   ),
+                   const SizedBox(height: 16),
+                   TextField(
+                     controller: controller,
+                     maxLines: 8,
+                     minLines: 3,
+                     style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                     decoration: InputDecoration(
+                       border: const OutlineInputBorder(),
+                       hintText: '{"version": 1, ...}',
+                       errorText: errorText,
+                     ),
+                     onChanged: (_) {
+                       if (errorText != null) {
+                         setDialogState(() => errorText = null);
+                       }
+                     },
+                   ),
+                ],
               ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final json = controller.text.trim();
-              if (json.isEmpty) return;
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: isValidating
+                      ? null
+                      : () async {
+                          final jsonStr = controller.text.trim();
+                          if (jsonStr.isEmpty) return;
+                          
+                          setDialogState(() => isValidating = true);
+                          
+                          // 1. Validate JSON Syntax
+                          try {
+                            jsonDecode(jsonStr);
+                          } catch (e) {
+                             setDialogState(() {
+                               isValidating = false;
+                               errorText = 'Invalid JSON: $e';
+                             });
+                             return;
+                          }
 
-              try {
-                final backupService = DataBackupService(
-                   settings: Provider.of<SettingsProvider>(context, listen: false), 
-                   library: Provider.of<LibraryProvider>(context, listen: false),
-                   profiles: Provider.of<ProfileProvider>(context, listen: false),
-                );
-                await backupService.restoreBackup(json);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Data restored successfully!')),
-                  );
-                }
-              } catch (e) {
-                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Import Failed: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              }
-            },
-            child: const Text('Import'),
-          ),
-        ],
-      ),
+                          // 2. Perform Restore
+                          try {
+                            final backupService = DataBackupService(
+                               settings: Provider.of<SettingsProvider>(context, listen: false), 
+                               library: Provider.of<LibraryProvider>(context, listen: false),
+                               profiles: Provider.of<ProfileProvider>(context, listen: false),
+                            );
+                            
+                            await backupService.restoreBackup(jsonStr);
+                            
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Data restored successfully!')),
+                              );
+                            }
+                          } catch (e) {
+                             setDialogState(() {
+                               isValidating = false;
+                               errorText = 'Restore Failed: $e';
+                             });
+                          }
+                        },
+                  child: isValidating 
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Import'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
