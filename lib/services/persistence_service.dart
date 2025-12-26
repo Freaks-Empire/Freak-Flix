@@ -97,6 +97,8 @@ class PersistenceService {
         bytes = await file.readAsBytes();
       }
       
+      if (bytes == null) return null;
+
       final decompressed = GZipDecoder().decodeBytes(bytes);
       return utf8.decode(decompressed);
     } catch (e) {
