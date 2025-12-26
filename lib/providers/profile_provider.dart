@@ -26,7 +26,6 @@ class ProfileProvider extends ChangeNotifier {
         final List<dynamic> list = jsonDecode(jsonStr);
         profiles = list.map((e) => UserProfile.fromJson(e)).toList();
       } else {
-      } else {
         // First run or empty: Do nothing. Setup wizard will handle creation.
         profiles = []; 
       }
