@@ -120,6 +120,10 @@ class GraphAuthService {
 
   /// Returns the base URL for Graph API calls (e.g. https://graph.microsoft.com/v1.0 or /api/graph/v1.0 on web)
   String get graphBaseUrl {
+    if (kIsWeb) {
+      // Use local proxy defined in netlify.toml
+      return '/api/graph/v1.0';
+    }
     return 'https://graph.microsoft.com/v1.0';
   }
 
@@ -146,10 +150,18 @@ class GraphAuthService {
     _tenant = tenant;
     _configError = null; // Success
     
-    // Microsoft Graph endpoints (Direct):
-    const authBase = 'https://login.microsoftonline.com';
-    _deviceCodeEndpoint = Uri.parse('$authBase/$_tenant/oauth2/v2.0/devicecode');
-    _tokenEndpoint = Uri.parse('$authBase/$_tenant/oauth2/v2.0/token');
+    if (kIsWeb) {
+      // Use local proxy to avoid CORS on web
+      // Configured in netlify.toml: /api/ms_auth/* -> https://login.microsoftonline.com/:splat
+      const proxyPrefix = '/api/ms_auth';
+      _deviceCodeEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/devicecode');
+      _tokenEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/token');
+    } else {
+      _deviceCodeEndpoint = Uri.parse(
+          'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/devicecode');
+      _tokenEndpoint = Uri.parse(
+          'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/token');
+    }
   }
 
   void _ensureConfigured() {
