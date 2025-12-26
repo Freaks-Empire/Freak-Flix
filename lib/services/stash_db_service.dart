@@ -49,11 +49,16 @@ class StashDbService {
 
     // Query to find scene by title
     // Using a broad search first
-    const query = '''
-      query SearchScenes(\$term: String!) {
-        searchScene(input: {
-          term: \$term,
-          limit: 1
+    // Query to find scene by title using FindScenes
+    // Hardcoding value to avoid variable type mismatch (422)
+    // Use GraphQL variables to prevent syntax errors and injection
+    const query = r'''
+      query FindScenes($title: String!) {
+        findScenes(scene_filter: {
+          title: {
+            value: $title
+            modifier: INCLUDES
+          }
         }) {
           scenes {
             id
@@ -81,6 +86,8 @@ class StashDbService {
       }
     ''';
 
+    print('StashDB: Searching for "$cleanTitle"');
+
     try {
       final response = await http.post(
         Uri.parse(_endpoint),
@@ -90,21 +97,33 @@ class StashDbService {
         },
         body: jsonEncode({
           'query': query,
-          'variables': {'term': cleanTitle},
+          'variables': {
+            'title': cleanTitle,
+          },
         }),
       );
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        final scenes = body['data']?['searchScene']?['scenes'] as List?;
+        if (body['errors'] != null) {
+           print('StashDB GraphQL Errors: ${body['errors']}');
+           return null;
+        }
+        final scenes = body['data']?['findScenes']?['scenes'] as List?;
         
         if (scenes != null && scenes.isNotEmpty) {
           final scene = scenes.first;
+           print('StashDB: Found match for $title');
           return _mapSceneToMediaItem(scene, title); // Pass original title/filename
+        } else {
+          print('StashDB: No matches found for $title');
         }
+      } else {
+        print('StashDB Error ${response.statusCode}: ${response.body}');
+        print('Query sent: $query');
       }
     } catch (e) {
-      // ignore error
+      print('StashDB Exception: $e');
     }
     return null;
   }

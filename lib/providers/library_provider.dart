@@ -522,11 +522,15 @@ class LibraryProvider extends ChangeNotifier {
     String label,
     MetadataService metadata,
   ) async {
-    final normalized = folderPath.trim();
+    var normalized = folderPath.trim();
+    if (normalized.endsWith('/')) {
+      normalized = normalized.substring(0, normalized.length - 1);
+    }
 
     final targetItems = items.where((item) {
       final path = item.folderPath.trim();
-      if (path == normalized) return true;
+      // Match exact folder or any subfolder
+      if (path == normalized || path == '$normalized/') return true;
       return path.startsWith('$normalized/');
     }).toList();
 
