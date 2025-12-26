@@ -12,7 +12,7 @@ class DetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (item.isAdult) {
+    if (item.isAdult || item.type == MediaType.scene) {
       return SceneDetailsScreen(item: item);
     }
     if (item.type == MediaType.tv || item.isAnime) {

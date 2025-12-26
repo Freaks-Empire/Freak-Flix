@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'cast_member.dart';
 
-enum MediaType { movie, tv, unknown }
+enum MediaType { movie, tv, scene, unknown }
 
 class EpisodeItem {
   final int? season;
@@ -55,6 +55,8 @@ MediaType mediaTypeFromString(String? value) {
       return MediaType.tv;
     case 'anime':
       return MediaType.tv;
+    case 'scene':
+      return MediaType.scene;
     default:
       return MediaType.unknown;
   }
@@ -66,6 +68,8 @@ String mediaTypeToString(MediaType type) {
       return 'movie';
     case MediaType.tv:
       return 'tv';
+    case MediaType.scene:
+      return 'scene';
     case MediaType.unknown:
       return 'unknown';
   }

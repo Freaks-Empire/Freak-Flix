@@ -35,7 +35,7 @@ class MetadataService {
               posterUrl: stashItem.posterUrl,
               backdropUrl: stashItem.backdropUrl,
               isAdult: true,
-              type: MediaType.movie,
+              type: MediaType.scene,
               genres: stashItem.genres,
               cast: stashItem.cast, 
             );

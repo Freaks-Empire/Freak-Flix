@@ -38,6 +38,7 @@ class TmdbService {
   Future<MediaItem> enrich(MediaItem item) async {
     final key = _key;
     if (key == null) return item;
+    if (item.type == MediaType.scene || item.type == MediaType.unknown) return item;
     if (item.title == null || item.title!.trim().isEmpty) return item;
 
     final searchPath = '/3/search/${item.type == MediaType.tv ? 'tv' : 'movie'}';
@@ -116,6 +117,7 @@ class TmdbService {
   Future<TmdbExtendedDetails?> getExtendedDetails(int tmdbId, MediaType type) async {
     final key = _key;
     if (key == null) return null;
+    if (type == MediaType.scene || type == MediaType.unknown) return null;
 
     // Fetch credits, videos, and recommendations in parallel (append_to_response is cleaner but lets stick to parallel for clarity/control)
     // Actually append_to_response is much better for performance.

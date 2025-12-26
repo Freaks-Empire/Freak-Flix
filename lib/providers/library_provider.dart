@@ -896,7 +896,7 @@ class LibraryProvider extends ChangeNotifier {
         for (var i = 0; i < scannedItems.length; i++) {
           final item = scannedItems[i];
           if (libraryType == LibraryType.adult) {
-            scannedItems[i] = item.copyWith(isAdult: true, type: MediaType.movie);
+            scannedItems[i] = item.copyWith(isAdult: true, type: MediaType.scene);
           } else if (libraryType == LibraryType.anime) {
              scannedItems[i] = item.copyWith(isAnime: true);
           }
@@ -1166,7 +1166,7 @@ MediaType _typeForFolder(LibraryFolder folder, bool hasTvHints) {
     case LibraryType.anime:
       return MediaType.tv;
     case LibraryType.adult:
-      return MediaType.movie;
+      return MediaType.scene;
     case LibraryType.other:
       return hasTvHints ? MediaType.tv : MediaType.movie;
   }
