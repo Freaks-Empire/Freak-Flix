@@ -11,7 +11,7 @@ import 'screens/discover_screen.dart';
 import 'screens/settings_screen.dart';
 
 import 'screens/search_screen.dart';
-import 'widgets/navigation_dock.dart';
+import 'widgets/app_sidebar.dart';
 import 'services/tmdb_discover_service.dart';
 
 import 'screens/movies_screen.dart';
@@ -76,86 +76,75 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
               : (profileProvider.activeProfile == null 
                   ? const ProfileSelectionScreen()
                   : Scaffold(
-              extendBodyBehindAppBar: true, // Allow content to go behind
-              body: Stack(
-                children: [
-                   // Main Content
-                   Positioned.fill(
-                     child: PageView(
-                       controller: _pageController,
-                       onPageChanged: (index) => setState(() => _index = index),
-                       children: [
-                         const DiscoverScreen(type: DiscoverType.all),
-                         const MoviesScreen(),
-                         const TvScreen(),
-                         const AnimeScreen(),
-                         if (settings.enableAdultContent) const AdultScreen(),
-                         const SearchScreen(),
-                         const SettingsScreen(),
-                       ],
-                     ),
-                   ),
-                   
-                   // Navigation Dock (Top Center)
-                   Align(
-                     alignment: Alignment.topCenter,
-                     child: SafeArea(
-                       child: NavigationDock(
-                         index: _index,
-                         onTap: (i) {
-                            setState(() => _index = i);
-                            _pageController.animateToPage(
-                              i,
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                            );
-                         },
-                       ),
-                     ),
-                   ),
-
-                   // Scanning Indicator
-                    if (library.isLoading)
-                      Positioned(
-                        top: 24+60, // Push down below dock
-                        left: 24,
-                        right: 24,
-                        child: Center(
-                          child: Material(
-                            elevation: 4,
-                            borderRadius: BorderRadius.circular(20),
-                            color: Colors.grey[900]?.withOpacity(0.95),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const SizedBox(
-                                    height: 16,
-                                    width: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.redAccent),
+                      backgroundColor: Colors.black, // Background for the whole app
+                      body: Row(
+                        children: [
+                          // Sidebar (Desktop/TV style)
+                          AppSidebar(
+                            selectedIndex: _index,
+                            onDestinationSelected: (i) {
+                               setState(() => _index = i);
+                               _pageController.jumpToPage(i); // Jump instead of animate for sidebar nav
+                            },
+                          ),
+                          
+                          // Main Content Area
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                PageView(
+                                 controller: _pageController,
+                                 physics: const NeverScrollableScrollPhysics(), // Disable swipe with sidebar
+                                 children: [
+                                   const DiscoverScreen(type: DiscoverType.all),
+                                   const MoviesScreen(),
+                                   const TvScreen(),
+                                   const AnimeScreen(),
+                                   if (settings.enableAdultContent) const AdultScreen(),
+                                   const SearchScreen(),
+                                   const SettingsScreen(),
+                                 ],
+                               ),
+                                // Scanning Indicator (Floating)
+                                if (library.isLoading)
+                                  Positioned(
+                                    bottom: 24,
+                                    right: 24,
+                                    child: Material(
+                                      elevation: 4,
+                                      borderRadius: BorderRadius.circular(20),
+                                      color: Colors.grey[900]?.withOpacity(0.95),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const SizedBox(
+                                              height: 16,
+                                              width: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor: AlwaysStoppedAnimation<Color>(Colors.redAccent),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Text(
+                                              library.scanningStatus.isNotEmpty
+                                                  ? library.scanningStatus
+                                                  : 'Scanning library...',
+                                              style: const TextStyle(fontSize: 12, color: Colors.white),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    library.scanningStatus.isNotEmpty
-                                        ? library.scanningStatus
-                                        : 'Scanning library...',
-                                    style: const TextStyle(fontSize: 12, color: Colors.white),
-                                  ),
-                                ],
-                              ),
+                              ],
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                ],
-              ),
-            )
-        )
-    );
+                    );
   }
 }
 
