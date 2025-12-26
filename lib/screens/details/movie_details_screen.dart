@@ -255,65 +255,82 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                   const SizedBox(height: 64),
                   
                   // Cast Selection Logic
+                  final displayCast = (_details?.cast ?? []).isNotEmpty ? _details!.cast : _current.cast;
 
+                  const sectionSpacer = SizedBox(height: 32);
 
-                  // Actors Section
+                  // 1. Actors Section
                   if (displayCast.isNotEmpty) ...[
                     _SectionHeader(title: 'Actors'),
+                    const SizedBox(height: 16),
                     SizedBox(
-                      height: 140,
-                      child: ListView.builder(
+                      height: 130,
+                      child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: displayCast.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 16),
                         itemBuilder: (ctx, i) {
                           final actor = displayCast[i];
                           return GestureDetector(
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(builder: (_) => ActorDetailsScreen(actor: actor)),
                             ),
-                            child: Container(
-                              width: 240,
-                              margin: const EdgeInsets.only(right: 12),
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white10,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: actor.profileUrl != null
-                                       ? Image.network(actor.profileUrl!, width: 60, height: 90, fit: BoxFit.cover)
-                                       : Container(width: 60, height: 90, color: Colors.grey, child: const Icon(Icons.person, color: Colors.white54)),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Text(actor.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 2),
-                                        const SizedBox(height: 4),
-                                        Text(actor.character, style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 2),
-                                      ],
+                            child: Column(
+                              children: [
+                                Container(
+                                  width: 80,
+                                  height: 80,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 4, offset: Offset(0, 2))],
+                                    image: DecorationImage(
+                                      image: (actor.profileUrl != null 
+                                          ? NetworkImage(actor.profileUrl!) 
+                                          : const AssetImage('assets/placeholder_person.png')) as ImageProvider, // Fallback asset or icon
+                                      fit: BoxFit.cover,
+                                      onError: (_, __) {}, // Handled by providing a valid provider or let it fail gracefully to color
                                     ),
+                                    color: Colors.grey[800],
                                   ),
-                                ],
-                              ),
+                                  // Fallback layout if image fails/is null
+                                  child: actor.profileUrl == null ? const Icon(Icons.person, color: Colors.white54) : null,
+                                ),
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  width: 100,
+                                  child: Text(
+                                    actor.name,
+                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 100,
+                                  child: Text(
+                                    actor.character,
+                                    style: const TextStyle(color: Colors.white54, fontSize: 10),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
                             ),
                           );
                         },
                       ),
                     ),
-                    const SizedBox(height: 48),
+                    sectionSpacer,
                   ],
 
-                  // Recommendations
+                  // 2. Recommendations / Related
                   if (_details?.recommendations.isNotEmpty ?? false) ...[
-                    _SectionHeader(title: 'You may like'),
+                    _SectionHeader(title: 'Related Movies'),
+                    const SizedBox(height: 16),
                     SizedBox(
-                      height: 280,
+                      height: 220, // Adjusted height
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: _details!.recommendations.length,
@@ -321,7 +338,13 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                         itemBuilder: (ctx, i) => DiscoverCard(item: _details!.recommendations[i]),
                       ),
                     ),
+                    sectionSpacer,
                   ],
+
+                  // 3. Details (Collapsible)
+                  _DetailsSection(item: _current),
+                  
+                  const SizedBox(height: 100), // Bottom padding
                 ],
               ),
             ),
@@ -389,6 +412,79 @@ class _MetaTag extends StatelessWidget {
   }
 }
 
+class _DetailsSection extends StatelessWidget {
+  final MediaItem item;
+  const _DetailsSection({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        title: const Text(
+          'Details',
+          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        iconColor: Colors.white,
+        collapsedIconColor: Colors.white,
+        tilePadding: EdgeInsets.zero,
+        children: [
+          _buildGrid(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGrid(BuildContext context) {
+    // Collect data
+    final data = <String, String>{};
+    
+    if (item.year != null) data['Premiered'] = item.year.toString();
+    if (item.runtimeMinutes != null) data['Runtime'] = '${item.runtimeMinutes}m';
+    if (item.genres.isNotEmpty) data['Genre'] = item.genres.join(', ');
+    
+    // Parse Studio from Overview if needed (hack for StashDB)
+    // "Studio: Name\n\nOverview..."
+    if (item.overview.startsWith('Studio: ')) {
+      final endLine = item.overview.indexOf('\n');
+      if (endLine != -1) {
+        data['Studio'] = item.overview.substring(8, endLine).trim();
+      }
+    }
+    
+    // Default Fallbacks or Placeholders if we wanted to match the screenshot exactly
+    // data['Country'] = 'Unknown';
+    // data['Language'] = 'English';
+
+    return GridView.count(
+      shrinkWrap: true,
+      crossAxisCount: 2,
+      childAspectRatio: 3.5, // Wide and short cells
+      physics: const NeverScrollableScrollPhysics(),
+      children: data.entries.map((e) => _DetailItem(label: e.key, value: e.value)).toList(),
+    );
+  }
+}
+
+class _DetailItem extends StatelessWidget {
+  final String label;
+  final String value;
+  const _DetailItem({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        const SizedBox(height: 2),
+        Text(value, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+      ],
+    );
+  }
+}
+
 class _SectionHeader extends StatelessWidget {
   final String title;
   const _SectionHeader({required this.title});
@@ -397,10 +493,10 @@ class _SectionHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Container(
-        padding: const EdgeInsets.only(left: 8),
-        decoration: const BoxDecoration(
-          border: Border(left: BorderSide(color: Colors.red, width: 4)),
-        ),
+          // Text only style as per images? 
+          // The reference image just has "Actors" text. 
+          // I will make it minimal but keep the existing class for compatibility.
+          // Or update it to match the "clean" reference.
         child: Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
     );
