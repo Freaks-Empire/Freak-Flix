@@ -120,6 +120,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
     }
 
     final displayCast = (_details?.cast.isNotEmpty ?? false) ? _details!.cast : _current.cast;
+    const sectionSpacer = SizedBox(height: 32);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -443,10 +444,10 @@ class _DetailsSection extends StatelessWidget {
     
     // Parse Studio from Overview if needed (hack for StashDB)
     // "Studio: Name\n\nOverview..."
-    if (item.overview.startsWith('Studio: ')) {
-      final endLine = item.overview.indexOf('\n');
+    if (item.overview != null && item.overview!.startsWith('Studio: ')) {
+      final endLine = item.overview!.indexOf('\n');
       if (endLine != -1) {
-        data['Studio'] = item.overview.substring(8, endLine).trim();
+        data['Studio'] = item.overview!.substring(8, endLine).trim();
       }
     }
     
