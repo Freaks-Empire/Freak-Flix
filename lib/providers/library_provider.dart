@@ -559,24 +559,41 @@ class LibraryProvider extends ChangeNotifier {
 
   Future<void> _ingestItems(
       List<MediaItem> newItems, MetadataService? metadata) async {
+    final existingPaths = {for (var i in _allItems) i.filePath};
+    final itemsToEnrich = <MediaItem>[];
+    
+    // Identify items that are actually new to the library
+    for (final item in newItems) {
+      if (!existingPaths.contains(item.filePath)) {
+        itemsToEnrich.add(item);
+      }
+    }
+
     final map = {for (var i in _allItems) i.filePath: i};
     for (final item in newItems) {
+      // If item exists, preserve its ID and user data (handled by Profile user data apply later, 
+      // but we should preserve ID at least if generated from path is stable).
+      // MediaItem IDs are usually hash of filePath, so they should be stable.
+      // But let's trust the new item's data structure, merging if necessary?
+      // Current logic just overwrites. We stick to that.
       map[item.filePath] = item;
     }
     _allItems = map.values.toList()
       ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
     notifyListeners();
 
-    if (settings.autoFetchAfterScan && metadata != null) {
+    if (settings.autoFetchAfterScan && metadata != null && itemsToEnrich.isNotEmpty) {
       // Parallelize metadata enrichment with a concurrency limit
       const batchSize = 5;
-      for (int i = 0; i < _allItems.length; i += batchSize) {
-        final batch = _allItems.skip(i).take(batchSize).toList();
-        _setScanStatus('Fetching metadata: ${batch.first.title} ...');
+      for (int i = 0; i < itemsToEnrich.length; i += batchSize) {
+        final batch = itemsToEnrich.skip(i).take(batchSize).toList();
+        _setScanStatus('Fetching metadata: ${batch.first.title ?? batch.first.fileName} ...');
         final enrichedBatch = await Future.wait(batch.map((item) => metadata.enrich(item)));
+        
         for (int j = 0; j < batch.length; j++) {
-          final idx = _allItems.indexWhere((e) => e.id == batch[j].id);
-          if (idx != -1) _allItems[idx] = enrichedBatch[j];
+          final enriched = enrichedBatch[j];
+          final idx = _allItems.indexWhere((e) => e.filePath == enriched.filePath);
+          if (idx != -1) _allItems[idx] = enriched;
         }
         notifyListeners();
       }
