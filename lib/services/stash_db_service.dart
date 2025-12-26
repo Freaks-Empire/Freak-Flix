@@ -25,7 +25,10 @@ class StashDbService {
           'Content-Type': 'application/json',
           'ApiKey': apiKey,
         },
-        body: jsonEncode({'query': query}),
+        body: jsonEncode({
+          'query': query,
+          'operationName': 'Me',
+        }),
       );
 
       if (response.statusCode == 200) {
@@ -97,6 +100,7 @@ class StashDbService {
         },
         body: jsonEncode({
           'query': query,
+          'operationName': 'FindScenes',
           'variables': {
             'title': cleanTitle,
           },
@@ -238,6 +242,7 @@ class StashDbService {
         },
         body: jsonEncode({
           'query': query,
+          'operationName': 'FindScenes',
           'variables': {'performerId': performerId},
         }),
       );
