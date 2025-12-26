@@ -381,7 +381,7 @@ class StashDbService {
     // 1. Scene direct duration (Box)
     if (scene['duration'] != null) {
        final d = scene['duration'];
-       if (d is int) durationSeconds = d;
+       if (d is num) durationSeconds = d.toInt();
        else if (d is String) durationSeconds = int.tryParse(d);
     }
     // 2. File duration (Stash App)

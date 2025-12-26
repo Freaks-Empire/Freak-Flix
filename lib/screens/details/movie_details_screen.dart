@@ -240,16 +240,19 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
 
                   const SizedBox(height: 64),
                   
+                  // Cast Selection Logic
+                  final displayCast = (_details?.cast.isNotEmpty ?? false) ? _details!.cast : _current.cast;
+
                   // Actors Section
-                  if ((_details?.cast.isNotEmpty ?? false) || _current.cast.isNotEmpty) ...[
+                  if (displayCast.isNotEmpty) ...[
                     _SectionHeader(title: 'Actors'),
                     SizedBox(
                       height: 140,
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
-                        itemCount: (_details?.cast ?? _current.cast).length,
+                        itemCount: displayCast.length,
                         itemBuilder: (ctx, i) {
-                          final actor = (_details?.cast ?? _current.cast)[i];
+                          final actor = displayCast[i];
                           return GestureDetector(
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(builder: (_) => ActorDetailsScreen(actor: actor)),
