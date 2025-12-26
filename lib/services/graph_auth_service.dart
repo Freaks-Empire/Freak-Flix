@@ -120,10 +120,7 @@ class GraphAuthService {
 
   /// Returns the base URL for Graph API calls (e.g. https://graph.microsoft.com/v1.0 or /api/graph/v1.0 on web)
   String get graphBaseUrl {
-    // Advanced Backend: All traffic currently routed through our Cloudflare proxy
-    // to handle CORS (on web) and allow for centralized logging/interception.
-    // For mobile, we might prefer direct connections for speed, but for migration consistency:
-    return '${dotenv.get('BACKEND_URL', fallback: 'http://localhost:8787')}/microsoft/proxy';
+    return 'https://graph.microsoft.com/v1.0';
   }
 
   void configureFromEnv() {
@@ -149,13 +146,10 @@ class GraphAuthService {
     _tenant = tenant;
     _configError = null; // Success
     
-    // Configure Endpoints using the new Backend Proxy
-    final backendUrl = dotenv.get('BACKEND_URL', fallback: 'http://localhost:8787');
-    final proxyPrefix = '$backendUrl/microsoft/proxy';
-    
-    // Microsoft Graph endpoints:
-    _deviceCodeEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/devicecode');
-    _tokenEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/token');
+    // Microsoft Graph endpoints (Direct):
+    const authBase = 'https://login.microsoftonline.com';
+    _deviceCodeEndpoint = Uri.parse('$authBase/$_tenant/oauth2/v2.0/devicecode');
+    _tokenEndpoint = Uri.parse('$authBase/$_tenant/oauth2/v2.0/token');
   }
 
   void _ensureConfigured() {
