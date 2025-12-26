@@ -3,6 +3,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:provider/provider.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' hide Video;
+import 'package:collection/collection.dart';
 
 import '../../models/media_item.dart';
 import '../../models/tmdb_item.dart';
