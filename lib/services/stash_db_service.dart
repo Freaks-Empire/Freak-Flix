@@ -327,9 +327,15 @@ class StashDbService {
     }
 
     // Extract Cast
-    final cast = (scene['performers'] as List?)?.map((p) {
+    final rawPerformers = scene['performers'] as List?;
+    debugPrint('StashDB: Parsing performers. Count: ${rawPerformers?.length}');
+    
+    final cast = rawPerformers?.map((p) {
         final perf = p['performer'];
-        if (perf == null) return null;
+        if (perf == null) {
+          debugPrint('StashDB: Performer object is null');
+          return null;
+        }
         
         // Handle both Stash App (image_path) and Stash Box (images list)
         String? profileUrl;
@@ -347,6 +353,7 @@ class StashDbService {
           source: CastSource.stashDb,
         );
     }).whereType<CastMember>().toList() ?? [];
+    debugPrint('StashDB: Extracted ${cast.length} cast members');
 
     // Extract Tags/Genres
     final tags = (scene['tags'] as List?)

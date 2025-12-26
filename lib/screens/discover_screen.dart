@@ -6,10 +6,6 @@ import '../models/discover_filter.dart';
 import '../services/tmdb_discover_service.dart';
 import '../widgets/discover_filter_sheet.dart';
 import '../widgets/discover_section.dart';
-import '../widgets/hero_featured_card.dart';
-import '../providers/playback_provider.dart';
-import 'video_player_screen.dart';
-import 'details_screen.dart';
 
 class DiscoverScreen extends StatefulWidget {
   final DiscoverType type;
@@ -106,41 +102,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 children: [
-                  // Hero Section (Featured Content)
-                  if (_bundle.trending.isNotEmpty || _bundle.popular.isNotEmpty) ...[
-                      Builder(builder: (context) {
-                        // Pick a random featured item
-                        final featured = (_bundle.trending.isNotEmpty ? _bundle.trending : _bundle.popular).first;
-                        return Column(
-                          children: [
-                            HeroFeaturedCard(
-                              item: featured,
-                              onPlay: () {
-                                 // TODO: Playback logic
-                                 final playback = context.read<PlaybackProvider>(); // Requires import
-                                 if (featured.filePath.isNotEmpty) {
-                                      playback.start(featured);
-                                         Navigator.of(context).push(
-                                           MaterialPageRoute(
-                                             builder: (_) => VideoPlayerScreen(item: featured),
-                                           ),
-                                         );
-                                 } else {
-                                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Media not available locally')));
-                                 }
-                              },
-                              onMoreInfo: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => DetailsScreen(item: featured)),
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 24),
-                          ],
-                        );
-                      }),
-                  ],
-
+                   // Add extra top padding for the dock
+                  const SizedBox(height: 60), 
+                  
                   DiscoverSection(
                     title: 'Trending',
                     items: _bundle.trending,

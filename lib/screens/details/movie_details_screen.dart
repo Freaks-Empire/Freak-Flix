@@ -106,6 +106,18 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
     final size = MediaQuery.of(context).size;
     final playback = context.read<PlaybackProvider>();
     final library = context.read<LibraryProvider>();
+    
+    // Watch for updates to this specific item in the library
+    final libraryItem = context.select<LibraryProvider, MediaItem?>((p) => 
+        p.items.firstWhereOrNull((i) => i.id == widget.item.id)
+    );
+    
+    // Use the latest library item if available, otherwise fall back to local state
+    // We update _current to match libraryItem if it exists and differs
+    if (libraryItem != null && libraryItem != _current) {
+      _current = libraryItem;
+    }
+
     final displayCast = (_details?.cast.isNotEmpty ?? false) ? _details!.cast : _current.cast;
 
     return Scaffold(
