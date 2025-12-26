@@ -22,3 +22,9 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+[dev]
+  command = "flutter run -d web-server --web-port 3000"
+  targetPort = 3000
+  framework = "#custom"
+  autoLaunch = true
