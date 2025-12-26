@@ -155,4 +155,55 @@ class ProfileProvider extends ChangeNotifier {
   UserMediaData? getDataFor(String mediaId) {
     return _userData[mediaId];
   }
+
+  // --- Export/Import ---
+
+  Future<Map<String, dynamic>> exportState() async {
+    // We need to export all profiles AND their individual data files.
+    final profilesJson = profiles.map((p) => p.toJson()).toList();
+    
+    // For each profile, load its data and add to export
+    final allUserData = <String, Map<String, dynamic>>{};
+    
+    for (final p in profiles) {
+      final fileName = 'profile_${p.id}_data.json';
+      final jsonStr = await PersistenceService.instance.loadString(fileName);
+      if (jsonStr != null) {
+        allUserData[p.id] = jsonDecode(jsonStr);
+      } else {
+        allUserData[p.id] = {};
+      }
+    }
+
+    return {
+      'profiles': profilesJson,
+      'userData': allUserData,
+    };
+  }
+
+  Future<void> importAllState(Map<String, dynamic> data) async {
+    if (data['profiles'] != null) {
+      final list = (data['profiles'] as List<dynamic>);
+      profiles = list.map((e) => UserProfile.fromJson(e)).toList();
+      await _saveProfiles();
+    }
+
+    if (data['userData'] != null) {
+      final allUserData = data['userData'] as Map<String, dynamic>;
+      for (final entry in allUserData.entries) {
+        final profileId = entry.key;
+        final userDataMap = entry.value as Map<String, dynamic>; // Raw map
+        // Save directly to file
+        final fileName = 'profile_${profileId}_data.json';
+        await PersistenceService.instance.saveString(fileName, jsonEncode(userDataMap));
+      }
+    }
+    
+    // Refresh active profile if needed
+    if (_activeProfile != null) {
+      // Reload current data
+      await _loadUserData(_activeProfile!.id);
+    }
+    notifyListeners();
+  }
 }

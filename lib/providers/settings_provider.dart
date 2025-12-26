@@ -98,6 +98,27 @@ class SettingsProvider extends ChangeNotifier {
     stashUrl = data['stashUrl'] as String? ?? 'https://stashdb.org/graphql';
   }
 
+  Map<String, dynamic> exportState() {
+    return {
+      'isDarkMode': isDarkMode,
+      'preferAniListForAnime': preferAniListForAnime,
+      'autoFetchAfterScan': autoFetchAfterScan,
+      'lastScannedFolder': lastScannedFolder,
+      'migrated_profiles': _hasMigratedProfiles,
+      'isSetupCompleted': _isSetupCompleted,
+      'tmdbApiKey': tmdbApiKey,
+      'enableAdultContent': enableAdultContent,
+      'stashApiKey': stashApiKey,
+      'stashUrl': stashUrl,
+    };
+  }
+
+  Future<void> importState(Map<String, dynamic> data) async {
+    _loadFromMap(data);
+    await save();
+    notifyListeners();
+  }
+
   Future<void> _migrateFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);

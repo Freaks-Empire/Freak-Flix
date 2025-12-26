@@ -14,10 +14,12 @@ import '../providers/profile_provider.dart';
 import '../models/user_profile.dart';
 
 import '../services/graph_auth_service.dart';
-import '../services/metadata_service.dart';
 import '../services/tmdb_service.dart';
 import '../services/stash_db_service.dart';
+import '../services/data_backup_service.dart'; // NEW
 import 'onedrive_folder_picker.dart';
+
+import 'package:file_picker/file_picker.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -670,6 +672,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
         ),
+
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            const Icon(Icons.dataset, size: 20),
+            const SizedBox(width: 8),
+            Text('Data Management', style: Theme.of(context).textTheme.titleMedium),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                title: const Text('Export Data'),
+                subtitle: const Text('Copy backup JSON to clipboard'),
+                leading: const Icon(Icons.copy),
+                onTap: () async {
+                  final backupService = DataBackupService(
+                    settings: settings,
+                    library: Provider.of<LibraryProvider>(context, listen: false),
+                    profiles: Provider.of<ProfileProvider>(context, listen: false),
+                  );
+                  final json = await backupService.createBackup();
+                  await Clipboard.setData(ClipboardData(text: json));
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Backup copied to clipboard!')),
+                    );
+                  }
+                },
+              ),
+              const Divider(),
+              ListTile(
+                title: const Text('Import Data'),
+                subtitle: const Text('Restore from backup JSON'),
+                leading: const Icon(Icons.paste),
+                onTap: () => _showImportDialog(context),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 48), // Bottom padding
       ],
     );
   }
@@ -926,5 +971,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
       i++;
     }
     return '${size.toStringAsFixed(1)} ${suffixes[i]}';
+  }
+
+  Future<void> _showImportDialog(BuildContext context) async {
+    final controller = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import Data'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Paste your backup JSON string here. WARNING: This will overwrite existing data.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: '{"version": 1, ...}',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final json = controller.text.trim();
+              if (json.isEmpty) return;
+
+              try {
+                final backupService = DataBackupService(
+                   settings: Provider.of<SettingsProvider>(context, listen: false), 
+                   library: Provider.of<LibraryProvider>(context, listen: false),
+                   profiles: Provider.of<ProfileProvider>(context, listen: false),
+                );
+                await backupService.restoreBackup(json);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Data restored successfully!')),
+                  );
+                }
+              } catch (e) {
+                 if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Import Failed: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            child: const Text('Import'),
+          ),
+        ],
+      ),
+    );
   }
 }
