@@ -26,15 +26,9 @@ class ProfileProvider extends ChangeNotifier {
         final List<dynamic> list = jsonDecode(jsonStr);
         profiles = list.map((e) => UserProfile.fromJson(e)).toList();
       } else {
-        // First run: Create default profile
-        final defaultProfile = const UserProfile(
-          id: 'default',
-          name: 'Default',
-          avatarId: 'assets/avatars/default.png', 
-          colorValue: 0xFF2196F3,
-        );
-        profiles = [defaultProfile];
-        await _saveProfiles();
+      } else {
+        // First run or empty: Do nothing. Setup wizard will handle creation.
+        profiles = []; 
       }
     } catch (e) {
       debugPrint('ProfileProvider: Error loading profiles: $e');

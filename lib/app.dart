@@ -5,6 +5,7 @@ import 'providers/settings_provider.dart';
 import 'providers/library_provider.dart';
 import 'providers/profile_provider.dart'; // Import
 import 'screens/profile_selection_screen.dart'; // Import
+import 'screens/setup_screen.dart';
 
 import 'screens/discover_screen.dart';
 import 'screens/settings_screen.dart';
@@ -70,9 +71,11 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
       darkTheme: darkThemeData,
       home: profileProvider.isLoading 
           ? const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator()))
-          : (profileProvider.activeProfile == null 
-              ? const ProfileSelectionScreen()
-              : Scaffold(
+          : (!settings.isSetupCompleted) 
+              ? const SetupScreen()
+              : (profileProvider.activeProfile == null 
+                  ? const ProfileSelectionScreen()
+                  : Scaffold(
               extendBodyBehindAppBar: true, // Allow content to go behind
               body: Stack(
                 children: [

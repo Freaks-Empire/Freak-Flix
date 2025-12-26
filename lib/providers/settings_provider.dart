@@ -76,6 +76,7 @@ class SettingsProvider extends ChangeNotifier {
     autoFetchAfterScan = data['autoFetchAfterScan'] as bool? ?? true;
     lastScannedFolder = data['lastScannedFolder'] as String?;
     _hasMigratedProfiles = data['migrated_profiles'] as bool? ?? false;
+    _isSetupCompleted = data['isSetupCompleted'] as bool? ?? false;
     
     String? savedKey = data['tmdbApiKey'] as String?;
     if (savedKey == null || savedKey.trim().isEmpty) {
@@ -122,6 +123,7 @@ class SettingsProvider extends ChangeNotifier {
         'enableAdultContent': enableAdultContent,
         'stashApiKey': stashApiKey,
         'migrated_profiles': _hasMigratedProfiles,
+        'isSetupCompleted': _isSetupCompleted,
     };
     await PersistenceService.instance.saveString(_storageFile, jsonEncode(data));
   }
@@ -134,6 +136,15 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> togglePreferAniList(bool value) async {
     preferAniListForAnime = value;
+    await save();
+    notifyListeners();
+  }
+
+  bool _isSetupCompleted = false;
+  bool get isSetupCompleted => _isSetupCompleted;
+
+  Future<void> completeSetup() async {
+    _isSetupCompleted = true;
     await save();
     notifyListeners();
   }
