@@ -19,54 +19,76 @@ import 'app.dart';
 import 'providers/library_provider.dart';
 import 'providers/playback_provider.dart';
 import 'providers/settings_provider.dart';
+import 'providers/profile_provider.dart';
 
 import 'services/metadata_service.dart';
 import 'services/tmdb_service.dart';
 import 'services/graph_auth_service.dart';
 import 'services/tmdb_discover_service.dart';
 
-
 import 'models/discover_filter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Load environment variables
   try {
-    // defaults to '.env' which matches pubspec assets.
     await dotenv.load(fileName: '.env'); 
   } catch (e) {
     debugPrint('Warning: dotenv.load failed: $e');
-    // Fallback: try reading from asset bundle manually if package fails
-    // (though dotenv 5.x should handle this)
   }
 
   MediaKit.ensureInitialized();
   
-  // Initialize GraphAuthService
   GraphAuthService.instance.configureFromEnv();
-
-  // Load saved Graph accounts
   await GraphAuthService.instance.loadFromPrefs();
 
   final settingsProvider = SettingsProvider();
   await settingsProvider.load();
+
+  final profileProvider = ProfileProvider();
+  await profileProvider.load();
+  
   final tmdbService = TmdbService(settingsProvider);
   final tmdbDiscoverService = TmdbDiscoverService(settingsProvider);
   final libraryProvider = LibraryProvider(settingsProvider);
   await libraryProvider.loadLibrary();
-  final metadataService = MetadataService(settingsProvider, tmdbService);
-  final playbackProvider = PlaybackProvider(libraryProvider);
   
+  // One-time Migration: Import legacy history to Default profile
+  if (!settingsProvider.hasMigratedProfiles) {
+      debugPrint('Main: Performing one-time profile migration...');
+      if (profileProvider.activeProfile == null && profileProvider.profiles.isNotEmpty) {
+          // Try 'default', fallback to first
+          await profileProvider.selectProfile('default');
+      }
+      
+      if (profileProvider.activeProfile != null) {
+          final history = libraryProvider.extractLegacyHistory();
+          if (history.isNotEmpty) {
+              debugPrint('Main: Importing ${history.length} items to Default profile.');
+              await profileProvider.importUserData(history);
+          }
+          await settingsProvider.setHasMigratedProfiles(true);
+          profileProvider.deselectProfile();
+      }
+  }
+  
+  // Connect Profile -> Library (Filter & User Data)
+  void syncProfileToLibrary() {
+    libraryProvider.updateProfile(profileProvider.activeProfile, profileProvider.userData);
+  }
+  profileProvider.addListener(syncProfileToLibrary);
+  // Initial sync
+  syncProfileToLibrary();
 
-
-  // --- Cloud Sync Integration ---
-  // Managed by SyncProvider inside MultiProvider
-  // -----------------------------
+  final metadataService = MetadataService(settingsProvider, tmdbService);
+  final playbackProvider = PlaybackProvider(libraryProvider, profileProvider);
+  
+  // ... Cloud Sync ...
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => settingsProvider),
+        ChangeNotifierProvider(create: (_) => profileProvider),
         ChangeNotifierProvider(create: (_) => libraryProvider),
         ChangeNotifierProvider(create: (_) => playbackProvider),
         ChangeNotifierProvider(create: (_) => DiscoverFilterNotifier()),

@@ -27,7 +27,17 @@ class LibraryProvider extends ChangeNotifier {
   static const _libraryFoldersKey = 'library_folders_v1';
 
   final SettingsProvider settings;
-  List<MediaItem> items = [];
+  
+  // backing store
+  List<MediaItem> _allItems = [];
+  
+  // exposed to UI (filtered + user data applied)
+  List<MediaItem> _filteredItems = [];
+  
+  List<MediaItem> get items => _filteredItems;
+  // Legacy setter compliance if needed, but preferably avoid setting items directly from outside.
+  // We'll keep _allItems in sync using internal logic.
+
   List<LibraryFolder> libraryFolders = [];
   bool isLoading = false;
   String? error;
@@ -35,6 +45,62 @@ class LibraryProvider extends ChangeNotifier {
 
   final _configChangedController = StreamController<void>.broadcast();
   Stream<void> get onConfigChanged => _configChangedController.stream;
+
+  // Profile State
+  UserProfile? _currentProfile;
+  Map<String, UserMediaData> _currentUserData = {};
+
+  void updateProfile(UserProfile? profile, Map<String, UserMediaData> userData) {
+    _currentProfile = profile;
+    _currentUserData = userData;
+    _rebuildFilteredItems();
+  }
+  
+  void _rebuildFilteredItems() {
+    // 1. Filter by Access Control
+    Iterable<MediaItem> visible = _allItems;
+    
+    if (_currentProfile?.allowedFolderIds != null) {
+      final allowed = _currentProfile!.allowedFolderIds!.toSet();
+      // Need to map items to their folder IDs.
+      // Current MediaItem doesn't strictly store folder ID, but it stores 'onedrive_ACCOUNTID_FOLDERID' logic or paths.
+      // We need to check if the item's folder path matches any allowed folder path.
+      
+      // Optimization: Build a list of allowed paths prefixes
+      final allowedPaths = libraryFolders
+          .where((f) => allowed.contains(f.id))
+          .map((f) => f.path.toLowerCase())
+          .toList();
+
+      if (allowedPaths.isEmpty && allowed.isNotEmpty) {
+          // Profile has restrictions but we found no matching folder objects? Block all.
+           visible = [];
+      } else {
+        visible = visible.where((item) {
+           final itemPath = item.folderPath.toLowerCase();
+           for (final p in allowedPaths) {
+             if (itemPath.startsWith(p)) return true;
+           }
+           return false;
+        });
+      }
+    }
+    
+    // 2. Apply User Data (Watch History)
+    _filteredItems = visible.map((item) {
+        final data = _currentUserData[item.id];
+        if (data != null) {
+           return item.copyWith(
+             lastPositionSeconds: data.positionSeconds,
+             isWatched: data.isWatched,
+           );
+        }
+        return item; // Item default is unwatched / 0 pos
+    }).toList();
+    
+    notifyListeners();
+  }
+
 
   // Scan progress state
   bool isScanning = false;
@@ -252,8 +318,8 @@ class LibraryProvider extends ChangeNotifier {
       final itemsJson = await PersistenceService.instance.loadCompressed(_itemsFile);
       if (itemsJson != null) {
           debugPrint('LibraryProvider: Found compressed items file. Parsing...');
-          items = MediaItem.listFromJson(itemsJson);
-          debugPrint('LibraryProvider: Loaded ${items.length} items from file.');
+          _allItems = MediaItem.listFromJson(itemsJson);
+          debugPrint('LibraryProvider: Loaded ${_allItems.length} items from file.');
       } else {
          debugPrint('LibraryProvider: No items file found. Checking legacy...');
          await _migrateItemsFromPrefs();
@@ -290,12 +356,12 @@ class LibraryProvider extends ChangeNotifier {
      
      try {
         if (raw.trim().startsWith('[')) {
-           items = MediaItem.listFromJson(raw);
+           _allItems = MediaItem.listFromJson(raw);
         } else {
            final bytes = base64Decode(raw);
            final decompressed = GZipDecoder().decodeBytes(bytes);
            final jsonStr = utf8.decode(decompressed);
-           items = MediaItem.listFromJson(jsonStr);
+           _allItems = MediaItem.listFromJson(jsonStr);
         }
         await saveLibrary();
         debugPrint('LibraryProvider: Migrated items from SharedPreferences.');
@@ -304,24 +370,24 @@ class LibraryProvider extends ChangeNotifier {
 
   Future<void> _reclassifyItems() async {
       bool updated = false;
-      for (var i = 0; i < items.length; i++) {
-        final parsed = FilenameParser.parse(items[i].fileName);
-        final inferredType = _inferTypeFromPath(items[i]);
-        final inferredAnime = _inferAnimeFromPath(items[i]);
-        final updatedItem = items[i].copyWith(
+      for (var i = 0; i < _allItems.length; i++) {
+        final parsed = FilenameParser.parse(_allItems[i].fileName);
+        final inferredType = _inferTypeFromPath(_allItems[i]);
+        final inferredAnime = _inferAnimeFromPath(_allItems[i]);
+        final updatedItem = _allItems[i].copyWith(
           title: parsed.seriesTitle.isNotEmpty
               ? parsed.seriesTitle
-              : items[i].title,
-          season: items[i].season ??
+              : _allItems[i].title,
+          season: _allItems[i].season ??
               parsed.season ??
               (parsed.episode != null ? 1 : null),
-          episode: items[i].episode ?? parsed.episode,
+          episode: _allItems[i].episode ?? parsed.episode,
           type: inferredType,
           isAnime: inferredAnime,
-          year: items[i].year ?? parsed.year,
+          year: _allItems[i].year ?? parsed.year,
         );
-        if (updatedItem != items[i]) {
-          items[i] = updatedItem;
+        if (updatedItem != _allItems[i]) {
+          _allItems[i] = updatedItem;
           updated = true;
         }
       }
@@ -330,8 +396,9 @@ class LibraryProvider extends ChangeNotifier {
 
   Future<void> saveLibrary() async {
     // Save items compressed
-    final jsonStr = MediaItem.listToJson(items);
+    final jsonStr = MediaItem.listToJson(_allItems);
     await PersistenceService.instance.saveCompressed(_itemsFile, jsonStr);
+    _rebuildFilteredItems(); // Ensure view is updated
   }
 
   Future<void> _saveLibraryFolders() async {
@@ -408,18 +475,18 @@ class LibraryProvider extends ChangeNotifier {
     try {
       // Parallelize metadata enrichment with a concurrency limit
       const batchSize = 5;
-      for (int i = 0; i < items.length; i += batchSize) {
-        final batch = items.skip(i).take(batchSize).toList();
+      for (int i = 0; i < _allItems.length; i += batchSize) {
+        final batch = _allItems.skip(i).take(batchSize).toList();
         scanningStatus =
-            'Refreshing metadata (${i + 1}/${items.length}) ${batch.first.title ?? batch.first.fileName}';
+            'Refreshing metadata (${i + 1}/${_allItems.length}) ${batch.first.title ?? batch.first.fileName}';
         notifyListeners();
         
         final enrichedBatch = await Future.wait(batch.map((item) => metadata.enrich(item)));
         
         for (int j = 0; j < batch.length; j++) {
-          final index = items.indexWhere((e) => e.id == batch[j].id);
+          final index = _allItems.indexWhere((e) => e.id == batch[j].id);
           if (index != -1) {
-            items[index] = enrichedBatch[j];
+            _allItems[index] = enrichedBatch[j];
           }
         }
         notifyListeners();
@@ -491,24 +558,24 @@ class LibraryProvider extends ChangeNotifier {
 
   Future<void> _ingestItems(
       List<MediaItem> newItems, MetadataService? metadata) async {
-    final map = {for (var i in items) i.filePath: i};
+    final map = {for (var i in _allItems) i.filePath: i};
     for (final item in newItems) {
       map[item.filePath] = item;
     }
-    items = map.values.toList()
+    _allItems = map.values.toList()
       ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
     notifyListeners();
 
     if (settings.autoFetchAfterScan && metadata != null) {
       // Parallelize metadata enrichment with a concurrency limit
       const batchSize = 5;
-      for (int i = 0; i < items.length; i += batchSize) {
-        final batch = items.skip(i).take(batchSize).toList();
+      for (int i = 0; i < _allItems.length; i += batchSize) {
+        final batch = _allItems.skip(i).take(batchSize).toList();
         _setScanStatus('Fetching metadata: ${batch.first.title} ...');
         final enrichedBatch = await Future.wait(batch.map((item) => metadata.enrich(item)));
         for (int j = 0; j < batch.length; j++) {
-          final idx = items.indexWhere((e) => e.id == batch[j].id);
-          if (idx != -1) items[idx] = enrichedBatch[j];
+          final idx = _allItems.indexWhere((e) => e.id == batch[j].id);
+          if (idx != -1) _allItems[idx] = enrichedBatch[j];
         }
         notifyListeners();
       }
@@ -527,7 +594,7 @@ class LibraryProvider extends ChangeNotifier {
       normalized = normalized.substring(0, normalized.length - 1);
     }
 
-    final targetItems = items.where((item) {
+    final targetItems = _allItems.where((item) {
       final path = item.folderPath.trim();
       // Match exact folder or any subfolder
       if (path == normalized || path == '$normalized/') return true;
@@ -560,9 +627,9 @@ class LibraryProvider extends ChangeNotifier {
         notifyListeners();
         final enrichedBatch = await Future.wait(batch.map((item) => metadata.enrich(item)));
         for (int j = 0; j < batch.length; j++) {
-          final index = items.indexWhere((e) => e.id == batch[j].id);
+          final index = _allItems.indexWhere((e) => e.id == batch[j].id);
           if (index != -1) {
-            items[index] = enrichedBatch[j];
+            _allItems[index] = enrichedBatch[j];
           }
         }
         notifyListeners();
@@ -653,15 +720,15 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   Future<void> clear() async {
-    items = [];
+    _allItems = [];
     await saveLibrary();
     notifyListeners();
   }
 
   Future<void> updateItem(MediaItem updated) async {
-    final index = items.indexWhere((i) => i.id == updated.id);
+    final index = _allItems.indexWhere((i) => i.id == updated.id);
     if (index == -1) return;
-    items[index] = updated;
+    _allItems[index] = updated;
     notifyListeners();
     await saveLibrary();
   }
@@ -835,13 +902,29 @@ class LibraryProvider extends ChangeNotifier {
   Map<String, dynamic> exportState() {
     return {
       'folders': libraryFolders.map((f) => f.toJson()).toList(),
-      'items': MediaItem.listToJson(items),
+      'items': MediaItem.listToJson(_allItems),
     };
+  }
+
+  Map<String, UserMediaData> extractLegacyHistory() {
+    final map = <String, UserMediaData>{};
+    for (final item in _allItems) {
+       if (item.isWatched || item.lastPositionSeconds > 0) {
+           map[item.id] = UserMediaData(
+               mediaId: item.id,
+               positionSeconds: item.lastPositionSeconds,
+               isWatched: item.isWatched,
+               lastUpdated: DateTime.now(),
+           );
+           // Optional: clear legacy data from item? No, keep it as backup or for legacy readers.
+       }
+    }
+    return map;
   }
 
   ({int count, int sizeBytes}) getFolderStats(LibraryFolder folder) {
     // Defines which items belong to this folder
-    final relevant = items.where((i) {
+    final relevant = _allItems.where((i) {
       if (folder.accountId.isNotEmpty) {
         // OneDrive items use ID convention: onedrive_{accountId}_{itemId}
         // But checking by path is safer for nested folders? 
@@ -910,12 +993,12 @@ class LibraryProvider extends ChangeNotifier {
     if (rawItems != null) {
       final cloudItems = MediaItem.listFromJson(rawItems);
       
-      final map = {for (var i in items) i.id: i};
+      final map = {for (var i in _allItems) i.id: i};
       for (final i in cloudItems) {
         // Overwrite local with cloud version to ensure metadata sync
         map[i.id] = i; 
       }
-      items = map.values.toList()
+      _allItems = map.values.toList()
         ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
       
       await saveLibrary();

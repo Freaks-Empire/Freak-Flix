@@ -3,6 +3,8 @@ import 'dart:ui'; // Required for PointerDeviceKind
 import 'package:provider/provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/library_provider.dart';
+import 'providers/profile_provider.dart'; // Import
+import 'screens/profile_selection_screen.dart'; // Import
 
 import 'screens/discover_screen.dart';
 import 'screens/settings_screen.dart';
@@ -43,24 +45,34 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     final library = context.watch<LibraryProvider>();
+    final profileProvider = context.watch<ProfileProvider>();
 
     final dark = settings.isDarkMode;
+    
+    // Theme Config
+    final themeData = ThemeData(
+        brightness: Brightness.light,
+        colorSchemeSeed: Colors.redAccent,
+        useMaterial3: true,
+      );
+    final darkThemeData = ThemeData(
+        brightness: Brightness.dark,
+        colorSchemeSeed: Colors.redAccent,
+        useMaterial3: true,
+      );
+
     return MaterialApp(
       title: 'Freak-Flix',
       scrollBehavior: CustomScrollBehavior(),
       debugShowCheckedModeBanner: false,
       themeMode: dark ? ThemeMode.dark : ThemeMode.light,
-      theme: ThemeData(
-        brightness: Brightness.light,
-        colorSchemeSeed: Colors.redAccent,
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        colorSchemeSeed: Colors.redAccent,
-        useMaterial3: true,
-      ),
-      home: Scaffold(
+      theme: themeData,
+      darkTheme: darkThemeData,
+      home: profileProvider.isLoading 
+          ? const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator()))
+          : (profileProvider.activeProfile == null 
+              ? const ProfileSelectionScreen()
+              : Scaffold(
               extendBodyBehindAppBar: true, // Allow content to go behind
               body: Stack(
                 children: [
@@ -139,7 +151,7 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
                 ],
               ),
             )
-
+        )
     );
   }
 }

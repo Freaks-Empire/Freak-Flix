@@ -10,6 +10,8 @@ import '../models/library_folder.dart';
 
 import '../providers/library_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/profile_provider.dart';
+import '../models/user_profile.dart';
 
 import '../services/graph_auth_service.dart';
 import '../services/metadata_service.dart';
@@ -69,6 +71,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     final library = context.watch<LibraryProvider>();
+    final profileProvider = context.watch<ProfileProvider>();
     final metadata = Provider.of<MetadataService>(context, listen: false);
     final tmdb = Provider.of<TmdbService>(context, listen: false);
 
@@ -119,6 +122,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Header
         Text('Settings', style: Theme.of(context).textTheme.headlineMedium),
         const SizedBox(height: 16),
+        
+        // Profile Section
+        if (profileProvider.activeProfile != null) ...[
+          Card(
+            clipBehavior: Clip.antiAlias,
+            child: ListTile(
+              leading: Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: profileProvider.activeProfile!.color, 
+                  shape: BoxShape.circle
+                ),
+                child: profileProvider.activeProfile!.avatarId.startsWith('assets') 
+                    ? null
+                    : const Icon(Icons.person, color: Colors.white),
+              ),
+              title: Text(profileProvider.activeProfile!.name),
+              subtitle: const Text('Active Profile'),
+              trailing: FilledButton.tonal(
+                onPressed: () {
+                   profileProvider.deselectProfile();
+                   // Wait for app rebuild to switch screens
+                },
+                child: const Text('Switch Profile'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
 
         // Support Section
         Card(

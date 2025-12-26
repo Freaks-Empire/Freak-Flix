@@ -29,6 +29,15 @@ class SettingsProvider extends ChangeNotifier {
 
   bool get isTestingTmdbKey => _isTestingTmdbKey;
   bool get hasTmdbKey => tmdbApiKey.trim().isNotEmpty;
+  
+  bool _hasMigratedProfiles = false;
+  bool get hasMigratedProfiles => _hasMigratedProfiles;
+
+  Future<void> setHasMigratedProfiles(bool val) async {
+    _hasMigratedProfiles = val;
+    await save();
+    notifyListeners();
+  }
 
   static const _storageFile = 'settings.json';
 
@@ -65,7 +74,9 @@ class SettingsProvider extends ChangeNotifier {
     isDarkMode = data['isDarkMode'] as bool? ?? true;
     preferAniListForAnime = data['preferAniListForAnime'] as bool? ?? true;
     autoFetchAfterScan = data['autoFetchAfterScan'] as bool? ?? true;
+    autoFetchAfterScan = data['autoFetchAfterScan'] as bool? ?? true;
     lastScannedFolder = data['lastScannedFolder'] as String?;
+    _hasMigratedProfiles = data['migrated_profiles'] as bool? ?? false;
     
     String? savedKey = data['tmdbApiKey'] as String?;
     if (savedKey == null || savedKey.trim().isEmpty) {
@@ -110,7 +121,11 @@ class SettingsProvider extends ChangeNotifier {
         'tmdbApiKey': tmdbApiKey,
         _tmdbStatusKey: tmdbStatus.index,
         'enableAdultContent': enableAdultContent,
+        'enableAdultContent': enableAdultContent,
         'stashApiKey': stashApiKey,
+        'migrated_profiles': _hasMigratedProfiles,
+    };
+        'migrated_profiles': _hasMigratedProfiles, // Save flag
     };
     await PersistenceService.instance.saveString(_storageFile, jsonEncode(data));
   }
