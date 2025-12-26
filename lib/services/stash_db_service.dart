@@ -89,6 +89,73 @@ class StashDbService {
     }
   ''';
 
+  static const String _queryFindScenesBox = r'''
+    query QueryScenes($title: String!) {
+      queryScenes(input: {
+        text: $title
+        per_page: 5
+      }) {
+        scenes {
+          id
+          title
+          details
+          date
+          tags {
+            name
+          }
+          images {
+            url
+          }
+          studio {
+            name
+          }
+          performers {
+            performer {
+              id
+              name
+              image_path
+            }
+          }
+        }
+      }
+    }
+  ''';
+
+  static const String _queryPerformerScenesBox = r'''
+    query PerformerScenesBox($performerId: ID!) {
+      queryScenes(input: {
+        performers: {
+          value: [$performerId]
+          modifier: INCLUDES
+        }
+        per_page: 20
+      }) {
+        scenes {
+          id
+          title
+          details
+          date
+          tags {
+            name
+          }
+          images {
+            url
+          }
+          studio {
+            name
+          }
+          performers {
+            performer {
+              id
+              name
+              image_path
+            }
+          }
+        }
+      }
+    }
+  ''';
+
   // --- Public Methods ---
 
   /// Tests the connection to StashDB using the provided API key.
@@ -117,16 +184,24 @@ class StashDbService {
     final cleanTitle = _cleanTitle(title);
     debugPrint('StashDB: Searching for "$cleanTitle" (Original: "$title") at $baseUrl');
 
+    final isStashBox = baseUrl.contains('stashdb.org');
+
     try {
       final data = await _executeQuery(
-        query: _queryFindScenes,
-        operationName: 'FindScenes',
+        query: isStashBox ? _queryFindScenesBox : _queryFindScenes,
+        operationName: isStashBox ? 'QueryScenes' : 'FindScenes',
         variables: {'title': cleanTitle},
         apiKey: apiKey,
         baseUrl: baseUrl,
       );
 
-      final scenes = data?['findScenes']?['scenes'] as List?;
+      List<dynamic>? scenes;
+      if (isStashBox) {
+        scenes = data?['queryScenes']?['scenes'] as List?;
+      } else {
+        scenes = data?['findScenes']?['scenes'] as List?;
+      }
+
       if (scenes != null && scenes.isNotEmpty) {
         debugPrint('StashDB: Found ${scenes.length} matches for "$title"');
         return _mapSceneToMediaItem(scenes.first, title);
@@ -144,16 +219,24 @@ class StashDbService {
   Future<List<MediaItem>> getPerformerScenes(String performerId, String apiKey, String baseUrl) async {
     if (apiKey.trim().isEmpty) return [];
 
+    final isStashBox = baseUrl.contains('stashdb.org');
+
     try {
       final data = await _executeQuery(
-        query: _queryPerformerScenes,
-        operationName: 'PerformerScenes',
+        query: isStashBox ? _queryPerformerScenesBox : _queryPerformerScenes,
+        operationName: isStashBox ? 'PerformerScenesBox' : 'PerformerScenes',
         variables: {'performerId': performerId},
         apiKey: apiKey,
         baseUrl: baseUrl,
       );
 
-      final scenes = data?['findScenes']?['scenes'] as List?;
+      List<dynamic>? scenes;
+      if (isStashBox) {
+        scenes = data?['queryScenes']?['scenes'] as List?;
+      } else {
+        scenes = data?['findScenes']?['scenes'] as List?;
+      }
+
       if (scenes != null) {
         return scenes
           .map((s) => _mapSceneToMediaItem(s, s['title'] ?? 'Unknown'))
