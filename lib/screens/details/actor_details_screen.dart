@@ -53,8 +53,9 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
       // Note: StashDbService is currently stateless/mixed. 
       // We need to instantiate it or use static if it were static.
       // It's defined as a class `StashDbService`.
+      // It's defined as a class `StashDbService`.
       
-      final scenes = await service.getPerformerScenes(widget.actor.id, settings.stashApiKey);
+      final scenes = await service.getPerformerScenes(widget.actor.id, settings.stashApiKey, settings.stashUrl);
       if (mounted) {
         setState(() {
           _stashScenes = List.from(scenes);

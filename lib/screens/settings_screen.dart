@@ -573,7 +573,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ],
                         ),
                         const SizedBox(height: 4),
-                            'Use StashDB.org metadata for matching file names. Does NOT provide streaming.',
+                        const SizedBox(height: 4),
+                        Text(
+                          'Use StashDB.org metadata for matching file names. Does NOT provide streaming.',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: 12),

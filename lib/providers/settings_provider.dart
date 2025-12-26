@@ -24,6 +24,7 @@ class SettingsProvider extends ChangeNotifier {
   
   bool enableAdultContent = false;
   String stashApiKey = '';
+  String stashUrl = 'https://stashdb.org/graphql';
 
   bool _isTestingTmdbKey = false;
 
@@ -165,6 +166,12 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> setStashApiKey(String value) async {
     stashApiKey = value.trim();
+    await save();
+    notifyListeners();
+  }
+
+  Future<void> setStashUrl(String value) async {
+    stashUrl = value.trim();
     await save();
     notifyListeners();
   }
