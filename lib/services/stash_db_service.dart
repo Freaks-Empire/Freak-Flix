@@ -92,7 +92,7 @@ class StashDbService {
   // --- Public Methods ---
 
   /// Tests the connection to StashDB using the provided API key.
-  Future<bool> testConnection(String apiKey) async {
+  Future<bool> testConnection(String apiKey, String baseUrl) async {
     if (apiKey.trim().isEmpty) return false;
     
     try {
@@ -100,6 +100,7 @@ class StashDbService {
         query: _queryMe,
         operationName: 'Me',
         apiKey: apiKey,
+        baseUrl: baseUrl,
       );
       return data?['me'] != null;
     } catch (e) {
@@ -109,12 +110,12 @@ class StashDbService {
   }
 
   /// Searches for a scene by title.
-  Future<MediaItem?> searchScene(String title, String apiKey) async {
+  Future<MediaItem?> searchScene(String title, String apiKey, String baseUrl) async {
     if (apiKey.trim().isEmpty) return null;
 
     // Clean title for better matching
     final cleanTitle = _cleanTitle(title);
-    debugPrint('StashDB: Searching for "$cleanTitle" (Original: "$title")');
+    debugPrint('StashDB: Searching for "$cleanTitle" (Original: "$title") at $baseUrl');
 
     try {
       final data = await _executeQuery(
@@ -122,6 +123,7 @@ class StashDbService {
         operationName: 'FindScenes',
         variables: {'title': cleanTitle},
         apiKey: apiKey,
+        baseUrl: baseUrl,
       );
 
       final scenes = data?['findScenes']?['scenes'] as List?;
@@ -139,7 +141,7 @@ class StashDbService {
   }
 
   /// Gets scenes for a specific performer.
-  Future<List<MediaItem>> getPerformerScenes(String performerId, String apiKey) async {
+  Future<List<MediaItem>> getPerformerScenes(String performerId, String apiKey, String baseUrl) async {
     if (apiKey.trim().isEmpty) return [];
 
     try {
@@ -148,6 +150,7 @@ class StashDbService {
         operationName: 'PerformerScenes',
         variables: {'performerId': performerId},
         apiKey: apiKey,
+        baseUrl: baseUrl,
       );
 
       final scenes = data?['findScenes']?['scenes'] as List?;
@@ -172,8 +175,9 @@ class StashDbService {
     required String operationName,
     Map<String, dynamic>? variables,
     required String apiKey,
+    required String baseUrl,
   }) async {
-    final uri = Uri.parse(_defaultEndpoint);
+    final uri = Uri.parse(baseUrl.isEmpty ? _defaultEndpoint : baseUrl);
     
     // StashDB typically uses 'ApiKey' header
     final headers = {

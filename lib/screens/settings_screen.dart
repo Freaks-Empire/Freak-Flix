@@ -35,6 +35,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _obscureTmdb = true;
 
   late final TextEditingController _stashKeyController;
+  late final TextEditingController _stashUrlController; // New
   bool _initializedStash = false;
   bool _obscureStash = true;
   bool _isTestingStash = false;
@@ -45,6 +46,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _tmdbController = TextEditingController();
     _stashKeyController = TextEditingController();
+    _stashUrlController = TextEditingController(); // New
     _graphAuth.loadFromPrefs().then((_) {
       if (mounted) setState(() {});
     });
@@ -64,6 +66,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _tmdbController.dispose();
     _stashKeyController.dispose();
+    _stashUrlController.dispose();
     super.dispose();
   }
 
@@ -88,6 +91,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ..text = settings.stashApiKey
         ..selection =
             TextSelection.collapsed(offset: settings.stashApiKey.length);
+      
+      _stashUrlController.text = settings.stashUrl; // No cursor management needed usually
       _initializedStash = true;
     }
 
@@ -568,17 +573,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ],
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          'Use StashDB.org metadata for matching file names. Does NOT provide streaming.',
+                            'Use StashDB.org metadata for matching file names. Does NOT provide streaming.',
                           style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _stashUrlController,
+                          decoration: const InputDecoration(
+                            labelText: 'Stash Instance URL',
+                            hintText: 'https://stashdb.org/graphql',
+                            helperText: 'For local Stash: http://localhost:9999/graphql',
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (value) => settings.setStashUrl(value),
+                          onSubmitted: (value) => settings.setStashUrl(value),
                         ),
                         const SizedBox(height: 12),
                         TextField(
                           controller: _stashKeyController,
                           obscureText: _obscureStash,
                           decoration: InputDecoration(
-                            labelText: 'StashDB API Key',
-                            hintText: 'Paste your API Key from stashdb.org',
+                            labelText: 'Stash API Key',
+                            hintText: 'Paste your API Key',
                             border: const OutlineInputBorder(),
                             suffixIcon: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -614,15 +630,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ? null
                                 : () async {
                                     setState(() => _isTestingStash = true);
-                                    final ok = await _stashService.testConnection(settings.stashApiKey);
+                                    final ok = await _stashService.testConnection(
+                                      settings.stashApiKey, 
+                                      settings.stashUrl
+                                    );
                                     if (!mounted) return;
                                     setState(() => _isTestingStash = false);
                                     
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
                                         content: Text(ok
-                                            ? 'StashDB Connection Successful!'
-                                            : 'Connection Failed. Check your API Key.'),
+                                            ? 'Connection Successful!'
+                                            : 'Connection Failed. Check URL and API Key.'),
                                         backgroundColor: ok ? Colors.green : Colors.red,
                                       ),
                                     );

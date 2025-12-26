@@ -94,6 +94,7 @@ class SettingsProvider extends ChangeNotifier {
 
     enableAdultContent = data['enableAdultContent'] as bool? ?? false;
     stashApiKey = data['stashApiKey'] as String? ?? '';
+    stashUrl = data['stashUrl'] as String? ?? 'https://stashdb.org/graphql';
   }
 
   Future<void> _migrateFromPrefs() async {
@@ -122,6 +123,7 @@ class SettingsProvider extends ChangeNotifier {
         _tmdbStatusKey: tmdbStatus.index,
         'enableAdultContent': enableAdultContent,
         'stashApiKey': stashApiKey,
+        'stashUrl': stashUrl,
         'migrated_profiles': _hasMigratedProfiles,
         'isSetupCompleted': _isSetupCompleted,
     };

@@ -26,7 +26,8 @@ class MetadataService {
     // 1. StashDB Lookup (if enabled)
     if (settings.enableAdultContent && settings.stashApiKey.isNotEmpty) {
       // Use parsed title or original filename
-      final stashItem = await _stash.searchScene(parsed.seriesTitle, settings.stashApiKey);
+      final stashItem = await _stash.searchScene(
+          parsed.seriesTitle, settings.stashApiKey, settings.stashUrl);
       if (stashItem != null) {
         // Merge with original file info
         return item.copyWith(
