@@ -864,13 +864,13 @@ class LibraryProvider extends ChangeNotifier {
     } else {
       for (final folder in libraryFolders) {
         if (folder.accountId.isEmpty) {
-          await _scanLocalFolder(folder.path, metadata: metadata, keywords: keywords);
+          await _scanLocalFolder(folder.path, metadata: metadata, keywords: keywords, libraryType: folder.type);
         }
       }
     }
   }
 
-  Future<void> _scanLocalFolder(String path, {MetadataService? metadata, List<String>? keywords}) async {
+  Future<void> _scanLocalFolder(String path, {MetadataService? metadata, List<String>? keywords, LibraryType? libraryType}) async {
     final sourceLabel = 'Folder: $path';
     beginScan(sourceLabel: sourceLabel);
 
@@ -889,6 +889,17 @@ class LibraryProvider extends ChangeNotifier {
           scannedItems.addAll(message);
           port.close();
           break;
+        }
+      }
+
+      if (libraryType != null) {
+        for (var i = 0; i < scannedItems.length; i++) {
+          final item = scannedItems[i];
+          if (libraryType == LibraryType.adult) {
+            scannedItems[i] = item.copyWith(isAdult: true, type: MediaType.movie);
+          } else if (libraryType == LibraryType.anime) {
+             scannedItems[i] = item.copyWith(isAnime: true);
+          }
         }
       }
 

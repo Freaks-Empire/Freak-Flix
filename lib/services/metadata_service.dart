@@ -20,72 +20,84 @@ class MetadataService {
   MetadataService(this.settings, this.tmdbService);
 
   Future<MediaItem> enrich(MediaItem item) async {
-    final parsed = FilenameParser.parse(item.fileName);
+    // 1. Strict Rules Check
     
-    // 1. StashDB Lookup (if enabled)
-    // 1. StashDB Lookup (if enabled)
-    if (settings.enableAdultContent && settings.stashApiKey.isNotEmpty) {
-      // Use parsed title or original filename
-      final stashItem = await _stash.searchScene(
-          parsed.seriesTitle, settings.stashApiKey, settings.stashUrl);
-      if (stashItem != null) {
-        // Merge with original file info
-        return item.copyWith(
-          title: stashItem.title,
-          year: stashItem.year,
-          overview: stashItem.overview,
-          posterUrl: stashItem.posterUrl,
-          backdropUrl: stashItem.backdropUrl,
-          isAdult: true,
-          type: MediaType.movie,
-        );
-      }
-    }
-
-    // Optimization: If it's explicitly marked as adult (from folder type) and we either 
-    // didn't find Stash metadata or Stash wasn't enabled, STOP here.
-    // Adult content shouldn't be enriched by AniList/TMDB as it leads to false positives.
+    // Rule A: Adult Content -> StashDB ONLY
     if (item.isAdult) {
-      return item;
+       if (settings.enableAdultContent && settings.stashApiKey.isNotEmpty) {
+          final stashItem = await _stash.searchScene(
+            parsed.seriesTitle, settings.stashApiKey, settings.stashUrl);
+          if (stashItem != null) {
+            return item.copyWith(
+              title: stashItem.title,
+              year: stashItem.year,
+              overview: stashItem.overview,
+              posterUrl: stashItem.posterUrl,
+              backdropUrl: stashItem.backdropUrl,
+              isAdult: true,
+              type: MediaType.movie,
+              genres: stashItem.genres,
+              cast: stashItem.cast, 
+            );
+          }
+       }
+       // If not enabled or not found, return original item. 
+       // Do NOT fall through to TMDB/AniList.
+       return item;
     }
 
-    var working = item.copyWith(
-      title: parsed.seriesTitle,
-      year: item.year ?? parsed.year,
-      season: item.season ?? parsed.season ?? (parsed.episode != null ? 1 : null),
-      episode: item.episode ?? parsed.episode,
-      type: _inferType(item, parsed),
-      showKey: item.showKey ?? _seriesKey(parsed.seriesTitle, item.year ?? parsed.year, null),
-    );
-    final preferAniList = settings.preferAniListForAnime;
+    // Rule B: Anime -> AniList ONLY
+    if (item.isAnime) {
+       // Prefer AniList for Anime is implied by "Library Type: Anime"
+       var aniCandidate = await _ani.enrichWithAniList(working);
+       if (aniCandidate.anilistId != null) {
+          return _ensureTypeForTvHints(aniCandidate);
+       }
+       // If AniList fails, return original item. 
+       // User requested "Anime handles metadata nothing else".
+       // We could technically fallback to TMDB if we wanted, but "nothing else" implies strictness.
+       // However, AniList might miss some obscure stuff. 
+       // Let's assume strict compliance with user request.
+       return item;
+    }
 
-    // Always attempt AniList first to auto-detect anime by name/title.
-    var aniCandidate = await _ani.enrichWithAniList(working);
-
+    // 2. Standard Content (Movies/TV) -> TMDB (with Trakt helper)
+    // Always attempt AniList first? No, only for Anime.
+    // Wait, what if it's "Movies" library but contains Anime movie?
+    // User said "Library type adult -> stash", "Movies and TV -> TMDB".
+    // "Anime -> AniList".
+    // So if item is NOT tagged as Adult or Anime (by library folder), we proceed to Standard Flow.
+    
+    // Standard Flow: Trakt (for ID/Type) -> TMDB
     MediaItem base;
-    if (preferAniList && aniCandidate.isAnime) {
-      if (aniCandidate.type == MediaType.unknown) {
-        aniCandidate = aniCandidate.copyWith(type: MediaType.tv);
-      }
-      base = _ensureTypeForTvHints(aniCandidate);
-    } else {
-      // Otherwise fall back to Trakt (movies/TV detection via genres) if key exists.
-      final bool looksLikeEpisode = aniCandidate.season != null ||
-          aniCandidate.episode != null ||
-          aniCandidate.type == MediaType.tv ||
-          aniCandidate.isAnime;
+    
+    // Auto-detect Anime if NOT strictly in Anime folder?
+    // If user puts "Naruto" in "TV Shows", do they want AniList?
+    // "Prefer AniList For Anime" setting exists.
+    final preferAniList = settings.preferAniListForAnime;
+    if (preferAniList) {
+       var aniCandidate = await _ani.enrichWithAniList(working);
+       if (aniCandidate.isAnime && aniCandidate.anilistId != null) {
+         return _ensureTypeForTvHints(aniCandidate);
+       }
+    }
+
+    // Otherwise fall back to Trakt (movies/TV detection via genres) if key exists.
+      final bool looksLikeEpisode = working.season != null ||
+          working.episode != null ||
+          working.type == MediaType.tv;
 
       if (!_trakt.hasKey) {
-        base = _ensureTypeForTvHints(aniCandidate);
+        base = _ensureTypeForTvHints(working);
       } else {
         final searchTitle = parsed.seriesTitle;
 
         if (looksLikeEpisode) {
-          final cacheKey = _seriesKey(searchTitle, aniCandidate.year);
+          final cacheKey = _seriesKey(searchTitle, working.year);
           Map<String, dynamic>? meta = _showCache[cacheKey];
           if (meta == null) {
             print('[metadata] Parsed "$searchTitle" S${working.season ?? '-'}E${working.episode ?? '-'}');
-            meta = await _trakt.searchShow(searchTitle, year: aniCandidate.year);
+            meta = await _trakt.searchShow(searchTitle, year: working.year);
             print('[metadata] Trakt search for "$searchTitle" -> ${meta?['title']} (${meta?['trakt']})');
             final traktId = meta?['trakt'] as int?;
             if (traktId != null) {
@@ -99,12 +111,11 @@ class MetadataService {
             }
           }
           if (meta == null) {
-            base = _ensureTypeForTvHints(aniCandidate);
+            base = _ensureTypeForTvHints(working);
           } else {
-            final enriched = _trakt.applyMetadata(aniCandidate, meta).copyWith(
-              showKey: _seriesKey(searchTitle, aniCandidate.year, meta['trakt'] as int?),
+            final enriched = _trakt.applyMetadata(working, meta).copyWith(
+              showKey: _seriesKey(searchTitle, working.year, meta['trakt'] as int?),
             );
-            print('[metadata] Applied show: ${enriched.title} traktId=${meta['trakt']} isAnime=${enriched.isAnime}');
             base = _ensureTypeForTvHints(enriched.copyWith(
               season: enriched.season ?? working.season,
               episode: enriched.episode ?? working.episode,
@@ -112,21 +123,16 @@ class MetadataService {
           }
         } else {
           // Movie flow
-          final meta = await _trakt.searchMovie(searchTitle, year: aniCandidate.year);
+          final meta = await _trakt.searchMovie(searchTitle, year: working.year);
           if (meta == null) {
-            base = _ensureTypeForTvHints(aniCandidate);
+            base = _ensureTypeForTvHints(working);
           } else {
-            base = _trakt.applyMetadata(aniCandidate.copyWith(type: MediaType.movie), meta);
+            base = _trakt.applyMetadata(working.copyWith(type: MediaType.movie), meta);
           }
         }
-      }
     }
 
-    // If found in AniList and it is Anime, we skip TMDB logic to respect user preference.
-    if (base.isAnime && base.anilistId != null) {
-       return base;
-    }
-
+    // TMDB Enrichment
     final bool tmdbAllowed = settings.hasTmdbKey && settings.tmdbStatus != TmdbKeyStatus.invalid;
     if (!tmdbAllowed || !tmdbService.hasKey) {
       return base;
