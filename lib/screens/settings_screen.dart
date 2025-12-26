@@ -1024,8 +1024,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onPressed: isValidating
                       ? null
                       : () async {
-                          final jsonStr = controller.text.trim();
+                          var jsonStr = controller.text.trim();
                           if (jsonStr.isEmpty) return;
+                          
+                          // Sanitize: Replace smart quotes and common invisible chars
+                          jsonStr = jsonStr
+                              .replaceAll('“', '"')
+                              .replaceAll('”', '"')
+                              .replaceAll('‘', "'")
+                              .replaceAll('’', "'");
                           
                           setDialogState(() => isValidating = true);
                           
