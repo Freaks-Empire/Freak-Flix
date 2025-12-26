@@ -71,10 +71,5 @@ class DataBackupService {
       rethrow;
     }
   }
-      
-    } catch (e) {
-      debugPrint('Restore failed: $e');
-      rethrow;
-    }
-  }
+
 }

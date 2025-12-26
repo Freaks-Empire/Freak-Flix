@@ -734,23 +734,7 @@ class LibraryProvider extends ChangeNotifier {
     await saveLibrary();
   }
 
-  Future<void> importState(Map<String, dynamic> data) async {
-    if (data['folders'] != null) {
-      libraryFolders = (data['folders'] as List<dynamic>)
-          .map((e) => LibraryFolder.fromJson(e as Map<String, dynamic>))
-          .toList();
-      await _saveLibraryFolders();
-    }
 
-    if (data['items'] != null) {
-      _allItems = MediaItem.listFromJson(jsonEncode(data['items']));
-      // Triggers creating compressed file
-      await saveLibrary();
-    }
-    
-    _configChangedController.add(null);
-    notifyListeners();
-  }
 
   List<MediaItem> get movies =>
       items.where((i) => i.type == MediaType.movie && !i.isAdult).toList();

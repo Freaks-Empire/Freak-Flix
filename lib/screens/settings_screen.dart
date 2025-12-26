@@ -14,6 +14,7 @@ import '../providers/profile_provider.dart';
 import '../models/user_profile.dart';
 
 import '../services/graph_auth_service.dart';
+import '../services/metadata_service.dart';
 import '../services/tmdb_service.dart';
 import '../services/stash_db_service.dart';
 import '../services/data_backup_service.dart'; // NEW
