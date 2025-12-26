@@ -2,37 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:provider/provider.dart';
-import 'package:youtube_explode_dart/youtube_explode_dart.dart' hide Video;
 import 'package:collection/collection.dart';
 
 import '../../models/media_item.dart';
-import '../../models/tmdb_item.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
-import '../../services/tmdb_service.dart';
-import '../../models/tmdb_extended_details.dart';
 import '../../widgets/discover_card.dart';
-import '../../widgets/safe_network_image.dart';
 import '../../widgets/safe_network_image.dart';
 import '../video_player_screen.dart';
 import 'actor_details_screen.dart';
-import '../../models/cast_member.dart';
 
-class MovieDetailsScreen extends StatefulWidget {
+class SceneDetailsScreen extends StatefulWidget {
   final MediaItem item;
-  const MovieDetailsScreen({super.key, required this.item});
+  const SceneDetailsScreen({super.key, required this.item});
 
   @override
-  State<MovieDetailsScreen> createState() => _MovieDetailsScreenState();
+  State<SceneDetailsScreen> createState() => _SceneDetailsScreenState();
 }
 
-class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
+class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
   late MediaItem _current;
   late final Player _player;
   late final VideoController _controller;
   
-  TmdbExtendedDetails? _details;
-  bool _trailerLoading = true;
   bool _muted = true;
 
   @override
@@ -42,52 +34,8 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
     _player = Player();
     _controller = VideoController(_player, configuration: const VideoControllerConfiguration(enableHardwareAcceleration: true));
     
-    _loadDetails();
-  }
-
-  Future<void> _loadDetails() async {
-    final service = context.read<TmdbService>();
-    if (_current.tmdbId != null) {
-      final details = await service.getExtendedDetails(_current.tmdbId!, _current.type);
-      if (mounted) {
-        setState(() => _details = details);
-        _playTrailer();
-      }
-    }
-  }
-
-  Future<void> _playTrailer() async {
-    if (_details?.videos.isEmpty ?? true) {
-      setState(() => _trailerLoading = false);
-      return;
-    }
-
-    // Find Youtube Trailer
-    final trailer = _details!.videos.firstWhere(
-      (v) => v.site == 'YouTube' && v.type == 'Trailer',
-      orElse: () => _details!.videos.firstWhere((v) => v.site == 'YouTube', orElse: () => const TmdbVideo(key: '', site: '', type: '', name: '')),
-    );
-
-    if (trailer.key.isEmpty) {
-      setState(() => _trailerLoading = false);
-      return;
-    }
-
-    try {
-      final yt = YoutubeExplode();
-      final manifest = await yt.videos.streamsClient.getManifest(trailer.key);
-      final streamInfo = manifest.muxed.withHighestBitrate();
-      yt.close();
-
-      await _player.open(Media(streamInfo.url.toString()), play: true);
-      await _player.setVolume(0); // Muted by default
-      await _player.setPlaylistMode(PlaylistMode.loop);
-      
-      if (mounted) setState(() => _trailerLoading = false);
-    } catch (e) {
-      debugPrint('Error playing trailer: $e');
-      if (mounted) setState(() => _trailerLoading = false);
-    }
+    // Auto-play preview if we had one? StashDB scenes usually return screenshot as backdrop.
+    // Future expansion: Play preview clip if available.
   }
 
   @override
@@ -113,13 +61,12 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
         p.items.firstWhereOrNull((i) => i.id == widget.item.id)
     );
     
-    // Use the latest library item if available, otherwise fall back to local state
-    // We update _current to match libraryItem if it exists and differs
     if (libraryItem != null && libraryItem != _current) {
       _current = libraryItem;
     }
 
-    final displayCast = (_details?.cast.isNotEmpty ?? false) ? _details!.cast : _current.cast;
+    // Cast Selection Legacy (Use standard current.cast for StashDB)
+    final displayCast = _current.cast;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -128,7 +75,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
         children: [
           // Background Layer
           Positioned.fill(
-            child: _trailerLoading || _player.state.width == null
+            child: _player.state.width == null
                 ? (_current.backdropUrl != null 
                     ? SafeNetworkImage(url: _current.backdropUrl, fit: BoxFit.cover) 
                     : Container(color: Colors.black))
@@ -180,12 +127,13 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                       const SizedBox(width: 12),
                       _MetaTag(text: '${_current.runtimeMinutes ?? "??"}m', icon: Icons.timer),
                       const SizedBox(width: 12),
+                      // StashDB often uses stars or 1-10 rating? We have 1-10 in model.
                       _MetaTag(text: '${_current.rating ?? ""}', icon: Icons.star, color: Colors.amber),
                     ],
                   ),
                   const SizedBox(height: 16),
                   
-                  // Genres
+                  // Genres / Tags
                   Wrap(
                     spacing: 8,
                     children: _current.genres.map((g) => Chip(
@@ -198,6 +146,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                   const SizedBox(height: 24),
                   
                   // Overview
+                  // StashDB overview might include Studio.
                   SizedBox(
                     width: size.width * 0.6,
                     child: Text(
@@ -254,14 +203,11 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
 
                   const SizedBox(height: 64),
                   
-                  // Cast Selection Logic
-                  final displayCast = (_details?.cast ?? []).isNotEmpty ? _details!.cast : _current.cast;
+                  const SizedBox(height: 32), // spacer
 
-                  const sectionSpacer = SizedBox(height: 32);
-
-                  // 1. Actors Section
+                  // 1. Actors Section (Performers)
                   if (displayCast.isNotEmpty) ...[
-                    _SectionHeader(title: 'Actors'),
+                    _SectionHeader(title: 'Performers'),
                     const SizedBox(height: 16),
                     SizedBox(
                       height: 130,
@@ -282,17 +228,18 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                                   height: 80,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 4, offset: Offset(0, 2))],
+                                    boxShadow: [
+                                      BoxShadow(color: Colors.black54, blurRadius: 4, offset: Offset(0, 2))
+                                    ],
                                     image: DecorationImage(
                                       image: (actor.profileUrl != null 
                                           ? NetworkImage(actor.profileUrl!) 
-                                          : const AssetImage('assets/placeholder_person.png')) as ImageProvider, // Fallback asset or icon
+                                          : const AssetImage('assets/placeholder_person.png')) as ImageProvider,
                                       fit: BoxFit.cover,
-                                      onError: (_, __) {}, // Handled by providing a valid provider or let it fail gracefully to color
+                                      onError: (_, __) {}, 
                                     ),
                                     color: Colors.grey[800],
                                   ),
-                                  // Fallback layout if image fails/is null
                                   child: actor.profileUrl == null ? const Icon(Icons.person, color: Colors.white54) : null,
                                 ),
                                 const SizedBox(height: 8),
@@ -306,40 +253,60 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                                     textAlign: TextAlign.center,
                                   ),
                                 ),
-                                SizedBox(
-                                  width: 100,
-                                  child: Text(
-                                    actor.character,
-                                    style: const TextStyle(color: Colors.white54, fontSize: 10),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
                               ],
                             ),
                           );
                         },
                       ),
                     ),
-                    sectionSpacer,
+                    const SizedBox(height: 32),
                   ],
 
-                  // 2. Recommendations / Related
-                  if (_details?.recommendations.isNotEmpty ?? false) ...[
-                    _SectionHeader(title: 'Related Movies'),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 220, // Adjusted height
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _details!.recommendations.length,
-                        separatorBuilder: (_,__) => const SizedBox(width: 12),
-                        itemBuilder: (ctx, i) => DiscoverCard(item: _details!.recommendations[i]),
-                      ),
-                    ),
-                    sectionSpacer,
-                  ],
+                  // 2. Related Scenes (Tag-based)
+                  Builder(
+                    builder: (context) {
+                      final libraryItems = library.items;
+                      final currentTags = _current.genres.toSet();
+                      
+                      List<MediaItem> relatedItems = [];
+                      if (currentTags.isNotEmpty) {
+                        relatedItems = libraryItems
+                            .where((i) => i.id != _current.id && i.isAdult) // Only matches other adult content? or just by tag?
+                            // Let's match any type if tags match, but user said "Related Scenes" which implies "Scenes".
+                            // StashDB items are usually marked isAdult=true.
+                            .map((item) {
+                              int score = item.genres.where((g) => currentTags.contains(g)).length;
+                              return MapEntry(item, score);
+                            })
+                            .where((e) => e.value > 0)
+                            .sorted((a, b) => b.value.compareTo(a.value))
+                            .map((e) => e.key)
+                            .take(15)
+                            .toList();
+                      }
+
+                      if (relatedItems.isNotEmpty) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _SectionHeader(title: 'Related Scenes'),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              height: 220,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: relatedItems.length,
+                                separatorBuilder: (_,__) => const SizedBox(width: 12),
+                                itemBuilder: (ctx, i) => DiscoverCard(item: relatedItems[i]),
+                              ),
+                            ),
+                            const SizedBox(height: 32),
+                          ],
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    }
+                  ),
 
                   // 3. Details (Collapsible)
                   _DetailsSection(item: _current),
@@ -360,7 +327,6 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
             ),
           ),
 
-          // Mute Button (if video playing)
           // Top Right Actions
           Positioned(
             top: 24,
@@ -378,13 +344,6 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                     context.read<LibraryProvider>().rescanItem(widget.item);
                   },
                 ),
-                if (!_trailerLoading) ...[
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: Icon(_muted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
-                    onPressed: _toggleMute,
-                  ),
-                ],
               ],
             ),
           ),
@@ -436,30 +395,24 @@ class _DetailsSection extends StatelessWidget {
   }
 
   Widget _buildGrid(BuildContext context) {
-    // Collect data
     final data = <String, String>{};
     
-    if (item.year != null) data['Premiered'] = item.year.toString();
+    if (item.year != null) data['Date'] = item.lastModified.toString().split(' ')[0]; // Use Release Date or similar
     if (item.runtimeMinutes != null) data['Runtime'] = '${item.runtimeMinutes}m';
-    if (item.genres.isNotEmpty) data['Genre'] = item.genres.join(', ');
+    if (item.genres.isNotEmpty) data['Tags'] = item.genres.take(3).join(', '); // Show top tags
     
-    // Parse Studio from Overview if needed (hack for StashDB)
-    // "Studio: Name\n\nOverview..."
+    // Parse Studio
     if (item.overview.startsWith('Studio: ')) {
       final endLine = item.overview.indexOf('\n');
       if (endLine != -1) {
         data['Studio'] = item.overview.substring(8, endLine).trim();
       }
     }
-    
-    // Default Fallbacks or Placeholders if we wanted to match the screenshot exactly
-    // data['Country'] = 'Unknown';
-    // data['Language'] = 'English';
 
     return GridView.count(
       shrinkWrap: true,
       crossAxisCount: 2,
-      childAspectRatio: 3.5, // Wide and short cells
+      childAspectRatio: 3.5,
       physics: const NeverScrollableScrollPhysics(),
       children: data.entries.map((e) => _DetailItem(label: e.key, value: e.value)).toList(),
     );
@@ -493,10 +446,6 @@ class _SectionHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Container(
-          // Text only style as per images? 
-          // The reference image just has "Actors" text. 
-          // I will make it minimal but keep the existing class for compatibility.
-          // Or update it to match the "clean" reference.
         child: Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
     );

@@ -4,6 +4,7 @@ import '../models/media_item.dart';
 import '../models/tmdb_item.dart';
 import 'details/movie_details_screen.dart';
 import 'details/tv_details_screen.dart';
+import 'details/scene_details_screen.dart';
 
 class DetailsScreen extends StatelessWidget {
   final MediaItem item;
@@ -11,6 +12,9 @@ class DetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (item.isAdult) {
+      return SceneDetailsScreen(item: item);
+    }
     if (item.type == MediaType.tv || item.isAnime) {
       return TvDetailsScreen(item: item);
     }
