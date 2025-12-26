@@ -1,5 +1,6 @@
 // ignore_for_file: use_build_context_synchronously
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -169,15 +170,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 16),
         Text('Library', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            ElevatedButton(
-              onPressed: () => library.pickAndScan(metadata: metadata),
-              child: const Text('Select / Rescan Folder(s)'),
-            ),
-            const SizedBox(width: 12),
-          ],
-        ),
+        if (!kIsWeb)
+          Row(
+            children: [
+              ElevatedButton(
+                onPressed: () => library.pickAndScan(metadata: metadata),
+                child: const Text('Select / Rescan Folder(s)'),
+              ),
+              const SizedBox(width: 12),
+            ],
+          ),
         if (library.isLoading && library.scanningStatus.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
