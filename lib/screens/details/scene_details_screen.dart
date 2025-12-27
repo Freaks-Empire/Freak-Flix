@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -7,10 +8,10 @@ import 'package:collection/collection.dart';
 import '../../models/media_item.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
-import '../../widgets/discover_card.dart';
 import '../../widgets/safe_network_image.dart';
 import '../video_player_screen.dart';
 import 'actor_details_screen.dart';
+import '../../models/cast_member.dart';
 
 class SceneDetailsScreen extends StatefulWidget {
   final MediaItem item;
@@ -34,8 +35,10 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
     _player = Player();
     _controller = VideoController(_player, configuration: const VideoControllerConfiguration(enableHardwareAcceleration: true));
     
-    // Auto-play preview if we had one? StashDB scenes usually return screenshot as backdrop.
-    // Future expansion: Play preview clip if available.
+    // Auto-play preview or full video loop if feasible? 
+    // Usually local files, so we can't just stream a small preview easily unless we play from start.
+    // We'll leave it as backdrop image for now, or play if user wants (handled by "Play" button).
+    // Future: Maybe play a snippet?
   }
 
   @override
@@ -56,7 +59,6 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
     final playback = context.read<PlaybackProvider>();
     final library = context.read<LibraryProvider>();
     
-    // Watch for updates to this specific item in the library
     final libraryItem = context.select<LibraryProvider, MediaItem?>((p) => 
         p.items.firstWhereOrNull((i) => i.id == widget.item.id)
     );
@@ -65,253 +67,138 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
       _current = libraryItem;
     }
 
-    // Cast Selection Legacy (Use standard current.cast for StashDB)
+    final isDesktop = size.width > 900;
     final displayCast = _current.cast;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF0F0F0F),
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background Layer
+          // 1. Background
           Positioned.fill(
-            child: _player.state.width == null
-                ? (_current.backdropUrl != null 
-                    ? SafeNetworkImage(url: _current.backdropUrl, fit: BoxFit.cover) 
-                    : Container(color: Colors.black))
-                : Video(controller: _controller, fit: BoxFit.cover, controls: NoVideoControls),
+            child: _current.backdropUrl != null 
+                ? SafeNetworkImage(url: _current.backdropUrl, fit: BoxFit.cover) 
+                : (_current.posterUrl != null 
+                    ? SafeNetworkImage(url: _current.posterUrl, fit: BoxFit.cover)
+                    : Container(color: Colors.black)),
           ),
-          
-          // Gradient Overlay
+
+          // 2. Blur & Overlay
           Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.3),
-                    Colors.black.withOpacity(0.5),
-                    Colors.black,
-                  ],
-                  stops: const [0.0, 0.4, 0.9],
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.4),
+                      const Color(0xFF0F0F0F).withOpacity(0.8),
+                      const Color(0xFF0F0F0F).withOpacity(0.95),
+                      const Color(0xFF0F0F0F),
+                    ],
+                    stops: const [0.0, 0.4, 0.7, 1.0],
+                  ),
                 ),
               ),
             ),
           ),
 
-          // Content Layer
+          // 3. Content
           Positioned.fill(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(48, 0, 48, 48),
+              padding: EdgeInsets.fromLTRB(
+                isDesktop ? 64 : 24, 
+                size.height * 0.15,
+                isDesktop ? 64 : 24, 
+                64
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(height: size.height * 0.45), // Push content down
-                  
-                  // Logo/Title
-                  Text(
-                    _current.title ?? _current.fileName,
-                    style: theme.textTheme.displayMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      shadows: [const Shadow(blurRadius: 10, color: Colors.black)],
+                   // --- Hero Section ---
+                  if (isDesktop)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildHeroPoster(context),
+                        const SizedBox(width: 48),
+                        Expanded(child: _buildHeroDetails(context, library, playback, theme)),
+                      ],
+                    )
+                  else
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Center(child: _buildHeroPoster(context)),
+                        const SizedBox(height: 24),
+                        _buildHeroDetails(context, library, playback, theme),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 12),
                   
-                  // Meta Row
-                  Row(
-                    children: [
-                      _MetaTag(text: '${_current.year ?? ""}', icon: Icons.calendar_today),
-                      const SizedBox(width: 12),
-                      _MetaTag(text: '${_current.runtimeMinutes ?? "??"}m', icon: Icons.timer),
-                      const SizedBox(width: 12),
-                      // StashDB often uses stars or 1-10 rating? We have 1-10 in model.
-                      _MetaTag(text: '${_current.rating ?? ""}', icon: Icons.star, color: Colors.amber),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Genres / Tags
-                  Wrap(
-                    spacing: 8,
-                    children: _current.genres.map((g) => Chip(
-                      label: Text(g, style: const TextStyle(fontSize: 12)),
-                      backgroundColor: Colors.white12,
-                      labelPadding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                    )).toList(),
-                  ),
-                  const SizedBox(height: 24),
-                  
-                  // Overview
-                  // StashDB overview might include Studio.
-                  SizedBox(
-                    width: size.width * 0.6,
-                    child: Text(
-                      _current.overview ?? '',
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: Colors.white70,
-                        height: 1.5,
-                      ),
-                      maxLines: 4,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  
-                  // Actions through library/playback
-                  Row(
-                    children: [
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                        ),
-                        onPressed: _current.filePath.isNotEmpty ? () {
-                           playback.start(_current);
-                           Navigator.of(context).push(
-                             MaterialPageRoute(
-                               builder: (_) => VideoPlayerScreen(
-                                   item: _current,
-                               ),
-                             ),
-                           );
-                        } : null,
-                        icon: const Icon(Icons.play_arrow),
-                        label: Text(_current.filePath.isNotEmpty ? 'Play' : 'Not Available'),
-                      ),
-                      const SizedBox(width: 16),
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                           foregroundColor: Colors.white,
-                           side: const BorderSide(color: Colors.white54),
-                           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                        ),
-                        onPressed: _current.filePath.isNotEmpty ? () {
-                            final updated = _current.copyWith(isWatched: !_current.isWatched);
-                            setState(() => _current = updated);
-                            library.updateItem(updated);
-                        } : null,
-                        icon: Icon(_current.isWatched ? Icons.check : Icons.add),
-                        label: Text(_current.isWatched ? 'Watched' : 'Watchlist'),
-                      ),
-                    ],
-                  ),
-
                   const SizedBox(height: 64),
-                  
-                  const SizedBox(height: 32), // spacer
 
-                  // 1. Actors Section (Performers)
+                  // Performers
                   if (displayCast.isNotEmpty) ...[
-                    _SectionHeader(title: 'Performers'),
+                    Text('Performers', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
                     const SizedBox(height: 16),
                     SizedBox(
-                      height: 130,
+                      height: 140,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: displayCast.length,
                         separatorBuilder: (_, __) => const SizedBox(width: 16),
-                        itemBuilder: (ctx, i) {
-                          final actor = displayCast[i];
-                          return GestureDetector(
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => ActorDetailsScreen(actor: actor)),
-                            ),
-                            child: Column(
-                              children: [
-                                Container(
-                                  width: 80,
-                                  height: 80,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(color: Colors.black54, blurRadius: 4, offset: Offset(0, 2))
-                                    ],
-                                    image: DecorationImage(
-                                      image: (actor.profileUrl != null 
-                                          ? NetworkImage(actor.profileUrl!) 
-                                          : const AssetImage('assets/placeholder_person.png')) as ImageProvider,
-                                      fit: BoxFit.cover,
-                                      onError: (_, __) {}, 
-                                    ),
-                                    color: Colors.grey[800],
-                                  ),
-                                  child: actor.profileUrl == null ? const Icon(Icons.person, color: Colors.white54) : null,
-                                ),
-                                const SizedBox(height: 8),
-                                SizedBox(
-                                  width: 100,
-                                  child: Text(
-                                    actor.name,
-                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                        itemBuilder: (ctx, i) => _CastCard(actor: displayCast[i]),
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 48),
                   ],
 
-                  // 2. Related Scenes (Tag-based)
+                  // Related Scenes
+                  // We can reuse logic or simplify it here.
                   Builder(
                     builder: (context) {
-                      final libraryItems = library.items;
-                      final currentTags = _current.genres.toSet();
-                      
-                      List<MediaItem> relatedItems = [];
-                      if (currentTags.isNotEmpty) {
-                        relatedItems = libraryItems
-                            .where((i) => i.id != _current.id && i.isAdult) // Only matches other adult content? or just by tag?
-                            // Let's match any type if tags match, but user said "Related Scenes" which implies "Scenes".
-                            // StashDB items are usually marked isAdult=true.
-                            .map((item) {
-                              int score = item.genres.where((g) => currentTags.contains(g)).length;
-                              return MapEntry(item, score);
-                            })
-                            .where((e) => e.value > 0)
-                            .sorted((a, b) => b.value.compareTo(a.value))
-                            .map((e) => e.key)
-                            .take(15)
-                            .toList();
-                      }
+                       final libraryItems = library.items;
+                       final currentTags = _current.genres.toSet();
+                       
+                       List<MediaItem> relatedItems = [];
+                       if (currentTags.isNotEmpty) {
+                         relatedItems = libraryItems
+                             .where((i) => i.id != _current.id && i.isAdult)
+                             .map((item) {
+                               int score = item.genres.where((g) => currentTags.contains(g)).length;
+                               return MapEntry(item, score);
+                             })
+                             .where((e) => e.value > 0)
+                             .sorted((a, b) => b.value.compareTo(a.value))
+                             .map((e) => e.key)
+                             .take(15)
+                             .toList();
+                       }
 
-                      if (relatedItems.isNotEmpty) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _SectionHeader(title: 'Related Scenes'),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              height: 220,
-                              child: ListView.separated(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: relatedItems.length,
-                                separatorBuilder: (_,__) => const SizedBox(width: 12),
-                                itemBuilder: (ctx, i) => _SceneCard(item: relatedItems[i]),
-                              ),
-                            ),
-                            const SizedBox(height: 32),
-                          ],
-                        );
-                      }
-                      return const SizedBox.shrink();
+                       if (relatedItems.isNotEmpty) {
+                         return Column(
+                           crossAxisAlignment: CrossAxisAlignment.start,
+                           children: [
+                             Text('Related Scenes', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
+                             const SizedBox(height: 16),
+                             SizedBox(
+                               height: 220,
+                               child: ListView.separated(
+                                 scrollDirection: Axis.horizontal,
+                                 itemCount: relatedItems.length,
+                                 separatorBuilder: (_,__) => const SizedBox(width: 12),
+                                 itemBuilder: (ctx, i) => _SceneCard(item: relatedItems[i]),
+                               ),
+                             ),
+                           ],
+                         );
+                       }
+                       return const SizedBox.shrink();
                     }
                   ),
-
-                  // 3. Details (Collapsible)
-                  _DetailsSection(item: _current),
-                  
-                  const SizedBox(height: 100), // Bottom padding
                 ],
               ),
             ),
@@ -322,51 +209,217 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
             top: 24,
             left: 24,
             child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
               onPressed: () => Navigator.of(context).pop(),
-            ),
-          ),
-
-          // Top Right Actions
-          Positioned(
-            top: 24,
-            right: 24,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.refresh, color: Colors.white),
-                  tooltip: 'Rescan Library',
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Rescanning ${widget.item.folderPath.isNotEmpty ? widget.item.folderPath : widget.item.title}...')),
-                    );
-                    context.read<LibraryProvider>().rescanItem(widget.item);
-                  },
-                ),
-              ],
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.black45,
+                foregroundColor: Colors.white,
+              ),
             ),
           ),
         ],
       ),
     );
   }
+
+  Widget _buildHeroPoster(BuildContext context) {
+    // For scenes, maybe Landscape poster? Or standard portrait if we have it?
+    // StashDB often gives landscape thumbnails (screenshots).
+    // Let's check aspect ratio of posterUrl.
+    // Assuming Portrait for uniformity with Movies, but if it's a screenshot it might look cropped.
+    // Let's use a flexible container.
+    return Container(
+      width: 300, 
+      height: 450, // Force portrait for consistency? Or 300x200 for landscape?
+                   // User said "similar look", usually means vertical poster.
+                   // If StashDB provides landscape, we might want to `fit: BoxFit.cover` which crops it centrally.
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20, offset: const Offset(0, 10)),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SafeNetworkImage(
+        url: _current.posterUrl ?? _current.backdropUrl, 
+        fit: BoxFit.cover,
+        errorBuilder: (_,__,___) => Container(color: Colors.grey[900], child: const Icon(Icons.movie, size: 50, color: Colors.white24)),
+      ),
+    );
+  }
+
+  Widget _buildHeroDetails(BuildContext context, LibraryProvider library, PlaybackProvider playback, ThemeData theme) {
+    final year = _current.year?.toString() ?? '';
+    final runtime = _current.runtimeMinutes != null ? '${_current.runtimeMinutes}m' : '';
+    final rating = _current.rating != null ? '${(_current.rating! * 10).toInt()}%' : '';
+    
+    // Extract Studio from overview if available (common in StashDB imports)
+    String? studio;
+    if (_current.overview != null && _current.overview!.startsWith('Studio: ')) {
+      final endLine = _current.overview!.indexOf('\n');
+      if (endLine != -1) {
+        studio = _current.overview!.substring(8, endLine).trim();
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _current.title ?? _current.fileName,
+          style: theme.textTheme.displayMedium?.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            height: 1.1,
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        if (studio != null) ...[
+          Text(
+            studio,
+            style: theme.textTheme.titleMedium?.copyWith(color: Colors.redAccent, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        Row(
+          children: [
+            if (year.isNotEmpty) _SimpleTag(text: year),
+            if (runtime.isNotEmpty) ...[const SizedBox(width: 12), _SimpleTag(text: runtime)],
+            const SizedBox(width: 12), const _SimpleTag(text: '18+', color: Colors.orange), // Explicit tag
+            const SizedBox(width: 12),
+            Expanded(
+               child: Text(
+                 _current.genres.join(', '), 
+                 style: const TextStyle(color: Colors.white54, fontSize: 13),
+                 overflow: TextOverflow.ellipsis,
+               ),
+             ),
+          ],
+        ),
+        const SizedBox(height: 20),
+
+        if (rating.isNotEmpty) ...[
+          Row(
+           children: [
+             const Icon(Icons.thumb_up, color: Colors.redAccent, size: 20),
+             const SizedBox(width: 6),
+             Text(rating, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+           ],
+          ),
+          const SizedBox(height: 24),
+        ],
+
+         Text(
+          _current.overview?.replaceAll(RegExp(r'Studio: .*\n'), '') ?? 'No details available.', // Strip studio if we showed it above
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: Colors.white70,
+            height: 1.6,
+            fontSize: 16,
+          ),
+          maxLines: 5,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 32),
+
+        Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: [
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFD32F2F),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 22),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: _current.filePath.isNotEmpty ? () {
+                 playback.start(_current);
+                 Navigator.of(context).push(
+                   MaterialPageRoute(builder: (_) => VideoPlayerScreen(item: _current)),
+                 );
+              } : null,
+              icon: const Icon(Icons.play_arrow),
+              label: Text(_current.filePath.isNotEmpty ? 'Play Scene' : 'Missing File'),
+            ),
+
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white24),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () {
+                 final updated = _current.copyWith(isWatched: !_current.isWatched);
+                 // We don't have local setState for _current inside this method easily unless we recreate layout, 
+                 // but LibraryProvider updates usually trigger rebuilds if we listen right.
+                 // Actually `_current` is updated in `build` from provider.
+                 library.updateItem(updated);
+              },
+              icon: Icon(_current.isWatched ? Icons.check : Icons.add),
+              label: Text(_current.isWatched ? 'Watched' : 'Watchlist'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
-class _MetaTag extends StatelessWidget {
+
+class _SimpleTag extends StatelessWidget {
   final String text;
-  final IconData icon;
-  final Color color;
-  const _MetaTag({required this.text, required this.icon, this.color = Colors.white});
+  final Color? color;
+  const _SimpleTag({required this.text, this.color});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 4),
-        Text(text, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      ],
+    return Text(
+      text,
+      style: TextStyle(
+        color: color ?? Colors.white70, 
+        fontWeight: FontWeight.w500,
+        fontSize: 14
+      ),
+    );
+  }
+}
+
+class _CastCard extends StatelessWidget {
+  final CastMember actor;
+  const _CastCard({required this.actor});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => ActorDetailsScreen(actor: actor)),
+      ),
+      child: SizedBox(
+        width: 100,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  image: DecorationImage(
+                    image: (actor.profileUrl != null 
+                        ? NetworkImage(actor.profileUrl!) 
+                        : const AssetImage('assets/placeholder_person.png')) as ImageProvider,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(actor.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -377,151 +430,35 @@ class _SceneCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-      final theme = Theme.of(context);
-      return GestureDetector(
-        onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (ctx) => SceneDetailsScreen(item: item),
-              ),
-            );
-        },
-        child: SizedBox(
-          width: 200, 
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-               Expanded(
-                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.network(
-                        item.posterUrl ?? item.backdropUrl ?? '',
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: Colors.grey[900],
-                          child: const Icon(Icons.movie, size: 40),
-                        ),
-                      ),
-                      if (item.runtimeMinutes != null)
-                      Positioned(
-                        bottom: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.7),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            _formatDuration(item.runtimeMinutes!),
-                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                 ),
-               ),
-               const SizedBox(height: 8),
-               Text(
-                 item.title ?? item.fileName,
-                 maxLines: 2,
-                 overflow: TextOverflow.ellipsis,
-                 style: theme.textTheme.labelLarge,
-               ),
-            ],
-          ),
-        ),
-      );
-  }
-
-  String _formatDuration(int minutes) {
-    final h = minutes ~/ 60;
-    final m = minutes % 60;
-    if (h > 0) return '${h}h ${m}m';
-    return '${m}m';
-  }
-}
-
-class _DetailsSection extends StatelessWidget {
-  final MediaItem item;
-  const _DetailsSection({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        title: const Text(
-          'Details',
-          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        iconColor: Colors.white,
-        collapsedIconColor: Colors.white,
-        tilePadding: EdgeInsets.zero,
-        children: [
-          _buildGrid(context),
-        ],
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => SceneDetailsScreen(item: item)),
       ),
-    );
-  }
-
-  Widget _buildGrid(BuildContext context) {
-    final data = <String, String>{};
-    
-    if (item.year != null) data['Date'] = item.lastModified.toString().split(' ')[0]; // Use Release Date or similar
-    if (item.runtimeMinutes != null) data['Runtime'] = '${item.runtimeMinutes}m';
-    if (item.genres.isNotEmpty) data['Tags'] = item.genres.take(3).join(', '); // Show top tags
-    
-    // Parse Studio
-    if (item.overview != null && item.overview!.startsWith('Studio: ')) {
-      final endLine = item.overview!.indexOf('\n');
-      if (endLine != -1) {
-        data['Studio'] = item.overview!.substring(8, endLine).trim();
-      }
-    }
-
-    return GridView.count(
-      shrinkWrap: true,
-      crossAxisCount: 2,
-      childAspectRatio: 3.5,
-      physics: const NeverScrollableScrollPhysics(),
-      children: data.entries.map((e) => _DetailItem(label: e.key, value: e.value)).toList(),
-    );
-  }
-}
-
-class _DetailItem extends StatelessWidget {
-  final String label;
-  final String value;
-  const _DetailItem({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-        const SizedBox(height: 2),
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
-      ],
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  const _SectionHeader({required this.title});
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Container(
-        child: Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
+      child: SizedBox(
+        width: 250, // Slightly wider for scenes (landscape thumbs usually)
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 16/9,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  image: DecorationImage(
+                    image: (item.posterUrl != null || item.backdropUrl != null) 
+                        ? NetworkImage(item.posterUrl ?? item.backdropUrl!) 
+                        : const AssetImage('assets/placeholder_movie.png') as ImageProvider,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                child: Center(child: Icon(Icons.play_circle_outline, color: Colors.white.withOpacity(0.5), size: 40)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(item.title ?? item.fileName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+             Text(item.year?.toString() ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+          ],
+        ),
       ),
     );
   }
