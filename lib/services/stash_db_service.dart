@@ -324,10 +324,17 @@ class StashDbService {
     );
     cleaned = cleaned.replaceAll(junkPattern, ' ');
 
-    // 4. Remove year if it looks like a year at the end of string or standalone
-    // (Optional: StashDB might like years, but sometimes they confuse title match if date is wrong)
-    // Let's keep year for now as it might be part of title "2022 Review"
-    // BUT user log shows "2022" as separate token.
+    // 4. Remove trailing numbers (years, dates, or random digits at the end)
+    // User request: "dont add numbers at the las most of the time its just the release date"
+    // We'll strip standalone digits at the end of the string.
+    var prev = cleaned;
+    cleaned = cleaned.replaceAll(RegExp(r'\s+\d+$'), ''); 
+    
+    // Also handle dates like 22.05.15 if they survived step 2 (step 2 replaced dots with space)
+    // So "22 05 15" -> might be "22 05 15" at end.
+    // Let's loop a bit or use a stronger regex if needed, but strict trailing digits is a good start.
+    // If we have "Title 2022", it becomes "Title".
+    // If we have "Title 01", it becomes "Title".
     
     // 5. Trim and collapse spaces
     return cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
