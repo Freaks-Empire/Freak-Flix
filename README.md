@@ -142,4 +142,4 @@ Adult/
 ---
 
 ## 📄 License
-This project is open source and available for personal use and modification.
+This project is open source and available for personal use and modification. You are not allowed to sell this software without explicit permission from the author.
