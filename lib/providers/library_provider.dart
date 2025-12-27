@@ -426,15 +426,42 @@ class LibraryProvider extends ChangeNotifier {
       (f) => f.id == folder.id && f.accountId == folder.accountId,
     );
     await _saveLibraryFolders();
+
+    // Remove associated items
+    final bool isCloud = folder.accountId.isNotEmpty;
+    if (isCloud) {
+       // Cloud items: ID format onedrive_{accountId}_{id}
+       // We need to be careful not to remove items from OTHER folders of same account if they exist
+       // But usually we filter by path.
+       // Let's rely on path matching.
+       final prefix = 'onedrive:${folder.accountId}${folder.path.isEmpty ? '/' : folder.path}';
+       _allItems.removeWhere((i) {
+         if (!i.id.startsWith('onedrive_${folder.accountId}_')) return false;
+         // Check if item belongs to this folder hierarchy
+         // item.folderPath example: 'onedrive:ACCOUNTID/Movies/Action'
+         // prefix: 'onedrive:ACCOUNTID/Movies'
+         return i.folderPath.startsWith(prefix);
+       });
+    } else {
+       // Local items
+       _allItems.removeWhere((i) => i.filePath.startsWith(folder.path));
+    }
+
     _configChangedController.add(null);
     notifyListeners();
+    await saveLibrary();
   }
 
   Future<void> removeLibraryFoldersForAccount(String accountId) async {
     libraryFolders.removeWhere((f) => f.accountId == accountId);
     await _saveLibraryFolders();
+    
+    // Remove all items for this account
+    _allItems.removeWhere((i) => i.id.startsWith('onedrive_${accountId}_'));
+    
     _configChangedController.add(null);
     notifyListeners();
+    await saveLibrary();
   }
 
   Future<void> rescanAll({
@@ -446,6 +473,9 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // 1. Prune orphans (Items not belonging to any active folder)
+      _pruneOrphans();
+
       for (final folder in libraryFolders) {
         if (folder.accountId.isNotEmpty) {
           // Cloud folder (OneDrive)
@@ -465,6 +495,35 @@ class LibraryProvider extends ChangeNotifier {
       finishScan();
       await saveLibrary();
 	  _configChangedController.add(null);
+    }
+  }
+
+  void _pruneOrphans() {
+    final before = _allItems.length;
+    _allItems.removeWhere((item) {
+      // OneDrive
+      if (item.id.startsWith('onedrive_')) {
+         return !libraryFolders.any((f) {
+             if (f.accountId.isEmpty) return false;
+             // item.id format: onedrive_{accountId}_{fileId}
+             // Ensure access to this specific account folder
+             // And strictly, check if folder path covers it.
+             final prefix = 'onedrive:${f.accountId}${f.path.isEmpty ? '/' : f.path}';
+             return item.folderPath.startsWith(prefix);
+         });
+      }
+      
+      // Local
+      return !libraryFolders.any((f) {
+          if (f.accountId.isNotEmpty) return false;
+          // Case-insensitive check for Windows friendliness
+          return item.filePath.toLowerCase().startsWith(f.path.toLowerCase());
+      });
+    });
+    
+    if (_allItems.length != before) {
+        debugPrint('LibraryProvider: Pruned ${before - _allItems.length} orphan items.');
+        notifyListeners();
     }
   }
 
