@@ -45,9 +45,9 @@ class TmdbReview {
       author: map['author'] as String? ?? 'Anonymous',
       content: map['content'] as String? ?? '',
       rating: (details?['rating'] as num?)?.toDouble(),
-      avatarPath: avatar,
     );
   }
+}
 
 class TmdbSeason {
   final int id;
