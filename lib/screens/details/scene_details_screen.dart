@@ -68,6 +68,9 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
       _current = libraryItem;
     }
 
+    final isDesktop = size.width > 900;
+    final displayCast = _current.cast;
+
     final isDark = theme.brightness == Brightness.dark;
     final baseColor = theme.scaffoldBackgroundColor;
     final textColor = theme.textTheme.bodyLarge?.color ?? Colors.white;
