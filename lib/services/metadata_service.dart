@@ -1,3 +1,4 @@
+/// lib/services/metadata_service.dart
 // ignore_for_file: avoid_print
 
 import '../models/media_item.dart';

@@ -1,3 +1,4 @@
+/// lib/widgets/segmented_pill_bar.dart
 import 'package:flutter/material.dart';
 
 class SegmentedPillItem {

@@ -1,3 +1,4 @@
+/// lib/models/library_folder.dart
 enum LibraryType { movies, tv, anime, adult, other }
 
 String libraryTypeToString(LibraryType type) {

@@ -1,3 +1,4 @@
+/// lib/models/tmdb_item.dart
 enum TmdbMediaType { movie, tv }
 
 class TmdbItem {

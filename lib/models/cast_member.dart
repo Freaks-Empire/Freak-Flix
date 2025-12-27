@@ -1,3 +1,4 @@
+/// lib/models/cast_member.dart
 enum CastSource { tmdb, stashDb }
 
 class CastMember {

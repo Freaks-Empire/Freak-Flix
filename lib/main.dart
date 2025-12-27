@@ -1,3 +1,4 @@
+/// lib/main.dart
 // Freak-Flix quick start:
 // 1) flutter pub get
 // 2) Desktop: flutter run -d windows|macos|linux (enable desktop support in SDK)

@@ -1,3 +1,4 @@
+/// lib/screens/search_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -69,7 +70,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final theme = Theme.of(context);
     
     return Scaffold(
-      backgroundColor: Colors.black, // Consistent dark theme
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           children: [
@@ -78,11 +79,11 @@ class _SearchScreenState extends State<SearchScreen> {
               child: TextField(
                 controller: _controller,
                 focusNode: _focusNode,
-                style: const TextStyle(color: Colors.white, fontSize: 18),
+                style: theme.textTheme.bodyLarge,
                 decoration: InputDecoration(
                   hintText: 'Search movies & TV shows...',
-                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-                  prefixIcon: const Icon(Icons.search, color: Colors.white70),
+                  hintStyle: theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor),
+                  prefixIcon: Icon(Icons.search, color: theme.iconTheme.color?.withOpacity(0.7)),
                   suffixIcon: _loading
                       ? const Padding(
                           padding: EdgeInsets.all(12.0),
@@ -93,7 +94,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         )
                       : (_controller.text.isNotEmpty
                           ? IconButton(
-                              icon: const Icon(Icons.clear, color: Colors.white70),
+                              icon: Icon(Icons.clear, color: theme.iconTheme.color?.withOpacity(0.7)),
                               onPressed: () {
                                 _controller.clear();
                                 _performSearch('');
@@ -101,7 +102,7 @@ class _SearchScreenState extends State<SearchScreen> {
                             )
                           : null),
                   filled: true,
-                  fillColor: Colors.white.withOpacity(0.1),
+                  fillColor: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                     borderSide: BorderSide.none,
@@ -119,11 +120,13 @@ class _SearchScreenState extends State<SearchScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.search, size: 64, color: Colors.white.withOpacity(0.1)),
+                          Icon(Icons.search, size: 64, color: theme.disabledColor.withOpacity(0.1)),
                           const SizedBox(height: 16),
                           Text(
                             'Find your next favorite',
-                            style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 16),
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: theme.textTheme.bodyMedium?.color?.withOpacity(0.3)
+                            ),
                           ),
                         ],
                       ),

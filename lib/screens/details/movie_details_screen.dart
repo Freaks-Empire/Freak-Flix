@@ -1,3 +1,4 @@
+/// lib/screens/details/movie_details_screen.dart
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
@@ -126,9 +127,14 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
 
     // Determine layout mode
     final isDesktop = size.width > 900;
+    
+    final isDark = theme.brightness == Brightness.dark;
+    final baseColor = theme.scaffoldBackgroundColor;
+    final textColor = theme.textTheme.bodyLarge?.color ?? Colors.white;
+    final mutedTextColor = theme.textTheme.bodyMedium?.color?.withOpacity(0.7) ?? Colors.white54;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F0F), // Deep black-ish background
+      backgroundColor: baseColor, 
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -137,7 +143,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
             child: _trailerLoading || _player.state.width == null
                 ? (_current.backdropUrl != null 
                     ? SafeNetworkImage(url: _current.backdropUrl, fit: BoxFit.cover) 
-                    : Container(color: Colors.black))
+                    : Container(color: baseColor))
                 : Video(controller: _controller, fit: BoxFit.cover, controls: NoVideoControls),
           ),
 
@@ -151,10 +157,10 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.black.withOpacity(0.4),
-                      const Color(0xFF0F0F0F).withOpacity(0.8),
-                      const Color(0xFF0F0F0F).withOpacity(0.95),
-                      const Color(0xFF0F0F0F),
+                      baseColor.withOpacity(0.2),
+                      baseColor.withOpacity(0.8),
+                      baseColor.withOpacity(0.95),
+                      baseColor,
                     ],
                     stops: const [0.0, 0.4, 0.7, 1.0],
                   ),
@@ -182,7 +188,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                       children: [
                         _buildHeroPoster(context),
                         const SizedBox(width: 48),
-                        Expanded(child: _buildHeroDetails(context, library, playback)),
+                        Expanded(child: _buildHeroDetails(context, library, playback, textColor, mutedTextColor)),
                       ],
                     )
                   else
@@ -191,7 +197,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                       children: [
                         Center(child: _buildHeroPoster(context)),
                         const SizedBox(height: 24),
-                        _buildHeroDetails(context, library, playback),
+                        _buildHeroDetails(context, library, playback, textColor, mutedTextColor),
                       ],
                     ),
                   
@@ -199,7 +205,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                   
                   // --- Cast Section ---
                   if (_details?.cast.isNotEmpty ?? false) ...[
-                    Text('Actors', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
+                    Text('Actors', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
                     SizedBox(
                       height: 140, // Height for Cast Card
@@ -207,7 +213,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                         scrollDirection: Axis.horizontal,
                         itemCount: _details!.cast.length,
                         separatorBuilder: (_, __) => const SizedBox(width: 16),
-                        itemBuilder: (ctx, i) => _CastCard(actor: _details!.cast[i]),
+                        itemBuilder: (ctx, i) => _CastCard(actor: _details!.cast[i], textColor: textColor, mutedColor: mutedTextColor),
                       ),
                     ),
                     const SizedBox(height: 48),
@@ -217,7 +223,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                   if (_details?.reviews.isNotEmpty ?? false) ...[
                      Row(
                        children: [
-                         Text('Reviews', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
+                         Text('Reviews', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                          const SizedBox(width: 12),
                          Container(
                            padding: const EdgeInsets.all(6),
@@ -233,7 +239,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                         scrollDirection: Axis.horizontal,
                         itemCount: _details!.reviews.length,
                         separatorBuilder: (_, __) => const SizedBox(width: 16),
-                        itemBuilder: (ctx, i) => _ReviewCard(review: _details!.reviews[i]),
+                        itemBuilder: (ctx, i) => _ReviewCard(review: _details!.reviews[i], textColor: textColor, mutedColor: mutedTextColor),
                       ),
                     ),
                     const SizedBox(height: 48),
@@ -241,7 +247,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
 
                   // --- Extras (Trailers) Section ---
                   if (_details?.videos.isNotEmpty ?? false) ...[
-                     Text('Extras', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
+                     Text('Extras', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                      const SizedBox(height: 16),
                      SizedBox(
                        height: 140,
@@ -251,7 +257,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                          separatorBuilder: (_, __) => const SizedBox(width: 16),
                          itemBuilder: (ctx, i) {
                            final vid = _details!.videos.where((v) => v.site == 'YouTube').elementAt(i);
-                           return _TrailerCard(video: vid);
+                           return _TrailerCard(video: vid, textColor: textColor);
                          }
                        ),
                      ),
@@ -261,7 +267,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
 
                   // --- Related Movies ---
                   if (_details?.recommendations.isNotEmpty ?? false) ...[
-                    Text('Related Movies', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
+                    Text('Related Movies', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
                     SizedBox(
                       height: 220,
@@ -284,10 +290,10 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
             left: 24,
             child: IconButton(
               onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              icon: Icon(Icons.arrow_back, color: textColor), // Adaptive back button color
               style: IconButton.styleFrom(
-                backgroundColor: Colors.black45,
-                foregroundColor: Colors.white,
+                backgroundColor: baseColor.withOpacity(0.5), // Semi-transparent based on theme
+                foregroundColor: textColor,
               ),
             ),
           ),
@@ -299,10 +305,10 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
               right: 24,
               child: IconButton(
                 onPressed: _toggleMute,
-                icon: Icon(_muted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
+                icon: Icon(_muted ? Icons.volume_off : Icons.volume_up, color: textColor),
                  style: IconButton.styleFrom(
-                  backgroundColor: Colors.black45,
-                  foregroundColor: Colors.white,
+                  backgroundColor: baseColor.withOpacity(0.5),
+                  foregroundColor: textColor,
                 ),
               ),
             ),
@@ -326,7 +332,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
     );
   }
 
-  Widget _buildHeroDetails(BuildContext context, LibraryProvider library, PlaybackProvider playback) {
+  Widget _buildHeroDetails(BuildContext context, LibraryProvider library, PlaybackProvider playback, Color textColor, Color mutedColor) {
     final theme = Theme.of(context);
     final imdbId = _details?.externalIds['imdb'];
     final year = _current.year?.toString() ?? '';
@@ -340,7 +346,6 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
         Text(
           _current.title ?? _current.fileName,
           style: theme.textTheme.displayMedium?.copyWith(
-            color: Colors.white,
             fontWeight: FontWeight.w900,
             height: 1.1,
           ),
@@ -351,22 +356,22 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
         // Placeholder for Director if not available, usually in credits crew
         Text(
           'Directed by Unknown', // We can fetch crew later if needed
-          style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
+          style: theme.textTheme.bodyMedium?.copyWith(color: mutedColor),
         ),
         const SizedBox(height: 12),
         
         // Technical Meta Row
         Row(
           children: [
-            if (year.isNotEmpty) _SimpleTag(text: year),
-            if (runtime.isNotEmpty) ...[const SizedBox(width: 12), _SimpleTag(text: runtime)],
+            if (year.isNotEmpty) _SimpleTag(text: year, color: mutedColor),
+            if (runtime.isNotEmpty) ...[const SizedBox(width: 12), _SimpleTag(text: runtime, color: mutedColor)],
             if (_current.isAdult) ...[const SizedBox(width: 12), const _SimpleTag(text: 'R', color: Colors.red)],
              // Genres
              const SizedBox(width: 12),
              Expanded(
                child: Text(
                  _current.genres.join(', '), 
-                 style: const TextStyle(color: Colors.white54, fontSize: 13),
+                 style: TextStyle(color: mutedColor, fontSize: 13),
                  overflow: TextOverflow.ellipsis,
                ),
              ),
@@ -380,9 +385,9 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
              if (rating.isNotEmpty) ...[
                const Icon(Icons.thumb_up, color: Colors.redAccent, size: 20),
                const SizedBox(width: 6),
-               Text(rating, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+               Text(rating, style: const TextStyle(fontWeight: FontWeight.bold)),
                const SizedBox(width: 8),
-               Text('${_current.voteCount ?? "2.3k"} ratings', style: const TextStyle(color: Colors.white38, fontSize: 12)),
+               Text('${_current.voteCount ?? "2.3k"} ratings', style: TextStyle(color: mutedColor.withOpacity(0.5), fontSize: 12)),
              ],
              if (imdbId != null) ...[
                const SizedBox(width: 24),
@@ -391,7 +396,6 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                  decoration: BoxDecoration(color: const Color(0xFFF5C518), borderRadius: BorderRadius.circular(4)),
                  child: const Text('IMDb', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 12)),
                ),
-               // We don't have separate IMDb rating from API often, so just show the logo badge as "Available on IMDb"
              ],
            ],
         ),
@@ -401,9 +405,9 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
         Text(
           _current.overview ?? 'No synopsis available.',
           style: theme.textTheme.bodyLarge?.copyWith(
-            color: Colors.white70,
             height: 1.6,
             fontSize: 16,
+            color: textColor.withOpacity(0.8),
           ),
           maxLines: 5,
           overflow: TextOverflow.ellipsis,
@@ -436,22 +440,22 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
 
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: Colors.white24),
+                foregroundColor: textColor,
+                side: BorderSide(color: mutedColor.withOpacity(0.3)),
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: () {},
-              icon: const Icon(Icons.bookmark_border),
-              label: const Text('Watchlist'),
+              icon: Icon(Icons.bookmark_border, color: textColor),
+              label: Text('Watchlist', style: TextStyle(color: textColor)),
             ),
 
             IconButton.filledTonal(
               style: IconButton.styleFrom(
-                backgroundColor: Colors.white10,
-                foregroundColor: Colors.white,
+                backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                foregroundColor: textColor,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                fixedSize: const Size(60, 60), // Match button height approx
+                fixedSize: const Size(60, 60), 
               ),
               onPressed: _details?.videos.isNotEmpty == true ? () async {
                   // Launch trailer externally or show dialog
@@ -464,8 +468,8 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
             ),
              IconButton.filledTonal(
               style: IconButton.styleFrom(
-                backgroundColor: Colors.white10,
-                foregroundColor: Colors.white,
+                backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                foregroundColor: textColor,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 fixedSize: const Size(60, 60),
               ),
@@ -518,10 +522,13 @@ class _SimpleTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Default color logic
+    final defaultColor = Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7) ?? Colors.white70;
+
     return Text(
       text,
       style: TextStyle(
-        color: color ?? Colors.white70, 
+        color: color ?? defaultColor, 
         fontWeight: FontWeight.w500,
         fontSize: 14
       ),
@@ -531,7 +538,9 @@ class _SimpleTag extends StatelessWidget {
 
 class _CastCard extends StatelessWidget {
   final CastMember actor;
-  const _CastCard({required this.actor});
+  final Color textColor;
+  final Color mutedColor;
+  const _CastCard({required this.actor, required this.textColor, required this.mutedColor});
 
   @override
   Widget build(BuildContext context) {
@@ -558,8 +567,8 @@ class _CastCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Text(actor.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-            Text(actor.character, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+            Text(actor.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 12)),
+            Text(actor.character, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: mutedColor, fontSize: 11)),
           ],
         ),
       ),
@@ -569,17 +578,20 @@ class _CastCard extends StatelessWidget {
 
 class _ReviewCard extends StatelessWidget {
   final TmdbReview review;
-  const _ReviewCard({required this.review});
+  final Color textColor;
+  final Color mutedColor;
+  const _ReviewCard({required this.review, required this.textColor, required this.mutedColor});
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       width: 300,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -589,15 +601,15 @@ class _ReviewCard extends StatelessWidget {
               CircleAvatar(
                 radius: 12,
                 backgroundImage: review.avatarPath != null ? NetworkImage(review.avatarPath!) : null,
-                backgroundColor: Colors.grey[800],
-                child: review.avatarPath == null ? Text(review.author[0], style: const TextStyle(fontSize: 10)) : null,
+                backgroundColor: theme.colorScheme.primaryContainer,
+                child: review.avatarPath == null ? Text(review.author[0].toUpperCase(), style: TextStyle(fontSize: 10, color: theme.colorScheme.onPrimaryContainer)) : null,
               ),
               const SizedBox(width: 8),
-              Expanded(child: Text(review.author, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1)),
+              Expanded(child: Text(review.author, style: TextStyle(color: textColor, fontWeight: FontWeight.bold), maxLines: 1)),
               if (review.rating != null) ...[
                 const Icon(Icons.star, size: 12, color: Colors.amber),
                 const SizedBox(width: 4),
-                Text(review.rating.toString(), style: const TextStyle(color: Colors.white, fontSize: 12)),
+                Text(review.rating.toString(), style: TextStyle(color: textColor, fontSize: 12)),
               ],
             ],
           ),
@@ -605,7 +617,7 @@ class _ReviewCard extends StatelessWidget {
           Expanded(
             child: Text(
               review.content,
-              style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
+              style: TextStyle(color: mutedColor, fontSize: 12, height: 1.4),
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
             ),
@@ -618,7 +630,8 @@ class _ReviewCard extends StatelessWidget {
 
 class _TrailerCard extends StatelessWidget {
   final TmdbVideo video;
-  const _TrailerCard({required this.video});
+  final Color textColor;
+  const _TrailerCard({required this.video, required this.textColor});
 
   @override
   Widget build(BuildContext context) {
@@ -651,7 +664,7 @@ class _TrailerCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Text(video.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12)),
+            Text(video.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: textColor, fontSize: 12)),
             const Text('YouTube', style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
           ],
         ),

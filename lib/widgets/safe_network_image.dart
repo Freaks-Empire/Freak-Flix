@@ -1,3 +1,5 @@
+/// lib/widgets/safe_network_image.dart
+
 import 'package:flutter/material.dart';
 
 /// Network image that fails gracefully and shows a placeholder on 404/other errors.

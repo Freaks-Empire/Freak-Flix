@@ -1,3 +1,4 @@
+/// lib/screens/details/tv_details_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 

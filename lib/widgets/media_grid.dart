@@ -1,3 +1,4 @@
+/// lib/widgets/media_grid.dart
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import 'media_card.dart';

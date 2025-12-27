@@ -1,3 +1,4 @@
+/// lib/models/discover_filter.dart
 import 'package:flutter/material.dart';
 
 class DiscoverFilter {

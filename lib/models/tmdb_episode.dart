@@ -1,3 +1,4 @@
+/// lib/models/tmdb_episode.dart
 class TmdbEpisode {
   final int id;
   final String name;

@@ -1,3 +1,4 @@
+/// lib/utils/platform/platform.dart
 
 // Stub file for conditional imports
 export 'platform_stub.dart'

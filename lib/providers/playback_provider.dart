@@ -1,3 +1,4 @@
+/// lib/providers/playback_provider.dart
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import '../models/user_profile.dart'; // Ensure import

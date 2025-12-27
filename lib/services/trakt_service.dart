@@ -1,3 +1,4 @@
+/// lib/services/trakt_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/media_item.dart';

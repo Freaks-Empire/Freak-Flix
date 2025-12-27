@@ -1,3 +1,4 @@
+/// lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:freak_flix/models/media_item.dart';

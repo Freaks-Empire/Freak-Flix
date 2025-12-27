@@ -1,3 +1,4 @@
+/// lib/utils/filename_parser.dart
 class ParsedMediaName {
   final String seriesTitle;
   final String? movieTitle;

@@ -1,3 +1,4 @@
+/// lib/screens/details/scene_details_screen.dart
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
@@ -67,11 +68,13 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
       _current = libraryItem;
     }
 
-    final isDesktop = size.width > 900;
-    final displayCast = _current.cast;
+    final isDark = theme.brightness == Brightness.dark;
+    final baseColor = theme.scaffoldBackgroundColor;
+    final textColor = theme.textTheme.bodyLarge?.color ?? Colors.white;
+    final mutedTextColor = theme.textTheme.bodyMedium?.color?.withOpacity(0.7) ?? Colors.white54;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F0F),
+      backgroundColor: baseColor,
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -81,7 +84,7 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                 ? SafeNetworkImage(url: _current.backdropUrl, fit: BoxFit.cover) 
                 : (_current.posterUrl != null 
                     ? SafeNetworkImage(url: _current.posterUrl, fit: BoxFit.cover)
-                    : Container(color: Colors.black)),
+                    : Container(color: baseColor)),
           ),
 
           // 2. Blur & Overlay
@@ -94,10 +97,10 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.black.withOpacity(0.4),
-                      const Color(0xFF0F0F0F).withOpacity(0.8),
-                      const Color(0xFF0F0F0F).withOpacity(0.95),
-                      const Color(0xFF0F0F0F),
+                      baseColor.withOpacity(0.2), // Light tint at top in light mode
+                      baseColor.withOpacity(0.8),
+                      baseColor.withOpacity(0.95),
+                      baseColor,
                     ],
                     stops: const [0.0, 0.4, 0.7, 1.0],
                   ),
@@ -125,7 +128,7 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                       children: [
                         _buildHeroPoster(context),
                         const SizedBox(width: 48),
-                        Expanded(child: _buildHeroDetails(context, library, playback, theme)),
+                        Expanded(child: _buildHeroDetails(context, library, playback, theme, textColor, mutedTextColor)),
                       ],
                     )
                   else
@@ -134,7 +137,7 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                       children: [
                         Center(child: _buildHeroPoster(context)),
                         const SizedBox(height: 24),
-                        _buildHeroDetails(context, library, playback, theme),
+                        _buildHeroDetails(context, library, playback, theme, textColor, mutedTextColor),
                       ],
                     ),
                   
@@ -142,7 +145,7 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
 
                   // Performers
                   if (displayCast.isNotEmpty) ...[
-                    Text('Performers', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
+                    Text('Performers', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
                     SizedBox(
                       height: 140,
@@ -150,14 +153,13 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                         scrollDirection: Axis.horizontal,
                         itemCount: displayCast.length,
                         separatorBuilder: (_, __) => const SizedBox(width: 16),
-                        itemBuilder: (ctx, i) => _CastCard(actor: displayCast[i]),
+                        itemBuilder: (ctx, i) => _CastCard(actor: displayCast[i], textColor: textColor),
                       ),
                     ),
                     const SizedBox(height: 48),
                   ],
 
                   // Related Scenes
-                  // We can reuse logic or simplify it here.
                   Builder(
                     builder: (context) {
                        final libraryItems = library.items;
@@ -182,7 +184,7 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                          return Column(
                            crossAxisAlignment: CrossAxisAlignment.start,
                            children: [
-                             Text('Related Scenes', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
+                             Text('Related Scenes', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                              const SizedBox(height: 16),
                              SizedBox(
                                height: 220,
@@ -190,7 +192,7 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                                  scrollDirection: Axis.horizontal,
                                  itemCount: relatedItems.length,
                                  separatorBuilder: (_,__) => const SizedBox(width: 12),
-                                 itemBuilder: (ctx, i) => _SceneCard(item: relatedItems[i]),
+                                 itemBuilder: (ctx, i) => _SceneCard(item: relatedItems[i], textColor: textColor, mutedColor: mutedTextColor),
                                ),
                              ),
                            ],
@@ -248,7 +250,7 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
     );
   }
 
-  Widget _buildHeroDetails(BuildContext context, LibraryProvider library, PlaybackProvider playback, ThemeData theme) {
+  Widget _buildHeroDetails(BuildContext context, LibraryProvider library, PlaybackProvider playback, ThemeData theme, Color textColor, Color mutedColor) {
     final year = _current.year?.toString() ?? '';
     final runtime = _current.runtimeMinutes != null ? '${_current.runtimeMinutes}m' : '';
     final rating = _current.rating != null ? '${(_current.rating! * 10).toInt()}%' : '';
@@ -268,7 +270,6 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
         Text(
           _current.title ?? _current.fileName,
           style: theme.textTheme.displayMedium?.copyWith(
-            color: Colors.white,
             fontWeight: FontWeight.w900,
             height: 1.1,
           ),
@@ -285,14 +286,14 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
 
         Row(
           children: [
-            if (year.isNotEmpty) _SimpleTag(text: year),
-            if (runtime.isNotEmpty) ...[const SizedBox(width: 12), _SimpleTag(text: runtime)],
+            if (year.isNotEmpty) _SimpleTag(text: year, color: mutedColor),
+            if (runtime.isNotEmpty) ...[const SizedBox(width: 12), _SimpleTag(text: runtime, color: mutedColor)],
             const SizedBox(width: 12), const _SimpleTag(text: '18+', color: Colors.orange), // Explicit tag
             const SizedBox(width: 12),
             Expanded(
                child: Text(
                  _current.genres.join(', '), 
-                 style: const TextStyle(color: Colors.white54, fontSize: 13),
+                 style: TextStyle(color: mutedColor, fontSize: 13),
                  overflow: TextOverflow.ellipsis,
                ),
              ),
@@ -305,7 +306,7 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
            children: [
              const Icon(Icons.thumb_up, color: Colors.redAccent, size: 20),
              const SizedBox(width: 6),
-             Text(rating, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+             Text(rating, style: const TextStyle(fontWeight: FontWeight.bold)),
            ],
           ),
           const SizedBox(height: 24),
@@ -314,9 +315,9 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
          Text(
           _current.overview?.replaceAll(RegExp(r'Studio: .*\n'), '') ?? 'No details available.', // Strip studio if we showed it above
           style: theme.textTheme.bodyLarge?.copyWith(
-            color: Colors.white70,
             height: 1.6,
             fontSize: 16,
+            color: textColor.withOpacity(0.8),
           ),
           maxLines: 5,
           overflow: TextOverflow.ellipsis,
@@ -346,16 +347,13 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
 
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: Colors.white24),
+                foregroundColor: textColor,
+                side: BorderSide(color: mutedColor.withOpacity(0.3)),
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: () {
                  final updated = _current.copyWith(isWatched: !_current.isWatched);
-                 // We don't have local setState for _current inside this method easily unless we recreate layout, 
-                 // but LibraryProvider updates usually trigger rebuilds if we listen right.
-                 // Actually `_current` is updated in `build` from provider.
                  library.updateItem(updated);
               },
               icon: Icon(_current.isWatched ? Icons.check : Icons.add),
@@ -376,10 +374,13 @@ class _SimpleTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Default color logic: if passed color is null, check theme brightness in build
+    final defaultColor = Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7) ?? Colors.white70;
+
     return Text(
       text,
       style: TextStyle(
-        color: color ?? Colors.white70, 
+        color: color ?? defaultColor, 
         fontWeight: FontWeight.w500,
         fontSize: 14
       ),
@@ -389,7 +390,8 @@ class _SimpleTag extends StatelessWidget {
 
 class _CastCard extends StatelessWidget {
   final CastMember actor;
-  const _CastCard({required this.actor});
+  final Color textColor;
+  const _CastCard({required this.actor, required this.textColor});
 
   @override
   Widget build(BuildContext context) {
@@ -416,7 +418,7 @@ class _CastCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Text(actor.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+            Text(actor.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 12)),
           ],
         ),
       ),
@@ -426,7 +428,10 @@ class _CastCard extends StatelessWidget {
 
 class _SceneCard extends StatelessWidget {
   final MediaItem item;
-  const _SceneCard({required this.item});
+  final Color textColor;
+  final Color mutedColor;
+
+  const _SceneCard({required this.item, required this.textColor, required this.mutedColor});
 
   @override
   Widget build(BuildContext context) {
@@ -435,7 +440,7 @@ class _SceneCard extends StatelessWidget {
         MaterialPageRoute(builder: (_) => SceneDetailsScreen(item: item)),
       ),
       child: SizedBox(
-        width: 250, // Slightly wider for scenes (landscape thumbs usually)
+        width: 250, 
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -455,8 +460,8 @@ class _SceneCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Text(item.title ?? item.fileName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-             Text(item.year?.toString() ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+            Text(item.title ?? item.fileName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13)),
+             Text(item.year?.toString() ?? '', style: TextStyle(color: mutedColor, fontSize: 11)),
           ],
         ),
       ),

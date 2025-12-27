@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+/// lib/app.dart
+import 'package:flutter/material.dart';
 import 'dart:ui'; // Required for PointerDeviceKind
 import 'package:provider/provider.dart';
 import 'providers/settings_provider.dart';

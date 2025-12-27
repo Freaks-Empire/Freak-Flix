@@ -1,3 +1,4 @@
+/// lib/widgets/discover_section.dart
 import 'package:flutter/material.dart';
 import '../models/tmdb_item.dart';
 import 'discover_card.dart';

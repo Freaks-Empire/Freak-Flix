@@ -1,3 +1,4 @@
+/// lib/screens/details/episode_details_screen.dart
 import 'package:flutter/material.dart';
 import '../../models/tmdb_episode.dart';
 import '../../models/media_item.dart';

@@ -1,3 +1,4 @@
+/// lib/widgets/video_player/video_controls.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

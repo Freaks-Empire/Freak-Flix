@@ -1,3 +1,4 @@
+/// lib/widgets/nav_bar.dart
 import 'package:flutter/material.dart';
 
 class NavBar extends StatelessWidget {

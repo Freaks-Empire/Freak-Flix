@@ -1,3 +1,4 @@
+/// lib/utils/platform/platform_web.dart
 
 class Platform {
   static const bool isWindows = false;

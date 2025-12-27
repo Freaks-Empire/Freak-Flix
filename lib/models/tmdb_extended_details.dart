@@ -1,3 +1,4 @@
+/// lib/models/tmdb_extended_details.dart
 
 import 'tmdb_item.dart';
 import 'cast_member.dart';

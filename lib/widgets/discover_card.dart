@@ -1,3 +1,4 @@
+/// lib/widgets/discover_card.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/tmdb_item.dart';

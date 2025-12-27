@@ -1,3 +1,4 @@
+/// lib/widgets/home_media_card.dart
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import '../screens/details_screen.dart';

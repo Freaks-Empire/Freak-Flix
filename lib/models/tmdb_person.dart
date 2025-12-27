@@ -1,3 +1,4 @@
+/// lib/models/tmdb_person.dart
 import 'tmdb_item.dart';
 
 class TmdbPerson {

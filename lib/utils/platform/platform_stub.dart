@@ -1,3 +1,4 @@
+/// lib/utils/platform/platform_stub.dart
 
 abstract class Platform {
   static const bool isWindows = false;
