@@ -66,41 +66,20 @@ class MetadataService {
        }
        // If AniList fails, return original item. 
        // User requested "Anime handles metadata nothing else".
-       // We could technically fallback to TMDB if we wanted, but "nothing else" implies strictness.
-       // However, AniList might miss some obscure stuff. 
-       // Let's assume strict compliance with user request.
        return item;
     }
 
-    // 2. Standard Content (Movies/TV) -> TMDB (with Trakt helper)
-    // Always attempt AniList first? No, only for Anime.
-    // Wait, what if it's "Movies" library but contains Anime movie?
-    // User said "Library type adult -> stash", "Movies and TV -> TMDB".
-    // "Anime -> AniList".
-    // So if item is NOT tagged as Adult or Anime (by library folder), we proceed to Standard Flow.
+    // Rule C: Standard Content -> TMDB only (via Trakt/TMDB)
+    // If we are here, it's NOT Adult and NOT Anime.
     
-    // Standard Flow: Trakt (for ID/Type) -> TMDB
     MediaItem base;
-    
-    // Auto-detect Anime if NOT strictly in Anime folder?
-    // If user puts "Naruto" in "TV Shows", do they want AniList?
-    // "Prefer AniList For Anime" setting exists.
-    final preferAniList = settings.preferAniListForAnime;
-    if (preferAniList) {
-       var aniCandidate = await _ani.enrichWithAniList(working);
-       if (aniCandidate.isAnime && aniCandidate.anilistId != null) {
-         return _ensureTypeForTvHints(aniCandidate);
-       }
-    }
-
-    // Otherwise fall back to Trakt (movies/TV detection via genres) if key exists.
-      final bool looksLikeEpisode = working.season != null ||
+    final bool looksLikeEpisode = working.season != null ||
           working.episode != null ||
           working.type == MediaType.tv;
 
-      if (!_trakt.hasKey) {
+    if (!_trakt.hasKey) {
         base = _ensureTypeForTvHints(working);
-      } else {
+    } else {
         final searchTitle = parsed.seriesTitle;
 
         if (looksLikeEpisode) {

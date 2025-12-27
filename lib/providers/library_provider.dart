@@ -373,9 +373,50 @@ class LibraryProvider extends ChangeNotifier {
   Future<void> _reclassifyItems() async {
       bool updated = false;
       for (var i = 0; i < _allItems.length; i++) {
-        final parsed = FilenameParser.parse(_allItems[i].fileName);
-        final inferredType = _inferTypeFromPath(_allItems[i]);
-        final inferredAnime = _inferAnimeFromPath(_allItems[i]);
+        final item = _allItems[i];
+        final parsed = FilenameParser.parse(item.fileName);
+        
+        // Find parent folder to determine strict type
+        LibraryFolder? parentFolder;
+        
+        // Check Cloud Folders
+        if (item.id.startsWith('onedrive_')) {
+             parentFolder = libraryFolders.firstWhereOrNull((f) {
+                 if (f.accountId.isEmpty) return false;
+                 final prefix = 'onedrive:${f.accountId}${f.path.isEmpty ? '/' : f.path}';
+                 return item.folderPath.startsWith(prefix);
+             });
+        } 
+        // Check Local Folders
+        else {
+             parentFolder = libraryFolders.firstWhereOrNull((f) {
+                 if (f.accountId.isNotEmpty) return false;
+                 return item.filePath.toLowerCase().startsWith(f.path.toLowerCase());
+             });
+        }
+        
+        bool newIsAnime = item.isAnime;
+        bool newIsAdult = item.isAdult;
+        MediaType newType = item.type;
+        
+        if (parentFolder != null) {
+            newIsAnime = parentFolder.type == LibraryType.anime;
+            newIsAdult = parentFolder.type == LibraryType.adult;
+            
+            // Re-infer type based on folder strictness + filename hints
+            if (parentFolder.type == LibraryType.movies) {
+               newType = MediaType.movie;
+            } else if (parentFolder.type == LibraryType.tv || parentFolder.type == LibraryType.anime) {
+               newType = MediaType.tv;
+            } else if (parentFolder.type == LibraryType.adult) {
+               newType = MediaType.scene;
+            } else {
+               // Other/Unknown: Keep inference but remove anime guessing if not strictly anime?
+               // Actually we'll keep inference for 'Other'.
+               newType = _inferTypeFromPath(item); 
+            }
+        } 
+
         final updatedItem = _allItems[i].copyWith(
           title: parsed.seriesTitle.isNotEmpty
               ? parsed.seriesTitle
@@ -384,8 +425,9 @@ class LibraryProvider extends ChangeNotifier {
               parsed.season ??
               (parsed.episode != null ? 1 : null),
           episode: _allItems[i].episode ?? parsed.episode,
-          type: inferredType,
-          isAnime: inferredAnime,
+          type: newType,
+          isAnime: newIsAnime,
+          isAdult: newIsAdult,
           year: _allItems[i].year ?? parsed.year,
         );
         if (updatedItem != _allItems[i]) {
@@ -1179,11 +1221,8 @@ Future<void> _walkOneDrivePage({
         DateTime.tryParse(lastModifiedRaw ?? '') ?? DateTime.now();
     final size = (m['size'] as num?)?.toInt() ?? 0;
     final parsed = FilenameParser.parse(name);
-    final animeHint = nextPath.toLowerCase().contains('anime');
-    final hasTvHints =
-        parsed.season != null || parsed.episode != null || animeHint;
-    final mediaType = _typeForFolder(libraryFolder, hasTvHints);
-    final isAnime = libraryFolder.type == LibraryType.anime || animeHint;
+    final mediaType = _typeForFolder(libraryFolder, parsed.season != null || parsed.episode != null);
+    final isAnime = libraryFolder.type == LibraryType.anime;
     final isAdult = libraryFolder.type == LibraryType.adult;
     final accountScopedFolderPath = '$accountPrefix$currentPath';
     final accountScopedFilePath = '$accountPrefix$nextPath';

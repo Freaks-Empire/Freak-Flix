@@ -22,18 +22,21 @@ class AniListService {
     const url = 'https://graphql.anilist.co';
     const query = r'''
       query ($search: String) {
-        Media(search: $search, type: ANIME) {
-          id
-          title { romaji english native }
-          description(asHtml: false)
-          episodes
-          status
-          seasonYear
-          coverImage { large }
-          bannerImage
-          genres
-          averageScore
-          duration
+        Page(perPage: 1) {
+          media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
+            id
+            title { romaji english native }
+            description(asHtml: false)
+            episodes
+            status
+            seasonYear
+            coverImage { large }
+            bannerImage
+            genres
+            averageScore
+            duration
+            format
+          }
         }
       }
     ''';
@@ -45,10 +48,16 @@ class AniListService {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'query': query, 'variables': variables}),
       );
+      
       if (res.statusCode != 200) return item;
+      
       final body = jsonDecode(res.body) as Map<String, dynamic>;
-      final media = (body['data'] as Map<String, dynamic>?)?['Media'] as Map<String, dynamic>?;
-      if (media == null) return item;
+      final page = body['data']?['Page'];
+      final mediaList = page?['media'] as List<dynamic>?;
+      
+      if (mediaList == null || mediaList.isEmpty) return item;
+      
+      final media = mediaList.first as Map<String, dynamic>;
       _cache[key] = media;
       return _apply(item, media);
     } catch (_) {
