@@ -481,35 +481,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
           ],
         ),
 
-        // Sentiment / Quote / Tagline
-        const SizedBox(height: 32),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF651F1F).withOpacity(0.3), // Dark red tint
-            border: Border(left: BorderSide(color: Colors.redAccent.withOpacity(0.5), width: 4)),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.auto_awesome, color: Colors.white70),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Sentiment', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Engaging soundtrack and score. Vivid visuals and atmosphere.', // Static placeholder
-                      style: const TextStyle(color: Colors.white70, fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+
       ],
     );
   }

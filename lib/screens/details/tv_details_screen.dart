@@ -93,6 +93,7 @@ class _TvDetailsScreenState extends State<TvDetailsScreen> {
        return i.tmdbId == _current.tmdbId;
     }).toList();
 
+    // Ensure strictly matching type (TV/Anime) to avoid Movie ID collisions
     final availableEps = eps.where((tmdbEp) {
       return localItems.any((localEp) => 
         localEp.season == tmdbEp.seasonNumber && 
@@ -113,7 +114,22 @@ class _TvDetailsScreenState extends State<TvDetailsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final size = MediaQuery.of(context).size;
+    final library = context.watch<LibraryProvider>();
     
+    // Find all local seasons for this show
+    final allShowEpisodes = library.items.where((i) {
+       if (_current.isAnime && _current.anilistId != null && i.anilistId != null) {
+         return i.anilistId == _current.anilistId;
+       }
+       if (i.type != MediaType.tv && !i.isAnime) return false;
+       return i.tmdbId == _current.tmdbId;
+    }).toList();
+    
+    final availableSeasonNumbers = allShowEpisodes.map((e) => e.season).toSet();
+    
+    // Filter seasons to only those with local episodes
+    final visibleSeasons = _details?.seasons.where((s) => availableSeasonNumbers.contains(s.seasonNumber)).toList() ?? [];
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -224,31 +240,33 @@ class _TvDetailsScreenState extends State<TvDetailsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Seasons', style: theme.textTheme.titleLarge?.copyWith(color: Colors.white)),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          height: 50,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _details?.seasons.length ?? 0, 
-                            separatorBuilder: (_,__) => const SizedBox(width: 12),
-                            itemBuilder: (ctx, i) {
-                              final season = _details!.seasons[i];
-                              final isSelected = season.seasonNumber == _selectedSeason;
-                              return ChoiceChip(
-                                label: Text(season.name.isNotEmpty ? season.name : 'Season ${season.seasonNumber}'),
-                                selected: isSelected,
-                                onSelected: (_) => _loadEpisodes(season.seasonNumber),
-                                selectedColor: theme.colorScheme.primary,
-                                labelStyle: TextStyle(color: isSelected ? theme.colorScheme.onPrimary : Colors.white),
-                                backgroundColor: Colors.white12,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                showCheckmark: false,
-                              );
-                            },
+                        if (visibleSeasons.isNotEmpty) ...[
+                          Text('Seasons', style: theme.textTheme.titleLarge?.copyWith(color: Colors.white)),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            height: 50,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: visibleSeasons.length, 
+                              separatorBuilder: (_,__) => const SizedBox(width: 12),
+                              itemBuilder: (ctx, i) {
+                                final season = visibleSeasons[i];
+                                final isSelected = season.seasonNumber == _selectedSeason;
+                                return ChoiceChip(
+                                  label: Text('Season ${season.seasonNumber}'),
+                                  selected: isSelected,
+                                  onSelected: (_) => _loadEpisodes(season.seasonNumber),
+                                  selectedColor: theme.colorScheme.primary,
+                                  labelStyle: TextStyle(color: isSelected ? theme.colorScheme.onPrimary : Colors.white),
+                                  backgroundColor: Colors.white12,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  showCheckmark: false,
+                                );
+                              },
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 32),
+                          const SizedBox(height: 32),
+                        ]
                       ],
                     ),
                   ),

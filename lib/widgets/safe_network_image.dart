@@ -26,8 +26,8 @@ class SafeNetworkImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final radius = borderRadius ?? BorderRadius.circular(12);
 
-    // No URL? Just show placeholder.
-    if (url == null || url!.isEmpty) {
+    // No URL or invalid scheme? Just show placeholder.
+    if (url == null || url!.isEmpty || !url!.startsWith('http')) {
       return _buildPlaceholder(radius);
     }
 
