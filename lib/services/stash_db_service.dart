@@ -310,10 +310,27 @@ class StashDbService {
   }
 
   String _cleanTitle(String title) {
-    return title
-        .replaceAll(RegExp(r'\.(mp4|mkv|avi|wmv|mov)$', caseSensitive: false), '')
-        .replaceAll('.', ' ')
-        .trim();
+    // 1. Remove extension
+    var cleaned = title.replaceAll(RegExp(r'\.(mp4|mkv|avi|wmv|mov|webm)$', caseSensitive: false), '');
+    
+    // 2. Remove dots, underscores, hyphens
+    cleaned = cleaned.replaceAll(RegExp(r'[._-]'), ' ');
+
+    // 3. Remove common release junk (Case insensitive)
+    // "XXX", "P2P", "PRT" (Private?), "SD", "HD", "4K", "1080p", etc.
+    final junkPattern = RegExp(
+      r'\b(xxx|p2p|prt|sd|hd|720p|1080p|2160p|4k|mp4|full|uhd|hevc|x264|x265|aac)\b',
+      caseSensitive: false,
+    );
+    cleaned = cleaned.replaceAll(junkPattern, ' ');
+
+    // 4. Remove year if it looks like a year at the end of string or standalone
+    // (Optional: StashDB might like years, but sometimes they confuse title match if date is wrong)
+    // Let's keep year for now as it might be part of title "2022 Review"
+    // BUT user log shows "2022" as separate token.
+    
+    // 5. Trim and collapse spaces
+    return cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   MediaItem _mapSceneToMediaItem(dynamic sceneData, String originalFileName) {
