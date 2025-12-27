@@ -13,8 +13,41 @@ class TmdbExtendedDetails {
     required this.videos,
     required this.recommendations,
     required this.seasons,
+    this.reviews = const [],
+    this.externalIds = const {},
   });
+
+  final List<TmdbReview> reviews;
+  final Map<String, String> externalIds;
 }
+
+class TmdbReview {
+  final String author;
+  final String content;
+  final double? rating;
+  final String? avatarPath;
+
+  const TmdbReview({
+    required this.author,
+    required this.content,
+    this.rating,
+    this.avatarPath,
+  });
+
+  factory TmdbReview.fromMap(Map<String, dynamic> map) {
+    final details = map['author_details'] as Map<String, dynamic>?;
+    var avatar = details?['avatar_path'] as String?;
+    if (avatar != null && !avatar.startsWith('http')) {
+      avatar = 'https://image.tmdb.org/t/p/w200$avatar';
+    }
+    
+    return TmdbReview(
+      author: map['author'] as String? ?? 'Anonymous',
+      content: map['content'] as String? ?? '',
+      rating: (details?['rating'] as num?)?.toDouble(),
+      avatarPath: avatar,
+    );
+  }
 
 class TmdbSeason {
   final int id;

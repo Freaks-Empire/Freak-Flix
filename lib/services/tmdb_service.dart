@@ -126,7 +126,7 @@ class TmdbService {
     final path = '/3/${type == MediaType.tv ? 'tv' : 'movie'}/$tmdbId';
     final uri = Uri.https(_baseHost, path, {
       'api_key': key,
-      'append_to_response': 'credits,videos,recommendations,similar',
+      'append_to_response': 'credits,videos,recommendations,similar,reviews,external_ids',
     });
 
     final res = await _client.get(uri);
@@ -184,11 +184,27 @@ class TmdbService {
         .where((s) => s.seasonNumber > 0) // Usually skip season 0 (Specials) unless wanted
         .toList();
 
+    // Parse Reviews
+    final reviewsData = data['reviews'] as Map<String, dynamic>?;
+    final reviewsList = (reviewsData?['results'] as List<dynamic>? ?? [])
+        .map((r) => TmdbReview.fromMap(r))
+        .toList();
+
+    // Parse External IDs
+    final externals = data['external_ids'] as Map<String, dynamic>? ?? {};
+    final exIds = <String, String>{};
+    if (externals['imdb_id'] != null) exIds['imdb'] = externals['imdb_id'].toString();
+    if (externals['facebook_id'] != null) exIds['facebook'] = externals['facebook_id'].toString();
+    if (externals['instagram_id'] != null) exIds['instagram'] = externals['instagram_id'].toString();
+    if (externals['twitter_id'] != null) exIds['twitter'] = externals['twitter_id'].toString();
+
     return TmdbExtendedDetails(
       cast: castList,
       videos: vidList,
       recommendations: combinedRecs,
       seasons: seasonList,
+      reviews: reviewsList,
+      externalIds: exIds,
     );
   }
 
