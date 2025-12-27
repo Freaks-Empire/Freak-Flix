@@ -319,7 +319,7 @@ class StashDbService {
     // 3. Remove common release junk (Case insensitive)
     // "XXX", "P2P", "PRT" (Private?), "SD", "HD", "4K", "1080p", etc.
     final junkPattern = RegExp(
-      r'\b(xxx|p2p|prt|sd|hd|720p|1080p|2160p|4k|mp4|full|uhd|hevc|x264|x265|aac)\b',
+      r'\b(xxx|p2p|prt|sd|hd|720p|1080p|2160p|4k|mp4|full|uhd|hevc|x264|x265|aac|webdl|web-dl|webrip|bluray|blueray|bdrip|dvdrip|hdtv)\b',
       caseSensitive: false,
     );
     cleaned = cleaned.replaceAll(junkPattern, ' ');
