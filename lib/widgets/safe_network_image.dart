@@ -15,7 +15,10 @@ class SafeNetworkImage extends StatelessWidget {
     this.height,
     this.fit = BoxFit.cover,
     this.borderRadius,
+    this.errorBuilder,
   });
+
+  final Widget Function(BuildContext, Object, StackTrace?)? errorBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +51,9 @@ class SafeNetworkImage extends StatelessWidget {
         );
       },
       errorBuilder: (context, error, stackTrace) {
+        if (errorBuilder != null) {
+          return errorBuilder!(context, error, stackTrace);
+        }
         return _buildPlaceholder(radius);
       },
     );

@@ -95,6 +95,7 @@ class MediaItem {
   double? rating;
   int? runtimeMinutes;
   List<String> genres;
+  int? voteCount;
 
   // Optional streaming URL for remote items (e.g., OneDrive).
   String? streamUrl;
@@ -140,6 +141,7 @@ class MediaItem {
     this.streamUrl,
     this.isAdult = false,
     this.cast = const [],
+    this.voteCount,
   });
 
   MediaItem copyWith({
@@ -164,6 +166,7 @@ class MediaItem {
     int? totalDurationSeconds,
     bool? isAdult,
     List<CastMember>? cast,
+    int? voteCount,
   }) {
     return MediaItem(
       id: id,
@@ -193,6 +196,7 @@ class MediaItem {
       streamUrl: streamUrl ?? this.streamUrl,
       isAdult: isAdult ?? this.isAdult,
       cast: cast ?? this.cast,
+      voteCount: voteCount ?? this.voteCount,
     );
   }
 
@@ -222,6 +226,7 @@ class MediaItem {
         'isWatched': isWatched,
         'isAdult': isAdult,
         'cast': cast.map((c) => c.toJson()).toList(),
+        'voteCount': voteCount,
       };
 
   factory MediaItem.fromJson(Map<String, dynamic> json) {
@@ -259,6 +264,7 @@ class MediaItem {
       cast: (json['cast'] as List<dynamic>? ?? [])
           .map((c) => CastMember.fromJson(c as Map<String, dynamic>))
           .toList(),
+      voteCount: json['voteCount'] as int?,
     );
   }
 
