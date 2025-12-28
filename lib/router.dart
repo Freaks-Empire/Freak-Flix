@@ -7,13 +7,24 @@ import 'providers/settings_provider.dart';
 import 'providers/library_provider.dart';
 
 // Screens
+// Screens
 import 'screens/setup_screen.dart';
 import 'screens/profile_selection_screen.dart';
-import 'screens/main_screen.dart'; // We will create this
+import 'screens/main_screen.dart';
 import 'screens/details/actor_details_screen.dart';
 import 'screens/details_screen.dart';
+import 'screens/discover_screen.dart';
+import 'screens/movies_screen.dart';
+import 'screens/tv_screen.dart';
+import 'screens/anime_screen.dart';
+import 'screens/adult_screen.dart';
+import 'screens/search_screen.dart';
+import 'screens/settings_screen.dart';
+
+// Models
 import 'models/cast_member.dart';
 import 'models/media_item.dart';
+import 'models/discover_type.dart';
 
 // Keys
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
