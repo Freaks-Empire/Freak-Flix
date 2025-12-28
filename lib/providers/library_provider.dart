@@ -1111,6 +1111,11 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
+  /// Explicitly rescan a single item for metadata updates (Cloud or local).
+  Future<void> rescanSingleItem(MediaItem item, MetadataService metadata) async {
+      await _refetchMetadataForItems([item], metadata, 'Single Item');
+  }
+
   Future<void> _scanLocalFolder(String path, {MetadataService? metadata, List<String>? keywords, LibraryType? libraryType}) async {
     final sourceLabel = 'Folder: $path';
     beginScan(sourceLabel: sourceLabel);

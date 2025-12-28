@@ -13,6 +13,7 @@ import '../../widgets/safe_network_image.dart';
 import '../video_player_screen.dart';
 import 'actor_details_screen.dart';
 import '../../models/cast_member.dart';
+import '../../services/metadata_service.dart'; // Import MetadataService
 
 class SceneDetailsScreen extends StatefulWidget {
   final MediaItem item;
@@ -287,12 +288,39 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
           const SizedBox(height: 12),
         ],
 
+
+
+        // Action Bar (Rescan)
+        Wrap(
+           spacing: 12,
+           children: [
+             if (year.isNotEmpty) _SimpleTag(text: year, color: mutedColor),
+             if (runtime.isNotEmpty) _SimpleTag(text: runtime, color: mutedColor),
+             const _SimpleTag(text: '18+', color: Colors.orange),
+             
+             // Rescan Button
+             SizedBox(
+               height: 24,
+               child: IconButton(
+                 padding: EdgeInsets.zero,
+                 iconSize: 18,
+                 tooltip: 'Rescan Metadata',
+                 icon: Icon(Icons.refresh, color: mutedColor),
+                 onPressed: () async {
+                    final meta = context.read<MetadataService>();
+                    await library.rescanSingleItem(_current, meta);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Metadata refreshed!'), duration: Duration(seconds: 1)),
+                    );
+                 },
+               ),
+             ),
+           ],
+        ),
+        
+        const SizedBox(width: 12),
         Row(
           children: [
-            if (year.isNotEmpty) _SimpleTag(text: year, color: mutedColor),
-            if (runtime.isNotEmpty) ...[const SizedBox(width: 12), _SimpleTag(text: runtime, color: mutedColor)],
-            const SizedBox(width: 12), const _SimpleTag(text: '18+', color: Colors.orange), // Explicit tag
-            const SizedBox(width: 12),
             Expanded(
                child: Text(
                  _current.genres.join(', '), 
