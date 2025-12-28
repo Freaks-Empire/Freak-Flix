@@ -116,14 +116,23 @@ class FilenameParser {
       withoutTags = withoutTags.substring(0, seMatch.start);
     } else {
       // --- 2) Fallback: loose "Ep 01" / "- 01" patterns ---
+      // We are stricter here: require "Ep", "Episode", "Part", "Vol", or a distinct " - " separator.
+      // We DO NOT match simple dot-separated numbers like "Movie.3.mkv" anymore to preserve sequel numbers.
       final loose = RegExp(
-        r'(?:^|[\s._-])(?:ep(?:isode)?\s*)?(\d{1,3})(?!\d)',
+        r'(?:^|[\s_])(?:ep(?:isode)?\.?|part|vol\.?)\s*(\d{1,3})(?!\d)', 
+        caseSensitive: false,
       ).firstMatch(withoutTags);
+      
+      final strictHyphen = RegExp(r'\s-\s+(\d{1,3})(?!\d)').firstMatch(withoutTags);
+
       if (loose != null) {
         episode = int.tryParse(loose.group(1)!);
         season ??= 1;
-        // remove the matched chunk so it doesn't pollute the title
         withoutTags = withoutTags.replaceFirst(loose.group(0)!, ' ');
+      } else if (strictHyphen != null) {
+        episode = int.tryParse(strictHyphen.group(1)!);
+        season ??= 1;
+        withoutTags = withoutTags.replaceFirst(strictHyphen.group(0)!, ' ');
       }
     }
 
@@ -131,12 +140,36 @@ class FilenameParser {
       season = 1;
     }
 
-    // --- 3) Year extraction ---
-    int? year;
-    final yearMatch = RegExp(r'(19|20)\d{2}').firstMatch(withoutTags);
-    if (yearMatch != null) {
-      year = int.tryParse(yearMatch.group(0)!);
-      withoutTags = withoutTags.replaceFirst(yearMatch.group(0)!, ' ');
+    // --- 3) Date extraction (YYYY.MM.DD or DD.MM.YY) ---
+    // User requested to remove dates like dd-mm-yy.
+    // We try to find them, optionally parse them (if useful), and remove them from title.
+    
+    // YYYY-MM-DD or YYYY.MM.DD
+    final dateMatchLong = RegExp(r'\b(\d{4}[.-]\d{2}[.-]\d{2})\b').firstMatch(withoutTags);
+    if (dateMatchLong != null) {
+       final dStr = dateMatchLong.group(1)!.replaceAll('.', '-');
+       date = DateTime.tryParse(dStr);
+       withoutTags = withoutTags.replaceFirst(dateMatchLong.group(0)!, ' ');
+       if (year == null && date != null) year = date.year;
+    }
+
+    // DD-MM-YY or DD.MM.YY (Risky, but requested)
+    // We'll require delimiters to be consistent.
+    final dateMatchShort = RegExp(r'\b(\d{2}[.-]\d{2}[.-]\d{2})\b').firstMatch(withoutTags);
+    if (dateMatchShort != null) {
+       // We don't try to parse 2-digit years to DateTime to avoid 19xx/20xx ambiguity issues lightly,
+       // but we DO remove it from the title.
+       withoutTags = withoutTags.replaceFirst(dateMatchShort.group(0)!, ' ');
+    }
+
+
+    // --- 4) Year extraction (if not found in date) ---
+    if (year == null) {
+      final yearMatch = RegExp(r'\b(19|20)\d{2}\b').firstMatch(withoutTags);
+      if (yearMatch != null) {
+        year = int.tryParse(yearMatch.group(0)!);
+        withoutTags = withoutTags.replaceFirst(yearMatch.group(0)!, ' ');
+      }
     }
 
     // --- 4) Clean up title: remove junk / punctuation ---
