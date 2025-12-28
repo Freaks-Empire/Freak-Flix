@@ -59,6 +59,14 @@ class LibraryProvider extends ChangeNotifier {
       ..sort((a, b) => b.lastModified.compareTo(a.lastModified)); // Most recently modified/watched first
   }
 
+  List<MediaItem> get historyItems {
+    return _filteredItems.where((item) {
+      // History includes anything with progress OR marked as watched
+      return item.lastPositionSeconds > 0 || item.isWatched;
+    }).toList()
+      ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+  }
+
   List<LibraryFolder> libraryFolders = [];
   bool isLoading = false;
   String? error;
