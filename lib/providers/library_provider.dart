@@ -844,11 +844,9 @@ class LibraryProvider extends ChangeNotifier {
         collectedItems: foundItems,
       );
       
-      // Phase 2: Metadata Fetching (Sequential)
-      if (metadata != null) {
-         _setScanStatus('Scanning complete. Fetching metadata for ${foundItems.length} items...');
-         await _refetchMetadataForItems(foundItems, metadata, 'Cloud Scan');
-      }
+      
+      // Ingest & Enrich (Parallel)
+      await _ingestItems(foundItems, metadata);
 
 
 
