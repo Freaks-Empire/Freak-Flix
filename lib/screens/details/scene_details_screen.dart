@@ -329,8 +329,7 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
              ),
            ],
         ),
-           ],
-        ),
+
         
         const SizedBox(width: 12),
         Row(

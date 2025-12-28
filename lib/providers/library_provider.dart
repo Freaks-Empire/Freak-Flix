@@ -1009,7 +1009,7 @@ class LibraryProvider extends ChangeNotifier {
 
     List<CastMember> cast = [];
     if (parsed.performers.isNotEmpty) {
-      cast = parsed.performers.map((p) => CastMember(name: p, id: '')).toList();
+      cast = parsed.performers.map((p) => CastMember(name: p, id: '', character: 'Performer')).toList();
     }
     // Usually: onedrive_{accountId}_{fileId}
     final itemId = 'onedrive_${accountId}_$id';
@@ -1537,7 +1537,7 @@ MediaItem _parseFile(PlatformFileSystemEntity f) {
 
   List<CastMember> cast = [];
   if (parsed.performers.isNotEmpty) {
-      cast = parsed.performers.map((p) => CastMember(name: p, id: '')).toList();
+      cast = parsed.performers.map((p) => CastMember(name: p, id: '', character: 'Performer')).toList();
   }
 
   return MediaItem(

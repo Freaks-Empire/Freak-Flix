@@ -252,7 +252,7 @@ class StashDbService {
         baseUrl: baseUrl,
       );
 
-      final sceneData = isStashBox ? data?['scene'] : data?['findScene'];
+      final sceneData = data?[isStashBox ? 'scene' : 'findScene'];
       if (sceneData != null) {
           return _mapSceneToMediaItem(sceneData, 'Unknown');
       }

@@ -112,7 +112,7 @@ class MediaItem {
   int? totalDurationSeconds;
   bool isAdult;
   List<CastMember> cast;
-  int? voteCount;
+
 
   // Manual or StashDB ID for overriding/enrichment
   String? stashId;
