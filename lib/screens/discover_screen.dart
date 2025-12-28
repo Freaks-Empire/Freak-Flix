@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../models/discover_filter.dart';
 
+import '../models/discover_type.dart';
 import '../services/tmdb_discover_service.dart';
 import '../widgets/discover_filter_sheet.dart';
 import '../widgets/discover_section.dart';

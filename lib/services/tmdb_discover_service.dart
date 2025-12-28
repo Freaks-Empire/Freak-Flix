@@ -8,7 +8,7 @@ import '../providers/settings_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crypto/crypto.dart';
 
-enum DiscoverType { all, movie, tv, anime }
+import '../models/discover_type.dart';
 
 class TmdbDiscoverService {
   final SettingsProvider settings;
