@@ -1,6 +1,7 @@
 /// lib/widgets/discover_card.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/tmdb_item.dart';
 import '../models/media_item.dart';
 import '../providers/library_provider.dart';
@@ -62,10 +63,20 @@ class DiscoverCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     if (item.posterUrl != null)
-                      Image.network(
-                        item.posterUrl!,
+                      CachedNetworkImage(
+                        imageUrl: item.posterUrl!,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _PosterFallback(type: item.type),
+                        errorWidget: (_, __, ___) => _PosterFallback(type: item.type),
+                        placeholder: (_, __) => Container(
+                          color: Colors.grey[900],
+                          child: const Center(
+                            child: SizedBox(
+                              width: 20, 
+                              height: 20, 
+                              child: CircularProgressIndicator(strokeWidth: 2)
+                            )
+                          ),
+                        ),
                       )
                     else
                       _PosterFallback(type: item.type),

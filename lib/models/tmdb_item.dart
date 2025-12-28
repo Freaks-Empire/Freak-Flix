@@ -59,4 +59,31 @@ class TmdbItem {
       overview: map['overview'] as String?,
     );
   }
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'type': type == TmdbMediaType.tv ? 'tv' : 'movie',
+      'posterUrl': posterUrl,
+      'releaseYear': releaseYear,
+      'voteAverage': voteAverage,
+      'voteCount': voteCount,
+      'popularity': popularity,
+      'overview': overview,
+    };
+  }
+
+  factory TmdbItem.fromJson(Map<String, dynamic> json) {
+    return TmdbItem(
+      id: json['id'] as int,
+      title: json['title'] as String,
+      type: json['type'] == 'tv' ? TmdbMediaType.tv : TmdbMediaType.movie,
+      posterUrl: json['posterUrl'] as String?,
+      releaseYear: json['releaseYear'] as int?,
+      voteAverage: (json['voteAverage'] as num?)?.toDouble(),
+      voteCount: json['voteCount'] as int?,
+      popularity: (json['popularity'] as num?)?.toDouble(),
+      overview: json['overview'] as String?,
+    );
+  }
 }

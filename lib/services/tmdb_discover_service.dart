@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import '../models/discover_filter.dart';
 import '../models/tmdb_item.dart';
 import '../providers/settings_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:crypto/crypto.dart';
 
 enum DiscoverType { all, movie, tv, anime }
 
@@ -295,7 +297,9 @@ class TmdbDiscoverService {
     required TmdbMediaType defaultType,
     bool allowFilter = true,
   }) async {
-    final cacheKey = uri.toString();
+    final cacheKey = _generateCacheKey(uri);
+    
+    // 1. Check Memory Cache
     if (_cache.containsKey(cacheKey)) {
       final entry = _cache[cacheKey]!;
       if (entry.isValid) {
@@ -305,6 +309,32 @@ class TmdbDiscoverService {
       }
     }
 
+    // 2. Check Persistent Cache (Lazy load)
+    final prefs = await SharedPreferences.getInstance();
+    final persistentParam = prefs.getString(cacheKey);
+    if (persistentParam != null) {
+       try {
+         final json = jsonDecode(persistentParam) as Map<String, dynamic>;
+         final timestamp = DateTime.fromMillisecondsSinceEpoch(json['ts'] as int);
+         final entry = _CacheEntry(
+            (json['items'] as List).map((x) => TmdbItem.fromJson(x)).toList(), 
+            timestamp
+         );
+         
+         if (entry.isValid) {
+            _cache[cacheKey] = entry; // Hydrate memory
+            return entry.items;
+         } else {
+            // Expired
+            await prefs.remove(cacheKey);
+         }
+       } catch (e) {
+         debugPrint('Error parsing persistent cache for $cacheKey: $e');
+         await prefs.remove(cacheKey);
+       }
+    }
+
+    // 3. Network Fetch
     final res = await _client.get(uri);
     if (res.statusCode != 200) return [];
     final decoded = jsonDecode(res.body) as Map<String, dynamic>;
@@ -323,8 +353,38 @@ class TmdbDiscoverService {
         .where((item) => item.title.isNotEmpty)
         .toList();
 
-    _cache[cacheKey] = _CacheEntry(items, DateTime.now());
+    // 4. Save to Cache
+    final entry = _CacheEntry(items, DateTime.now());
+    _cache[cacheKey] = entry;
+    
+    // Async save to prefs to not block UI?
+    // We want to avoid race conditions but for cache it's fine.
+    _saveToPersistentCache(prefs, cacheKey, entry);
+
     return items;
+  }
+  
+  String _generateCacheKey(Uri uri) {
+    // Sanitize URI to be key-safe. 
+    // We remove the API Key to potentially share cache if keys change? 
+    // No, different keys might have different perms? Unlikely for public API.
+    // Better to just hash the whole thing or the path+query without api_key.
+    // For simplicity, hash the whole URI string.
+    final bytes = utf8.encode(uri.toString());
+    final digest = md5.convert(bytes);
+    return 'tmdb_discovery_${digest.toString()}';
+  }
+
+  Future<void> _saveToPersistentCache(SharedPreferences prefs, String key, _CacheEntry entry) async {
+      try {
+        final data = {
+          'ts': entry.timestamp.millisecondsSinceEpoch,
+          'items': entry.items.map((i) => i.toJson()).toList(),
+        };
+        await prefs.setString(key, jsonEncode(data));
+      } catch (e) {
+        debugPrint('Failed to save persistence cache: $e');
+      }
   }
 }
 
