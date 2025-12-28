@@ -52,7 +52,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     debugPrint('VideoPlayerScreen: Initial path: $path');
     
     // Check if this is a OneDrive item that needs a fresh link
-    if (_currentItem.streamUrl != null && _currentItem.id.startsWith('onedrive:')) {
+    // IDs start with 'onedrive_' (underscore), not colon. folderPath starts with 'onedrive:'.
+    if (_currentItem.streamUrl != null && _currentItem.id.startsWith('onedrive_')) {
        debugPrint('VideoPlayerScreen: OneDrive item detected. Attempting refresh...');
        try {
           if (_currentItem.folderPath.startsWith('onedrive:')) {
