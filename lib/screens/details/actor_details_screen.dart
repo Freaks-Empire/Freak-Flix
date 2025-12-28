@@ -8,6 +8,7 @@ import '../../models/tmdb_item.dart';
 import '../../models/media_item.dart';
 import '../../services/tmdb_service.dart';
 import '../../services/stash_db_service.dart';
+import '../../providers/library_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../widgets/discover_card.dart';
 import '../../widgets/safe_network_image.dart';
@@ -58,9 +59,24 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
       
       final scenes = await service.getPerformerScenes(widget.actor.id, settings.stashApiKey, settings.stashUrl);
       if (mounted) {
+        final library = context.read<LibraryProvider>();
+        
+        scenes.sort((a, b) {
+           // Prioritize locally available scenes
+           final aId = a.id.replaceFirst('stashdb:', '');
+           final bId = b.id.replaceFirst('stashdb:', '');
+           final aLocal = library.items.any((l) => l.stashId == aId);
+           final bLocal = library.items.any((l) => l.stashId == bId);
+           
+           if (aLocal && !bLocal) return -1;
+           if (!aLocal && bLocal) return 1;
+           
+           // Otherwise sort by date/year descending
+           return (b.year ?? 0).compareTo(a.year ?? 0);
+        });
+
         setState(() {
           _stashScenes = List.from(scenes);
-          _stashScenes.shuffle(Random()); // Randomize
           _isLoading = false;
         });
       }
@@ -71,6 +87,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final size = MediaQuery.of(context).size;
+    final library = context.watch<LibraryProvider>();
     final isDark = theme.brightness == Brightness.dark;
 
     final name = _tmdbPerson?.name ?? widget.actor.name;
@@ -228,32 +245,84 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                       ),
                     )
                   else
-                    // StashDB Scenes Grid (or horizontal list)
-                    SizedBox(
-                      height: 280,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _stashScenes.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 12),
-                        itemBuilder: (ctx, i) {
-                           final item = _stashScenes[i];
-                           // Create temporary TmdbItem for DiscoverCard or use custom card
-                           // DiscoverCard takes TmdbItem. Let's map MediaItem to TmdbItem loosely or create a custom card?
-                           // DiscoverCard expects TmdbItem.
-                           // Let's create a TmdbItem from MediaItem
-                           final tmdbItem = TmdbItem(
-                             id: 0, // Placeholder
-                             title: item.title ?? item.fileName,
-                             posterUrl: item.posterUrl,
-                             overview: item.overview,
-                             voteAverage: 0,
-                             releaseYear: item.year,
-                             type: TmdbMediaType.movie, // Treat as movie
-                           );
-                           return DiscoverCard(item: tmdbItem);
-                        },
+                    // StashDB Scenes Grid
+                    GridView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 150,
+                        childAspectRatio: 2 / 3,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
                       ),
+                      itemCount: _stashScenes.length,
+                      itemBuilder: (ctx, i) {
+                           final item = _stashScenes[i];
+                           // library is defined in build scope now
+                           
+                           // Check if we have this locally (by stashId)
+                           final rawId = item.id.replaceFirst('stashdb:', '');
+                           MediaItem? local;
+                           try {
+                             local = library.items.firstWhere((l) => l.stashId == rawId);
+                           } catch (_) {}
+
+                           return GestureDetector(
+                             onTap: () {
+                               Navigator.of(context).push(
+                                 MaterialPageRoute(
+                                   builder: (ctx) => DetailsScreen(item: local ?? item),
+                                 ),
+                               );
+                             },
+                             child: Column(
+                               crossAxisAlignment: CrossAxisAlignment.start,
+                               children: [
+                                 Expanded(
+                                   child: ClipRRect(
+                                     borderRadius: BorderRadius.circular(12),
+                                     child: Stack(
+                                       children: [
+                                          if (item.posterUrl != null)
+                                            Image.network(
+                                              item.posterUrl!,
+                                              fit: BoxFit.cover, 
+                                              width: double.infinity,
+                                              height: double.infinity,
+                                              errorBuilder: (_,__,___) => Container(color: Colors.grey[900]),
+                                            )
+                                          else 
+                                            Container(color: Colors.grey[900]),
+                                            
+                                          if (local != null)
+                                            Positioned(
+                                              top: 6,
+                                              left: 6,
+                                              child: Container(
+                                                padding: const EdgeInsets.all(4),
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.green,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(Icons.check, size: 12, color: Colors.white),
+                                              ),
+                                            ),
+                                       ],
+                                     ),
+                                   ),
+                                 ),
+                                 const SizedBox(height: 6),
+                                 Text(
+                                   item.title ?? item.fileName,
+                                   maxLines: 2,
+                                   overflow: TextOverflow.ellipsis,
+                                   style: const TextStyle(color: Colors.white, fontSize: 12),
+                                 ),
+                               ],
+                             ),
+                           );
+                      },
                     ),
                     
                   if (_tmdbCredits.isEmpty && _stashScenes.isEmpty)
