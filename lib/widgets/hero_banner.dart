@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import '../screens/details_screen.dart';
+import 'package:go_router/go_router.dart';
 import 'safe_network_image.dart';
 
 class HeroBanner extends StatelessWidget {
@@ -11,9 +12,17 @@ class HeroBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => DetailsScreen(itemId: item.id, item: item)),
-      ),
+      onTap: () {
+         if (item.isAnime && item.anilistId != null) {
+            final slug = _slugify(item.title ?? 'anime');
+            context.push('/anime/${item.anilistId}/$slug', extra: item);
+         } else if (item.id.startsWith('stashdb:')) {
+            final rawId = item.id.replaceFirst('stashdb:', '');
+            context.push('/scene/$rawId', extra: item);
+         } else {
+            context.push('/media/${item.id}', extra: item);
+         }
+      },
       child: Stack(
         children: [
           AspectRatio(
@@ -58,10 +67,17 @@ class HeroBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 FilledButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => DetailsScreen(itemId: item.id, item: item)),
-                  ),
+                  onPressed: () {
+                     if (item.isAnime && item.anilistId != null) {
+                        final slug = _slugify(item.title ?? 'anime');
+                        context.push('/anime/${item.anilistId}/$slug', extra: item);
+                     } else if (item.id.startsWith('stashdb:')) {
+                        final rawId = item.id.replaceFirst('stashdb:', '');
+                        context.push('/scene/$rawId', extra: item);
+                     } else {
+                        context.push('/media/${item.id}', extra: item);
+                     }
+                  },
                   icon: const Icon(Icons.play_arrow),
                   label: const Text('Play'),
                 ),
@@ -71,5 +87,13 @@ class HeroBanner extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _slugify(String input) {
+    return input
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s-]'), '') 
+        .trim()
+        .replaceAll(RegExp(r'\s+'), '-'); 
   }
 }

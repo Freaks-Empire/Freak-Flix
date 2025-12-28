@@ -4,6 +4,7 @@ import '../models/media_item.dart';
 import '../screens/details_screen.dart';
 import '../providers/library_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import 'safe_network_image.dart';
 
 class MediaCard extends StatelessWidget {
@@ -14,13 +15,22 @@ class MediaCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => DetailsScreen(itemId: item.id, item: item)),
-      ),
+      onTap: () {
+         if (item.isAnime && item.anilistId != null) {
+            final slug = _slugify(item.title ?? 'anime');
+            context.push('/anime/${item.anilistId}/$slug', extra: item);
+         } else if (item.id.startsWith('stashdb:')) {
+            final rawId = item.id.replaceFirst('stashdb:', '');
+            context.push('/scene/$rawId', extra: item);
+         } else {
+            context.push('/media/${item.id}', extra: item);
+         }
+      },
       child: SizedBox(
         width: 140,
         child: LayoutBuilder(
           builder: (context, constraints) {
+            // ... (rest of the builder implementation)
             // Reserve vertical space for text/chip to avoid overflow in tight grids.
             const reserved = 60.0; // title + year + chip spacing
             final posterHeight = (constraints.maxHeight - reserved).clamp(110.0, 190.0);
@@ -129,5 +139,13 @@ class MediaCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _slugify(String input) {
+    return input
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s-]'), '') // remove non-alphanumeric (keep spaces)
+        .trim()
+        .replaceAll(RegExp(r'\s+'), '-'); // replace spaces with dashes
   }
 }

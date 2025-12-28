@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import '../screens/details_screen.dart';
+import 'package:go_router/go_router.dart';
 import 'safe_network_image.dart';
 
 class HomeMediaCard extends StatelessWidget {
@@ -26,9 +27,17 @@ class HomeMediaCard extends StatelessWidget {
     final subtitle = _buildSubtitle(item);
 
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => DetailsScreen(itemId: item.id, item: item)),
-      ),
+      onTap: () {
+         if (item.isAnime && item.anilistId != null) {
+            final slug = _slugify(item.title ?? 'anime');
+            context.push('/anime/${item.anilistId}/$slug', extra: item);
+         } else if (item.id.startsWith('stashdb:')) {
+            final rawId = item.id.replaceFirst('stashdb:', '');
+            context.push('/scene/$rawId', extra: item);
+         } else {
+            context.push('/media/${item.id}', extra: item);
+         }
+      },
       child: SizedBox(
         width: 150,
         child: Column(
@@ -154,5 +163,12 @@ class HomeMediaCard extends StatelessWidget {
       ),
     );
   }
-}
 
+  String _slugify(String input) {
+    return input
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s-]'), '') // remove non-alphanumeric (keep spaces)
+        .trim()
+        .replaceAll(RegExp(r'\s+'), '-'); // replace spaces with dashes
+  }
+}

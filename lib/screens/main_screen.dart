@@ -1,66 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 
-import '../providers/settings_provider.dart';
 import '../providers/library_provider.dart';
-import '../models/discover_type.dart';
-
 import '../widgets/navigation_dock.dart';
-import 'discover_screen.dart';
-import 'movies_screen.dart';
-import 'tv_screen.dart';
-import 'anime_screen.dart';
-import 'adult_screen.dart';
-import 'search_screen.dart';
-import 'settings_screen.dart';
 
-class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
+class MainScreen extends StatelessWidget {
+  final StatefulNavigationShell? navigationShell;
+
+  const MainScreen({super.key, this.navigationShell});
 
   @override
-  State<MainScreen> createState() => _MainScreenState();
-}
-
-class _MainScreenState extends State<MainScreen> {
-   int _index = 0;
-   late final PageController _pageController;
-
-   @override
-   void initState() {
-     super.initState();
-     _pageController = PageController(initialPage: _index);
-   }
-
-   @override
-   void dispose() {
-     _pageController.dispose();
-     super.dispose();
-   }
-
-   @override
-   Widget build(BuildContext context) {
-     final settings = context.watch<SettingsProvider>();
+  Widget build(BuildContext context) {
      final library = context.watch<LibraryProvider>();
+     
+     // If not using Shell (legacy fallback or error), show empty container or legacy layout.
+     // But with createRouter configuration, this should always be provided.
+     if (navigationShell == null) {
+       return const Scaffold(body: Center(child: Text("Router Error: No Navigation Shell")));
+     }
 
      return Scaffold(
         extendBodyBehindAppBar: true, 
         body: Stack(
           children: [
-             // Main Content
+             // Main Content (Router Branch)
              Positioned.fill(
-               child: PageView(
-                 controller: _pageController,
-                 onPageChanged: (index) => setState(() => _index = index),
-                 children: [
-                   const DiscoverScreen(type: DiscoverType.all),
-                   const MoviesScreen(),
-                   const TvScreen(),
-                   const AnimeScreen(),
-                   if (settings.enableAdultContent) const AdultScreen(),
-                   const SearchScreen(),
-                   const SettingsScreen(),
-                 ],
-               ),
+               child: navigationShell!,
              ),
              
              // Navigation Dock (Top Center)
@@ -68,13 +34,11 @@ class _MainScreenState extends State<MainScreen> {
                alignment: Alignment.topCenter,
                child: SafeArea(
                  child: NavigationDock(
-                   index: _index,
+                   index: navigationShell!.currentIndex,
                    onTap: (i) {
-                      setState(() => _index = i);
-                      _pageController.animateToPage(
+                      navigationShell!.goBranch(
                         i,
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
+                        initialLocation: i == navigationShell!.currentIndex, 
                       );
                    },
                  ),
@@ -121,5 +85,5 @@ class _MainScreenState extends State<MainScreen> {
           ],
         ),
      );
-   }
+  }
 }
