@@ -61,6 +61,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _version = '';
 
   Future<void> _loadVersion() async {
+    const gitVersion = String.fromEnvironment('GIT_VERSION');
+    if (gitVersion.isNotEmpty) {
+      if (mounted) setState(() => _version = gitVersion);
+      return;
+    }
+    
     final info = await PackageInfo.fromPlatform();
     if (mounted) {
       setState(() => _version = info.version);
@@ -873,11 +879,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SnackBar(
             content: Text('Added ${_typeLabel(type)}: ${selection.path}')),
         );
-        await library.scanLibraryFolder(
-          auth: _graphAuth,
-          folder: folder,
-          metadata: metadata,
-        );
+        // Check if its a cloud folder
+        if (folder.accountId.isNotEmpty) {
+           await library.rescanOneDriveFolder(
+             auth: _graphAuth,
+             folder: folder,
+             metadata: metadata
+           );
+        } else {
+           // Local folder - use existing public method or just pickAndScan wrapper?
+           // pickAndScan is for NEW folders.
+           // For existing local folders, library.rescanAll() scans everything.
+           // To scan ONE local folder, we need to expose _scanLocalFolder or similar.
+           // Since we don't have a public single-folder local scan method exposed easily right now 
+           // (it was removed), we can just trigger a full rescan or re-add it.
+           // Ideally: library.rescanAll() is the safest fallback for now to avoid compilation errors.
+           await library.rescanAll(auth: _graphAuth, metadata: metadata);
+        }
         setState(() {});
       }
     } catch (e) {
