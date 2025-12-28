@@ -72,6 +72,29 @@ class FilenameParser {
       );
     }
 
+    // --- 0.5) Check for Underscore Pattern: _Studio_ - Title.mp4 ---
+    // Example: _VR Edging_ - Barbie Let You Finish...
+    final underscoreMatch = RegExp(r'^_([^_]+)_\s*-\s*(.*)$').firstMatch(nameNoExt);
+    if (underscoreMatch != null) {
+       studio = underscoreMatch.group(1)?.trim(); // VR Edging
+       var remainder = underscoreMatch.group(2)?.trim() ?? '';
+       
+       // Check for (w_ Performer) in this format too?
+       final perfMatch = RegExp(r'\(\s*w[_\s]\s*([^)]+)\)').firstMatch(remainder);
+       if (perfMatch != null) {
+          final rawPerfs = perfMatch.group(1)!;
+          performers = rawPerfs.split(',').map((e) => e.trim()).toList();
+          remainder = remainder.replaceAll(perfMatch.group(0)!, '').trim();
+       }
+
+       return ParsedMediaName(
+          seriesTitle: remainder,
+          movieTitle: remainder,
+          studio: studio,
+          performers: performers,
+       );
+    }
+
 
     // remove fansub tags [..] and (..)
     // Note: If we didn't match the specific scene pattern, we proceed with standard cleanup.
