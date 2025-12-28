@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../services/graph_auth_service.dart';
 import '../widgets/device_code_dialog.dart';
 import 'video_player_screen.dart';
+import '../models/media_item.dart';
 
 class OneDriveBrowserScreen extends StatefulWidget {
   final GraphAuthService auth;
@@ -167,11 +168,21 @@ class _OneDriveBrowserScreenState extends State<OneDriveBrowserScreen> {
                           _loadFolder(newPath);
                         } else if (_isVideo(item.name) &&
                             item.downloadUrl != null) {
+                          final mediaItem = MediaItem(
+                              id: item.id,
+                              filePath: item.downloadUrl!,
+                              fileName: item.name,
+                              folderPath: _currentPath,
+                              sizeBytes: 0,
+                              lastModified: DateTime.now(),
+                              type: MediaType.movie,
+                              streamUrl: item.downloadUrl,
+                          );
+
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) => VideoPlayerScreen(
-                                  filePath: item.downloadUrl!,
-                                  title: item.name,
+                                  item: mediaItem,
                               ),
                             ),
                           );

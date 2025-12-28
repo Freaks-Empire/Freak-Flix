@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/library_folder.dart';
 import '../models/user_profile.dart'; // Import for UserProfile and UserMediaData
 import '../models/media_item.dart';
+import '../models/discover_type.dart';
 import '../models/cast_member.dart';
 import '../services/graph_auth_service.dart' as graph_auth;
 import '../services/persistence_service.dart';
