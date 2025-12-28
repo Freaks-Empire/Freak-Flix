@@ -921,9 +921,31 @@ class LibraryProvider extends ChangeNotifier {
                if (_isVideo(name)) {
                   _setScanStatus('Found: $name');
                   final newItem = _createMediaItemFromGraph(item, accountId, baseFolderPath);
-                  await _ingestItems([newItem], metadata);
+                  // Determine if adult/anime based on folder type immediately so it shows up in filtered view
+                  final parentFolder = libraryFolders.firstWhereOrNull((f) => f.accountId == accountId && newItem.folderPath.startsWith('onedrive:${f.accountId}${f.path.isEmpty ? '/' : f.path}'));
+                  
+                  bool initialIsAdult = newItem.isAdult;
+                  bool initialIsAnime = newItem.isAnime;
+                  MediaType initialType = newItem.type;
+
+                  if (parentFolder != null) {
+                       if (parentFolder.type == LibraryType.adult) {
+                           initialIsAdult = true;
+                           initialType = MediaType.scene;
+                       }
+                       if (parentFolder.type == LibraryType.anime) initialIsAnime = true;
+                  }
+
+                  final adjustedItem = newItem.copyWith(
+                      isAdult: initialIsAdult,
+                      isAnime: initialIsAnime,
+                      type: initialType
+                  );
+
+                  await _ingestItems([adjustedItem], metadata);
                   scannedCount++;
-                  if (scannedCount % 10 == 0) await saveLibrary();
+                  // Throttle saving to avoid UI jank
+                  if (scannedCount % 50 == 0) await saveLibrary();
                   notifyListeners();
                }
             }
