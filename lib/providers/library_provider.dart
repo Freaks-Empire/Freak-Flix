@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/library_folder.dart';
 import '../models/user_profile.dart'; // Import for UserProfile and UserMediaData
 import '../models/media_item.dart';
+import '../models/cast_member.dart';
 import '../services/graph_auth_service.dart' as graph_auth;
 import '../services/persistence_service.dart';
 import '../services/metadata_service.dart';
@@ -998,7 +999,18 @@ class LibraryProvider extends ChangeNotifier {
     final lastModStr = json['lastModifiedDateTime'] as String?;
     final lastMod = lastModStr != null ? DateTime.parse(lastModStr) : DateTime.now();
     
-    // Construct a unique ID consistent with current app logic
+    final parsed = FilenameParser.parse(name);
+    
+    // Construct overview with Studio if available
+    String? overview;
+    if (parsed.studio != null) {
+      overview = 'Studio: ${parsed.studio}\n';
+    }
+
+    List<CastMember> cast = [];
+    if (parsed.performers.isNotEmpty) {
+      cast = parsed.performers.map((p) => CastMember(name: p, id: '')).toList();
+    }
     // Usually: onedrive_{accountId}_{fileId}
     final itemId = 'onedrive_${accountId}_$id';
     
@@ -1009,10 +1021,12 @@ class LibraryProvider extends ChangeNotifier {
       folderPath: folderPath, // e.g. onedrive:ACCOUNT/Movies/Action
       sizeBytes: size,
       lastModified: lastMod,
-      // Store actual download Url? It expires. 
-      // We rely on getting it fresh via GraphAuthService.getDownloadUrl using the ID part.
-      // We need to store original ID somewhere? 
-      // MediaItem ID has it.
+      title: parsed.seriesTitle,
+      year: parsed.year, // Use parsed year (from date or YYYY)
+      overview: overview,
+      cast: cast,
+      isAdult: parsed.studio != null, // Hint: if studio parsed, likely adult scene
+      type: parsed.studio != null ? MediaType.scene : MediaType.unknown,
     );
   }
 
@@ -1516,6 +1530,16 @@ MediaItem _parseFile(PlatformFileSystemEntity f) {
   // Use folder as the stable show key so all episodes in the same folder group together.
   final showKey = folder.toLowerCase();
 
+  String? overview;
+  if (parsed.studio != null) {
+      overview = 'Studio: ${parsed.studio}\n';
+  }
+
+  List<CastMember> cast = [];
+  if (parsed.performers.isNotEmpty) {
+      cast = parsed.performers.map((p) => CastMember(name: p, id: '')).toList();
+  }
+
   return MediaItem(
     id: id,
     filePath: filePath,
@@ -1525,11 +1549,14 @@ MediaItem _parseFile(PlatformFileSystemEntity f) {
     lastModified: stat.modified,
     title: parsed.seriesTitle,
     year: parsed.year,
-    type: type,
+    type: parsed.studio != null ? MediaType.scene : type,
     season: parsed.season,
     episode: parsed.episode,
     isAnime: animeHint,
     showKey: showKey,
+    overview: overview,
+    cast: cast,
+    isAdult: parsed.studio != null,
   );
 }
 
