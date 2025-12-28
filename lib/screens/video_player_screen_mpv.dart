@@ -48,8 +48,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     setState(() => _isLoadingLink = true);
     String path = _currentItem.streamUrl ?? _currentItem.filePath;
     
+    debugPrint('VideoPlayerScreen: _playCurrent called for item ${_currentItem.id}');
+    debugPrint('VideoPlayerScreen: Initial path: $path');
+    
     // Check if this is a OneDrive item that needs a fresh link
     if (_currentItem.streamUrl != null && _currentItem.id.startsWith('onedrive:')) {
+       debugPrint('VideoPlayerScreen: OneDrive item detected. Attempting refresh...');
        try {
           if (_currentItem.folderPath.startsWith('onedrive:')) {
              final pathAfterPrefix = _currentItem.folderPath.substring('onedrive:'.length);
@@ -72,7 +76,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                    path = fresh;
                    debugPrint('Got fresh URL: $fresh');
                 } else {
-                   throw Exception('Could not refresh download URL');
+                   debugPrint('Could not refresh download URL, using original streamUrl');
                 }
              }
           }
@@ -84,10 +88,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             );
           }
        }
+    } else {
+       debugPrint('VideoPlayerScreen: Local/Static item. Skipping OneDrive refresh.');
     }
 
     setState(() => _isLoadingLink = false);
+    debugPrint('VideoPlayerScreen: Opening player with path: $path');
     await player.open(Media(path));
+    debugPrint('VideoPlayerScreen: Player opened.');
   }
   
   void _playIndex(int index) {

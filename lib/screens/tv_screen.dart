@@ -15,7 +15,7 @@ class TvScreen extends StatelessWidget {
 
     // Debugging: ensure grouping works
     // ignore: avoid_print
-    print('TV GROUPS: ${shows.map((s) => '${s.title} (${s.episodes.length})').toList()}');
+
 
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(12, 100, 12, 12),
