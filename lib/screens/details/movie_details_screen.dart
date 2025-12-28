@@ -19,6 +19,7 @@ import '../../widgets/safe_network_image.dart';
 import '../video_player_screen.dart';
 import 'actor_details_screen.dart';
 import '../../models/cast_member.dart';
+import 'package:go_router/go_router.dart';
 
 class MovieDetailsScreen extends StatefulWidget {
   final MediaItem item;
@@ -517,9 +518,7 @@ class _CastCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ActorDetailsScreen(actorId: actor.id, actor: actor)),
-      ),
+      onTap: () => context.push('/actor/${actor.id}', extra: actor),
       child: SizedBox(
         width: 100,
         child: Column(

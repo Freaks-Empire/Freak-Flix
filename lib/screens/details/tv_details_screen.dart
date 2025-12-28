@@ -15,6 +15,7 @@ import '../../services/metadata_service.dart';
 import '../../models/tmdb_extended_details.dart';
 import 'actor_details_screen.dart';
 import '../../models/cast_member.dart';
+import 'package:go_router/go_router.dart';
 
 class TvDetailsScreen extends StatefulWidget {
   final MediaItem item;
@@ -350,9 +351,7 @@ class _TvDetailsScreenState extends State<TvDetailsScreen> {
                         itemBuilder: (ctx, i) {
                           final actor = (_details?.cast ?? _current.cast)[i];
                           return GestureDetector(
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => ActorDetailsScreen(actorId: actor.id, actor: actor)),
-                            ),
+                            onTap: () => context.push('/actor/${actor.id}', extra: actor),
                             child: Container(
                               width: 240,
                               margin: const EdgeInsets.only(right: 12),

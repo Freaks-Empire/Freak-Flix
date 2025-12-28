@@ -18,6 +18,7 @@ import '../models/media_item.dart';
 import '../models/cast_member.dart';
 import '../services/graph_auth_service.dart' as graph_auth;
 import '../services/persistence_service.dart';
+import '../services/tmdb_discover_service.dart';
 import '../services/metadata_service.dart';
 
 import 'settings_provider.dart';
@@ -1113,6 +1114,43 @@ class LibraryProvider extends ChangeNotifier {
     final sorted = items.where((i) => !i.isAdult).toList()
       ..sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
     return sorted.take(20).toList();
+  }
+
+  /// Returns recommended local items based on type.
+  /// Logic: Unwatched items, filtered by type, sorted by Rating desc or Random? 
+  /// Let's go with Random unwatched for discovery, or Rating.
+  /// User asked for "Recommended only show local files".
+  List<MediaItem> getRecommendedLocal(DiscoverType type) {
+    if (items.isEmpty) return [];
+
+    // Base filter: Not Watched, Not Adult (unless specifically asked, but DiscoverType usually handles that separately)
+    // Actually DiscoverType.adult exists? 
+    // Let's stick to standard types.
+    
+    var pool = items.where((i) => !i.isWatched && !i.isAdult);
+
+    switch (type) {
+      case DiscoverType.movie:
+        pool = pool.where((i) => i.type == MediaType.movie);
+        break;
+      case DiscoverType.tv:
+        pool = pool.where((i) => i.type == MediaType.tv && !i.isAnime);
+        break;
+      case DiscoverType.anime:
+        pool = pool.where((i) => i.isAnime);
+        break;
+      case DiscoverType.all:
+      default:
+        // Mixed
+        break;
+    }
+    
+    final list = pool.toList();
+    // Shuffle for variety, or Sort by Rating?
+    // "Recommended" usually implies quality. Let's sort by rating then random shuffle 
+    // or just Shuffle to surface buried content.
+    list.shuffle(); 
+    return list.take(20).toList();
   }
 
 

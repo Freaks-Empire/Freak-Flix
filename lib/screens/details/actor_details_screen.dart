@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/cast_member.dart';
+import 'package:go_router/go_router.dart';
 import '../../models/tmdb_person.dart';
 import '../../models/tmdb_item.dart';
 import '../../models/media_item.dart';
@@ -43,11 +44,12 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
       
       return GestureDetector(
        onTap: () {
-         Navigator.of(context).push(
-           MaterialPageRoute(
-             builder: (ctx) => DetailsScreen(itemId: item.id, item: item),
-           ),
-         );
+         if (item.id.startsWith('stashdb:')) {
+            final rawId = item.id.replaceFirst('stashdb:', '');
+            context.push('/scene/$rawId', extra: item);
+         } else {
+            context.push('/media/${item.id}', extra: item);
+         }
        },
        child: Column(
          crossAxisAlignment: CrossAxisAlignment.start,

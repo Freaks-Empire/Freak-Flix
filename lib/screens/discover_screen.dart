@@ -121,13 +121,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> with AutomaticKeepAlive
                       items: context.watch<LibraryProvider>().continueWatchingItems,
                     ),
 
-                  DiscoverSection(
-                    title: 'Recommended',
-                    items: _bundle.recommended,
-                    loading: _loading,
-                    onRetry: _load,
-                    onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchRecommended(filter: context.read<DiscoverFilterNotifier>().filter, type: widget.type, page: p),
-                  ),
+                  // Recommended (Local Files Only)
+                  if (context.watch<LibraryProvider>().getRecommendedLocal(widget.type).isNotEmpty)
+                    _MediaItemSection(
+                      title: 'Recommended For You',
+                      icon: Icons.thumb_up_alt_outlined,
+                      items: context.watch<LibraryProvider>().getRecommendedLocal(widget.type),
+                    ),
 
                   // History
                   if (context.watch<LibraryProvider>().historyItems.isNotEmpty)

@@ -14,6 +14,7 @@ import '../video_player_screen.dart';
 import 'actor_details_screen.dart';
 import '../../models/cast_member.dart';
 import '../../services/metadata_service.dart'; // Import MetadataService
+import 'package:go_router/go_router.dart';
 
 class SceneDetailsScreen extends StatefulWidget {
   final MediaItem item;
@@ -500,9 +501,7 @@ class _CastCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ActorDetailsScreen(actorId: actor.id, actor: actor)),
-      ),
+      onTap: () => context.push('/actor/${actor.id}', extra: actor),
       child: SizedBox(
         width: 100,
         child: Column(
@@ -540,9 +539,14 @@ class _SceneCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => SceneDetailsScreen(item: item)),
-      ),
+      onTap: () {
+         if (item.id.startsWith('stashdb:')) {
+            final rawId = item.id.replaceFirst('stashdb:', '');
+            context.push('/scene/$rawId', extra: item);
+         } else {
+            context.push('/media/${item.id}', extra: item);
+         }
+      },
       child: SizedBox(
         width: 250, 
         child: Column(
