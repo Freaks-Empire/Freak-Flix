@@ -32,6 +32,7 @@ class FilenameParser {
     String nameNoExt = fileName.replaceAll(RegExp(r'\.[^.]+$'), '');
     String? studio;
     DateTime? date;
+    int? year; // Restored definition
     List<String> performers = [];
 
     // --- 0) Check for Scene Release Pattern: [Studio] - YYYY.MM.DD - Title (w_ Performers) ---
