@@ -31,6 +31,29 @@ class MetadataService {
       showKey: item.showKey ?? _seriesKey(parsed.seriesTitle, item.year ?? parsed.year, null),
     );
 
+    // 0. Manual Override Check (StashDB ID)
+    if (item.stashId != null && item.stashId!.isNotEmpty) {
+       if (settings.stashApiKey.isNotEmpty) {
+          // Strip 'stashdb:' prefix if we stored it that way, though usually we'll store raw UUID
+          final rawId = item.stashId!.replaceFirst('stashdb:', '');
+          final stashItem = await _stash.getScene(rawId, settings.stashApiKey, settings.stashUrl);
+          if (stashItem != null) {
+            return item.copyWith(
+              title: stashItem.title,
+              year: stashItem.year,
+              overview: stashItem.overview,
+              posterUrl: stashItem.posterUrl,
+              backdropUrl: stashItem.backdropUrl,
+              isAdult: true, // Force adult if from StashDB
+              type: MediaType.scene,
+              genres: stashItem.genres,
+              cast: stashItem.cast, 
+              stashId: rawId, // Persist clean ID
+            );
+          }
+       }
+    }
+
     // 1. Strict Rules Check
     
     // Rule A: Adult Content -> StashDB ONLY

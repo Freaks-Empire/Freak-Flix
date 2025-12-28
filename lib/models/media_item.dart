@@ -112,6 +112,10 @@ class MediaItem {
   int? totalDurationSeconds;
   bool isAdult;
   List<CastMember> cast;
+  int? voteCount;
+
+  // Manual or StashDB ID for overriding/enrichment
+  String? stashId;
 
   MediaItem({
     required this.id,
@@ -143,6 +147,7 @@ class MediaItem {
     this.isAdult = false,
     this.cast = const [],
     this.voteCount,
+    this.stashId,
   });
 
   MediaItem copyWith({
@@ -168,6 +173,7 @@ class MediaItem {
     bool? isAdult,
     List<CastMember>? cast,
     int? voteCount,
+    String? stashId,
   }) {
     return MediaItem(
       id: id,
@@ -198,6 +204,7 @@ class MediaItem {
       isAdult: isAdult ?? this.isAdult,
       cast: cast ?? this.cast,
       voteCount: voteCount ?? this.voteCount,
+      stashId: stashId ?? this.stashId,
     );
   }
 
@@ -228,6 +235,7 @@ class MediaItem {
         'isAdult': isAdult,
         'cast': cast.map((c) => c.toJson()).toList(),
         'voteCount': voteCount,
+        'stashId': stashId,
       };
 
   factory MediaItem.fromJson(Map<String, dynamic> json) {
@@ -266,6 +274,7 @@ class MediaItem {
           .map((c) => CastMember.fromJson(c as Map<String, dynamic>))
           .toList(),
       voteCount: json['voteCount'] as int?,
+      stashId: json['stashId'] as String?,
     );
   }
 

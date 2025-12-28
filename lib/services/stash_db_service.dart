@@ -175,6 +175,39 @@ class StashDbService {
     }
   ''';
 
+  static const String _queryFindSceneById = r'''
+    query FindScene($id: ID!) {
+      findScene(id: $id) {
+        id
+        title
+        details
+        date
+        tags {
+          name
+        }
+        images {
+          url
+        }
+        paths {
+          screenshot
+        }
+        files {
+          duration
+        }
+        studio {
+          name
+        }
+        performers {
+          performer {
+            id
+            name
+            image_path
+          }
+        }
+      }
+    }
+  ''';
+
   // --- Public Methods ---
 
   /// Tests the connection to StashDB using the provided API key.
@@ -193,6 +226,40 @@ class StashDbService {
       debugPrint('StashDB: Connection test failed: $e');
       return false;
     }
+  }
+
+  /// Gets a specific scene by ID.
+  Future<MediaItem?> getScene(String id, String apiKey, String baseUrl) async {
+    if (apiKey.trim().isEmpty) return null;
+
+    try {
+       // Note: StashBox uses 'scene' query for ID lookup, StashApp uses 'findScene'.
+       // We'll try to determine or just handle the error.
+       // Actually StashBox schema: query { scene(id: "...") { ... } }
+       // StashApp schema: query { findScene(id: "...") { ... } }
+       
+       final isStashBox = baseUrl.contains('stashdb.org');
+       final query = isStashBox 
+           ? _queryFindSceneById.replaceFirst('findScene', 'scene') 
+           : _queryFindSceneById;
+       final opName = isStashBox ? 'Scene' : 'FindScene';
+
+       final data = await _executeQuery(
+        query: query,
+        operationName: opName,
+        variables: {'id': id},
+        apiKey: apiKey,
+        baseUrl: baseUrl,
+      );
+
+      final sceneData = isStashBox ? data?['scene'] : data?['findScene'];
+      if (sceneData != null) {
+          return _mapSceneToMediaItem(sceneData, 'Unknown');
+      }
+    } catch (e) {
+      debugPrint('StashDB: Get scene by ID failed: $e');
+    }
+    return null;
   }
 
   /// Searches for a scene by title.

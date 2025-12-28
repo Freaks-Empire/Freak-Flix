@@ -315,6 +315,20 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                  },
                ),
              ),
+             
+             // Edit Button
+             SizedBox(
+               height: 24,
+               child: IconButton(
+                 padding: EdgeInsets.zero,
+                 iconSize: 18,
+                 tooltip: 'Edit Details',
+                 icon: Icon(Icons.edit, color: mutedColor),
+                 onPressed: () => _showEditDialog(context, library),
+               ),
+             ),
+           ],
+        ),
            ],
         ),
         
@@ -393,6 +407,66 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
           ],
         ),
       ],
+    );
+  }
+  Future<void> _showEditDialog(BuildContext context, LibraryProvider library) async {
+    final meta = context.read<MetadataService>();
+    final controller = TextEditingController(text: _current.stashId);
+    
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Scene Details'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter StashDB Scene ID or URL to manually link metadata.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'StashDB ID / URL',
+                border: OutlineInputBorder(),
+                hintText: 'e.g. 019b36f4-b90d... or https://stashdb.org/scenes/...',
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              String input = controller.text.trim();
+              
+              // Basic logic to extract UUID if full URL pasted
+              // UUID regex: [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
+              final uuidRegex = RegExp(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', caseSensitive: false);
+              final match = uuidRegex.firstMatch(input);
+              if (match != null) {
+                input = match.group(0)!;
+              }
+              
+              if (input.isNotEmpty) {
+                 final updated = _current.copyWith(stashId: input);
+                 // Trigger rescan which will use this new ID
+                 await library.rescanSingleItem(updated, meta);
+                 
+                 if (mounted) {
+                   ScaffoldMessenger.of(context).showSnackBar(
+                     const SnackBar(content: Text('Updating with new ID...')),
+                   );
+                 }
+              }
+            },
+            child: const Text('Save & Rescan'),
+          ),
+        ],
+      ),
     );
   }
 }
