@@ -819,21 +819,16 @@ class LibraryProvider extends ChangeNotifier {
         requestUrl = '$baseUrl/root:/$path:/children';
       }
 
-      _setScanStatus('Listing files in $folderLabel...');
+      _setScanStatus('Scanning cloud files in $folderLabel...');
       
-      final newItems = <MediaItem>[];
       await _walkOneDriveFolder(
         token: token, 
         url: requestUrl, 
         baseFolderPath: 'onedrive:${account.id}/${path.isEmpty ? '' : path}',
         accountId: account.id,
-        foundItems: newItems,
+        metadata: metadata,
       );
 
-      _setScanStatus('Processing ${newItems.length} cloud items...');
-      
-      // Ingest
-      await _ingestItems(newItems, metadata);
 
     } catch (e) {
       error = 'Cloud scan failed: $e';
@@ -851,7 +846,7 @@ class LibraryProvider extends ChangeNotifier {
     required String url,
     required String baseFolderPath,
     required String accountId,
-    required List<MediaItem> foundItems,
+    MetadataService? metadata,
   }) async {
     if (_cancelScanRequested) return;
     
@@ -919,14 +914,16 @@ class LibraryProvider extends ChangeNotifier {
                  url: childUrl,
                  baseFolderPath: '$baseFolderPath/$name',
                  accountId: accountId,
-                 foundItems: foundItems,
+                 metadata: metadata,
                );
             } else if (isFile) {
                // Check extension
                if (_isVideo(name)) {
-                  foundItems.add(_createMediaItemFromGraph(item, accountId, baseFolderPath));
                   _setScanStatus('Found: $name');
+                  final newItem = _createMediaItemFromGraph(item, accountId, baseFolderPath);
+                  await _ingestItems([newItem], metadata);
                   scannedCount++;
+                  if (scannedCount % 10 == 0) await saveLibrary();
                   notifyListeners();
                }
             }
