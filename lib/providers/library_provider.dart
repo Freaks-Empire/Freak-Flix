@@ -39,6 +39,25 @@ class LibraryProvider extends ChangeNotifier {
   
   List<MediaItem> get items => _filteredItems;
   List<MediaItem> get allItems => List.unmodifiable(_allItems);
+  
+  List<MediaItem> get continueWatchingItems {
+    return _filteredItems.where((item) {
+      final pos = item.lastPositionSeconds;
+      final total = item.totalDurationSeconds ?? (item.runtimeMinutes != null ? item.runtimeMinutes! * 60 : 0);
+      
+      // Basic check: has position, not fully watched
+      if (pos <= 0) return false;
+      if (item.isWatched) return false;
+      
+      // Optional: ignore if < 5% or > 95%? 
+      // For now, raw check is fine. 
+      // User might want to resume end credits?
+      // Usually "Continue Watching" excludes finished items.
+      
+      return true;
+    }).toList()
+      ..sort((a, b) => b.lastModified.compareTo(a.lastModified)); // Most recently modified/watched first
+  }
 
   List<LibraryFolder> libraryFolders = [];
   bool isLoading = false;

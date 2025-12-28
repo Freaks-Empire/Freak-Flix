@@ -8,6 +8,9 @@ import '../models/discover_type.dart';
 import '../services/tmdb_discover_service.dart';
 import '../widgets/discover_filter_sheet.dart';
 import '../widgets/discover_section.dart';
+import '../providers/library_provider.dart';
+import '../widgets/home_media_card.dart';
+import '../models/media_item.dart';
 
 class DiscoverScreen extends StatefulWidget {
   final DiscoverType type;
@@ -107,16 +110,17 @@ class _DiscoverScreenState extends State<DiscoverScreen> with AutomaticKeepAlive
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 children: [
-                   // Add extra top padding for the dock
+                  // Add extra top padding for the dock
                   const SizedBox(height: 60), 
                   
-                  DiscoverSection(
-                    title: 'Trending',
-                    items: _bundle.trending,
-                    loading: _loading,
-                    onRetry: _load,
-                    onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchTrending(filter: context.read<DiscoverFilterNotifier>().filter, type: widget.type, page: p),
-                  ),
+                  // Continue Watching
+                  if (context.watch<LibraryProvider>().continueWatchingItems.isNotEmpty)
+                    _MediaItemSection(
+                      title: 'Continue Watching',
+                      icon: Icons.play_circle_outline,
+                      items: context.watch<LibraryProvider>().continueWatchingItems,
+                    ),
+
                   DiscoverSection(
                     title: 'Recommended',
                     items: _bundle.recommended,
@@ -124,20 +128,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> with AutomaticKeepAlive
                     onRetry: _load,
                     onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchRecommended(filter: context.read<DiscoverFilterNotifier>().filter, type: widget.type, page: p),
                   ),
-                  DiscoverSection(
-                    title: 'Popular',
-                    items: _bundle.popular,
-                    loading: _loading,
-                    onRetry: _load,
-                    onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchPopular(filter: context.read<DiscoverFilterNotifier>().filter, type: widget.type, page: p),
-                  ),
-                  DiscoverSection(
-                    title: 'Upcoming',
-                    items: _bundle.upcoming,
-                    loading: _loading,
-                    onRetry: _load,
-                    onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchUpcoming(filter: context.read<DiscoverFilterNotifier>().filter, type: widget.type, page: p),
-                  ),
+
+                  // History
+                  if (context.watch<LibraryProvider>().historyItems.isNotEmpty)
+                     _MediaItemSection(
+                        title: 'History',
+                        icon: Icons.history,
+                        items: context.watch<LibraryProvider>().historyItems,
+                     ),
+                     
                   DiscoverSection(
                     title: 'Top Rated',
                     items: _bundle.topRated,
@@ -186,6 +185,53 @@ class _ErrorState extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _MediaItemSection extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final List<MediaItem> items;
+  
+  const _MediaItemSection({
+    required this.title,
+    required this.icon,
+    required this.items,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                title,
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(width: 4),
+              Icon(icon, size: 18),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 250,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: items.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                return HomeMediaCard(item: items[index]);
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
