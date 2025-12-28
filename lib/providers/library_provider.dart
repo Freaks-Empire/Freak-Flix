@@ -687,12 +687,12 @@ class LibraryProvider extends ChangeNotifier {
          final existing = map[newItem.filePath]!;
          if (existing.isAdult != newItem.isAdult || 
              existing.isAnime != newItem.isAnime ||
-             (existing.type != newItem.type && newItem.type != MediaType.other)) {
+             (existing.type != newItem.type && newItem.type != MediaType.unknown)) {
              
              map[newItem.filePath] = existing.copyWith(
                isAdult: newItem.isAdult,
                isAnime: newItem.isAnime,
-               type: newItem.type != MediaType.other ? newItem.type : existing.type,
+               type: newItem.type != MediaType.unknown ? newItem.type : existing.type,
              );
          }
       }
