@@ -593,6 +593,11 @@ class LibraryProvider extends ChangeNotifier {
           }
         }
         notifyListeners();
+
+        // Incremental save every 25 items
+        if ((i + batch.length) % 25 == 0) {
+           await saveLibrary();
+        }
       }
 
       await saveLibrary();
@@ -698,6 +703,11 @@ class LibraryProvider extends ChangeNotifier {
           if (idx != -1) _allItems[idx] = enriched;
         }
         notifyListeners();
+
+        // Incremental save every 25 items
+        if ((i + batch.length) % 25 == 0) {
+           await saveLibrary();
+        }
       }
     }
   }
@@ -753,6 +763,11 @@ class LibraryProvider extends ChangeNotifier {
           }
         }
         notifyListeners();
+
+        // Incremental save every 25 items
+        if ((i + batch.length) % 25 == 0) {
+           await saveLibrary();
+        }
       }
 
       await saveLibrary();

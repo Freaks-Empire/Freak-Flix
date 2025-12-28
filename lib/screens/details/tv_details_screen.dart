@@ -91,7 +91,11 @@ class _TvDetailsScreenState extends State<TvDetailsScreen> {
        // Ensure strictly matching type (TV/Anime) to avoid Movie ID collisions
        if (i.type != MediaType.tv && !i.isAnime) return false;
        return i.tmdbId == _current.tmdbId;
-    }).toList();
+    }).toList()
+      ..sort((a, b) {
+        if (a.season != b.season) return (a.season ?? 0).compareTo(b.season ?? 0);
+        return (a.episode ?? 0).compareTo(b.episode ?? 0);
+      });
 
     // Ensure strictly matching type (TV/Anime) to avoid Movie ID collisions
     final availableEps = eps.where((tmdbEp) {
