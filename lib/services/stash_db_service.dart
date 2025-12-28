@@ -234,15 +234,12 @@ class StashDbService {
 
     try {
        // Note: StashBox uses 'scene' query for ID lookup, StashApp uses 'findScene'.
-       // We'll try to determine or just handle the error.
-       // Actually StashBox schema: query { scene(id: "...") { ... } }
-       // StashApp schema: query { findScene(id: "...") { ... } }
+       // Error investigation suggests 'scene' is NOT valid on stashdb.org (StashBox).
+       // We will try 'findScene' for both.
        
        final isStashBox = baseUrl.contains('stashdb.org');
-       final query = isStashBox 
-           ? _queryFindSceneById.replaceFirst('findScene', 'scene') 
-           : _queryFindSceneById;
-       final opName = isStashBox ? 'Scene' : 'FindScene';
+       final query = isStashBox ? _queryFindSceneById : _queryFindSceneById; // Explicitly same for now
+       final opName = 'FindScene';
 
        final data = await _executeQuery(
         query: query,
@@ -252,7 +249,7 @@ class StashDbService {
         baseUrl: baseUrl,
       );
 
-      final sceneData = data?[isStashBox ? 'scene' : 'findScene'];
+      final sceneData = data?['findScene']; // Query is 'findScene', so result key is 'findScene'
       if (sceneData != null) {
           return _mapSceneToMediaItem(sceneData, 'Unknown');
       }
