@@ -37,8 +37,7 @@ class LibraryProvider extends ChangeNotifier {
   List<MediaItem> _filteredItems = [];
   
   List<MediaItem> get items => _filteredItems;
-  // Legacy setter compliance if needed, but preferably avoid setting items directly from outside.
-  // We'll keep _allItems in sync using internal logic.
+  List<MediaItem> get allItems => List.unmodifiable(_allItems);
 
   List<LibraryFolder> libraryFolders = [];
   bool isLoading = false;
@@ -1094,63 +1093,81 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   Future<void> importState(Map<String, dynamic> data) async {
+    debugPrint('LibraryProvider: Importing library state...');
+    
+    // 1. Import Folders
     final rawFolders = data['folders'] as List<dynamic>?;
     if (rawFolders != null) {
-      final newFolders = rawFolders
+      debugPrint('LibraryProvider: Processing ${rawFolders.length} folders from backup');
+      final incomingFolders = rawFolders
           .map((e) => LibraryFolder.fromJson(e as Map<String, dynamic>))
           .toList();
-      
-      // Merge logic: For now, simple replace or merge? 
-      // User expects sync. Let's try to merge missing ones or replace all?
-      // Replacing entirely might lose local-only folders (like "Local file picker"?).
-      // But libraryFolders stores specific configurations.
-      // Let's replace OneDrive folders but keep others? Or just simple replace.
-      // Based on app structure, having identical setup across devices is desired.
-      // Let's replace for now, but safer to merge unique IDs?
-      
-      // Let's do a merge based on ID:
-      for (final f in newFolders) {
-         final exists = libraryFolders.any((old) => old.id == f.id && old.accountId == f.accountId);
-         if (!exists) {
-           libraryFolders.add(f);
-         }
+
+      // Merge Strategy:
+      // Start with a copy of current folders.
+      // Add incoming folders if they don't already exist (by ID/Account or Path).
+      final mergedFolders = <LibraryFolder>[...libraryFolders];
+
+      for (final inc in incomingFolders) {
+        // Check if exists by unique ID + Account
+        final existsById = mergedFolders.any((curr) => 
+            curr.id == inc.id && curr.accountId == inc.accountId);
+            
+        if (!existsById) {
+           // For local folders, also check by Path to avoid duplicates just because ID is different
+           if (inc.accountId.isEmpty) {
+              final existsByPath = mergedFolders.any((curr) => 
+                  curr.accountId.isEmpty && 
+                  curr.path.toLowerCase() == inc.path.toLowerCase()); // Windows insensitive
+              
+              if (!existsByPath) {
+                 mergedFolders.add(inc);
+              }
+           } else {
+              // Cloud folder: Add if ID didn't match
+              mergedFolders.add(inc);
+           }
+        }
       }
-      // What about deletions? If user deleted on Web, should we delete on Windows?
-      // Sync usually implies "current state". If we only add, deletions never sync.
-      // Let's Replace. But wait, local folders (not OneDrive) might vary by device path (C:\ vs /home/).
-      // OneDrive folders use ID so they are cross-platform safe.
-      // Filter: Keep local folders, replace/sync OneDrive folders.
       
-      final localOnly = libraryFolders.where((f) => f.accountId.isEmpty).toList();
-      final cloudFolders = newFolders.where((f) => f.accountId.isNotEmpty).toList();
-      
-      libraryFolders = [...localOnly, ...cloudFolders];
+      libraryFolders = mergedFolders;
+      debugPrint('LibraryProvider: Final folder count: ${libraryFolders.length}');
       
       await _saveLibraryFolders();
       notifyListeners();
-      
-      // Optional: Auto-scan new folders? 
-      // Maybe not immediately to avoid blasting network on startup. User can click "Rescan".
-      // But user expects to see items. 
-      // We'll leave auto-scan for now, user can click "Rescan".
     }
 
 
-    // Import Items
+    // 2. Import Items
     final rawItems = data['items'];
     if (rawItems != null) {
-      final cloudItems = MediaItem.listFromJson(rawItems);
+      List<MediaItem> cloudItems = [];
+      
+      if (rawItems is List) {
+         // Already decoded List
+         cloudItems = rawItems
+             .map((e) => MediaItem.fromJson(e as Map<String, dynamic>))
+             .toList();
+      } else if (rawItems is String) {
+         // Encoded String (Edge case if passed differently)
+         cloudItems = MediaItem.listFromJson(rawItems);
+      }
+      
+      debugPrint('LibraryProvider: Processing ${cloudItems.length} items from backup');
       
       final map = {for (var i in _allItems) i.id: i};
       for (final i in cloudItems) {
-        // Overwrite local with cloud version to ensure metadata sync
+        // Overwrite local with cloud/backup version
         map[i.id] = i; 
       }
       _allItems = map.values.toList()
         ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
       
+      debugPrint('LibraryProvider: Final item count: ${_allItems.length}');
+      
       await saveLibrary();
       notifyListeners();
+      _configChangedController.add(null);
     }
   }
 }

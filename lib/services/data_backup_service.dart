@@ -1,5 +1,6 @@
 /// lib/services/data_backup_service.dart
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -20,8 +21,8 @@ class DataBackupService {
     required this.profiles,
   });
 
-  Future<String> createBackup() async {
-    final backup = <String, dynamic>{
+  Future<Map<String, dynamic>> _generateBackupMap() async {
+    return {
       'version': 1,
       'timestamp': DateTime.now().toIso8601String(),
       'settings': settings.exportState(),
@@ -29,13 +30,43 @@ class DataBackupService {
       'profiles': await profiles.exportState(),
       'library': {
         'folders': library.libraryFolders.map((f) => f.toJson()).toList(),
-        // We export items too, to restore the library state without re-scanning.
-        // However, this might be large.
-        'items': library.items.map((i) => i.toJson()).toList(), 
+        // Export ALL items, not just filtered view
+        'items': library.allItems.map((i) => i.toJson()).toList(), 
       },
     };
+  }
 
-    return jsonEncode(backup);
+  /// Exports backup to a file at [path].
+  Future<void> exportBackupToFile(String path) async {
+    try {
+       final backupMap = await _generateBackupMap();
+       final jsonStr = jsonEncode(backupMap);
+       final file = File(path);
+       await file.writeAsString(jsonStr, flush: true);
+       debugPrint('DataBackupService: Backup saved to $path');
+    } catch (e) {
+      debugPrint('DataBackupService: Export failed: $e');
+      rethrow;
+    }
+  }
+
+  /// Imports backup from a file at [path].
+  Future<void> importBackupFromFile(String path) async {
+     try {
+       final file = File(path);
+       if (!await file.exists()) throw Exception('File not found');
+       final jsonStr = await file.readAsString();
+       await restoreBackup(jsonStr);
+     } catch (e) {
+       debugPrint('DataBackupService: Import failed: $e');
+       rethrow;
+     }
+  }
+
+  // Legacy/Web clipboard support (kept for compatibility or small backups)
+  Future<String> createBackupJson() async {
+    final map = await _generateBackupMap();
+    return jsonEncode(map);
   }
 
   Future<void> restoreBackup(String jsonString) async {

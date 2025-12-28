@@ -698,12 +698,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     library: Provider.of<LibraryProvider>(context, listen: false),
                     profiles: Provider.of<ProfileProvider>(context, listen: false),
                   );
-                  final json = await backupService.createBackup();
-                  await Clipboard.setData(ClipboardData(text: json));
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Backup copied to clipboard!')),
+                  if (kIsWeb) {
+                    final json = await backupService.createBackupJson();
+                    await Clipboard.setData(ClipboardData(text: json));
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Backup copied to clipboard!')),
+                      );
+                    }
+                  } else {
+                    final String? outputFile = await FilePicker.platform.saveFile(
+                      dialogTitle: 'Save Backup',
+                      fileName: 'freakflix_backup_${DateTime.now().millisecondsSinceEpoch}.json',
+                      allowedExtensions: ['json'],
+                      type: FileType.custom,
                     );
+
+                    if (outputFile != null) {
+                      try {
+                        await backupService.exportBackupToFile(outputFile);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Backup saved to $outputFile')),
+                          );
+                        }
+                      } catch (e) {
+                         if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Export failed: $e')),
+                          );
+                        }
+                      }
+                    }
                   }
                 },
               ),
@@ -712,7 +738,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: const Text('Import Data'),
                 subtitle: const Text('Restore from backup JSON'),
                 leading: const Icon(Icons.paste),
-                onTap: () => _showImportDialog(context),
+                onTap: () async {
+                   if (kIsWeb) {
+                      // Web: use text input dialog or clipboard paste? 
+                      // Clipboard paste is restricted. simpler to show import dialog
+                      _showImportDialog(context); 
+                   } else {
+                      // Native: Pick File
+                      final result = await FilePicker.platform.pickFiles(
+                        type: FileType.custom,
+                        allowedExtensions: ['json'],
+                      );
+                      
+                      if (result != null && result.files.single.path != null) {
+                         try {
+                            final backupService = DataBackupService(
+                              settings: settings,
+                              library: Provider.of<LibraryProvider>(context, listen: false),
+                              profiles: Provider.of<ProfileProvider>(context, listen: false),
+                            );
+                            await backupService.importBackupFromFile(result.files.single.path!);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Restore successful!')),
+                              );
+                            }
+                         } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Import failed: $e')),
+                              );
+                            }
+                         }
+                      }
+                   }
+                },
               ),
             ],
           ),
