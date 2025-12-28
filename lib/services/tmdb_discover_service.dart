@@ -16,6 +16,10 @@ class TmdbDiscoverService {
   TmdbDiscoverService(this.settings, {http.Client? client})
       : _client = client ?? http.Client();
 
+  final Map<String, _CacheEntry> _cache = {};
+
+  void clearCache() => _cache.clear();
+
   String? get _key {
     final k = settings.tmdbApiKey.trim();
     return k.isEmpty ? null : k;
@@ -291,12 +295,23 @@ class TmdbDiscoverService {
     required TmdbMediaType defaultType,
     bool allowFilter = true,
   }) async {
+    final cacheKey = uri.toString();
+    if (_cache.containsKey(cacheKey)) {
+      final entry = _cache[cacheKey]!;
+      if (entry.isValid) {
+        return entry.items;
+      } else {
+        _cache.remove(cacheKey);
+      }
+    }
+
     final res = await _client.get(uri);
     if (res.statusCode != 200) return [];
     final decoded = jsonDecode(res.body) as Map<String, dynamic>;
     final results = decoded['results'] as List<dynamic>?;
     if (results == null) return [];
-    return results
+    
+    final items = results
         .whereType<Map<String, dynamic>>()
         .map(
           (m) => TmdbItem.fromMap(
@@ -307,7 +322,20 @@ class TmdbDiscoverService {
         )
         .where((item) => item.title.isNotEmpty)
         .toList();
+
+    _cache[cacheKey] = _CacheEntry(items, DateTime.now());
+    return items;
   }
+}
+
+class _CacheEntry {
+  final List<TmdbItem> items;
+  final DateTime timestamp;
+
+  _CacheEntry(this.items, this.timestamp);
+
+  // Cache validity duration: 60 minutes
+  bool get isValid => DateTime.now().difference(timestamp) < const Duration(minutes: 60);
 }
 
 class DiscoverBundle {
