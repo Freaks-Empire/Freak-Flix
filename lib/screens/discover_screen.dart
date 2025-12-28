@@ -137,13 +137,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> with AutomaticKeepAlive
                         items: context.watch<LibraryProvider>().historyItems,
                      ),
                      
-                  DiscoverSection(
-                    title: 'Top Rated',
-                    items: _bundle.topRated,
-                    loading: _loading,
-                    onRetry: _load,
-                    onFetchNextPage: (p) => context.read<TmdbDiscoverService>().fetchTopRated(filter: context.read<DiscoverFilterNotifier>().filter, type: widget.type, page: p),
-                  ),
                   const SizedBox(height: 24),
                 ],
               ),
