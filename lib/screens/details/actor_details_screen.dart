@@ -15,9 +15,10 @@ import '../../widgets/safe_network_image.dart';
 import '../details_screen.dart';
 
 class ActorDetailsScreen extends StatefulWidget {
-  final CastMember actor;
+  final String actorId;
+  final CastMember? actor;
 
-  const ActorDetailsScreen({super.key, required this.actor});
+  const ActorDetailsScreen({super.key, required this.actorId, this.actor});
 
   @override
   State<ActorDetailsScreen> createState() => _ActorDetailsScreenState();
@@ -31,6 +32,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
   bool _hasMore = true;
   final ScrollController _scrollController = ScrollController();
 
+  late CastMember _actor;
   TmdbPerson? _tmdbPerson;
   List<TmdbItem> _tmdbCredits = [];
   List<MediaItem> _localScenes = [];
@@ -43,7 +45,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
        onTap: () {
          Navigator.of(context).push(
            MaterialPageRoute(
-             builder: (ctx) => DetailsScreen(item: item),
+             builder: (ctx) => DetailsScreen(itemId: item.id, item: item),
            ),
          );
        },
@@ -103,7 +105,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _loadDetails();
+    _loadData();
   }
 
   @override
@@ -121,19 +123,76 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
     }
   }
 
-  Future<void> _loadDetails() async {
-    if (widget.actor.source == CastSource.tmdb) {
-      final service = context.read<TmdbService>();
-      final details = await service.getPersonDetails(widget.actor.id);
-      if (mounted) {
-        setState(() {
-          _tmdbPerson = details;
-          if (details != null) {
-            _tmdbCredits = List.from(details.knownFor);
-            _tmdbCredits.shuffle(Random()); // Randomize as requested
+  Future<void> _loadData() async {
+      // 1. Resolve Actor
+      if (widget.actor != null) {
+          _actor = widget.actor!;
+      } else {
+          // Fetch actor by ID
+          final id = widget.actorId;
+          if (id.startsWith('stashdb:')) {
+              // StashDB
+               final settings = context.read<SettingsProvider>();
+               final service = StashDbService();
+               // Extract real ID
+               final realId = id.replaceFirst('stashdb:', '');
+               final fetched = await service.getPerformer(realId, settings.stashApiKey, settings.stashUrl);
+               
+               if (fetched != null) {
+                   _actor = fetched;
+               } else {
+                   // Failed to fetch, set dummy
+                   _actor = CastMember(id: id, name: 'Unknown', character: '', source: CastSource.stashDb);
+               }
+          } else {
+              // TMDB 
+              final service = context.read<TmdbService>();
+              final details = await service.getPersonDetails(int.tryParse(id) ?? 0);
+              
+              if (details != null) {
+                  _actor = CastMember(
+                      id: id,
+                      name: details.name,
+                      character: 'Actor',
+                      profileUrl: details.profilePath,
+                      source: CastSource.tmdb,
+                  );
+                  _tmdbPerson = details;
+              } else {
+                  _actor = CastMember(id: id, name: 'Unknown', character: '', source: CastSource.tmdb);
+              }
           }
-          _isLoading = false;
+      }
+
+      if (mounted) {
+         setState(() {}); 
+      }
+
+      await _loadDetails();
+  }
+
+  Future<void> _loadDetails() async {
+    if (_actor.source == CastSource.tmdb) {
+      // TMDB
+      if (_tmdbPerson == null) {
+          final service = context.read<TmdbService>();
+          final pid = int.tryParse(_actor.id) ?? 0;
+          final details = await service.getPersonDetails(pid);
+          if (mounted) {
+            setState(() {
+              _tmdbPerson = details;
+            });
+          }
+      }
+      
+      if (mounted && _tmdbPerson != null) {
+        setState(() {
+            _tmdbCredits = List.from(_tmdbPerson!.knownFor);
+            _tmdbCredits.shuffle(Random());
+            _isLoading = false;
         });
+      } else if (mounted) {
+         setState(() => _isLoading = false);
       }
     } else {
       // StashDB
@@ -141,26 +200,19 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
       // 1. Load Local Scenes Immediately
       if (mounted) {
          final library = context.read<LibraryProvider>();
-         // Filter library items for this performer
-         // Note: We need to search all items. Ideally LibraryProvider has a map, but iteration is fine for < 10k items usually.
-         // Matching by ID is safest: "stashdb:PERFORMER_ID" logic? 
-         // No, MediaItem cast has CastMembers. We need to check if ANY cast member matches current actor ID.
          
-         final actorId = widget.actor.id;
-         final actorName = widget.actor.name; // Fallback?
+         final actorId = _actor.id;
+         final actorName = _actor.name;
 
          final local = library.items.where((item) {
              return item.cast.any((c) => c.id == actorId || (c.id.isEmpty && c.name == actorName));
          }).toList();
 
-         // Sort by date descending
          local.sort((a,b) => (b.year ?? 0).compareTo(a.year ?? 0));
 
          setState(() {
            _localScenes = local;
-           // Don't set isLoading false yet, we want to fetch first page of remote too?
-           // Actually let's show local results ASAP then loading indicator for remote.
-           _isLoading = local.isEmpty; // If we have local, show them. If not, keep loading spinner.
+           _isLoading = local.isEmpty; 
          });
       }
 
@@ -178,6 +230,9 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
   Future<void> _loadNextPage() async {
     if (_isLoadingMore) return;
     
+    // Safety check if actor is loaded
+    if (_actor.source != CastSource.stashDb) return;
+    
     setState(() {
       _isLoadingMore = true;
     });
@@ -187,7 +242,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
       final service = StashDbService();
       
       final scenes = await service.getPerformerScenes(
-          widget.actor.id, 
+          _actor.id, 
           settings.stashApiKey, 
           settings.stashUrl,
           page: _currentPage,
@@ -239,14 +294,30 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // If loading, show spinner (wrapped in Scaffold to handle back button)
+    if (_isLoading) {
+       return Scaffold(
+         backgroundColor: Colors.black,
+         appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+         ),
+         body: const Center(child: CircularProgressIndicator(color: Colors.redAccent)),
+       );
+    }
+
     final theme = Theme.of(context);
     final size = MediaQuery.of(context).size;
     final library = context.watch<LibraryProvider>();
     final isDark = theme.brightness == Brightness.dark;
 
-    final name = _tmdbPerson?.name ?? widget.actor.name;
+    final name = _tmdbPerson?.name ?? _actor.name;
     final bio = _tmdbPerson?.biography;
-    final profileUrl = _tmdbPerson?.profilePath ?? widget.actor.profileUrl;
+    final profileUrl = _tmdbPerson?.profilePath ?? _actor.profileUrl;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -259,9 +330,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.redAccent))
-          : SingleChildScrollView(
+      body: SingleChildScrollView(
               controller: _scrollController,
               padding: const EdgeInsets.only(bottom: 48),
               child: Column(
@@ -280,6 +349,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                             fit: BoxFit.cover,
                             color: Colors.black.withOpacity(0.6),
                             colorBlendMode: BlendMode.darken,
+                            errorBuilder: (_,__,___) => Container(color: Colors.black),
                           ),
                         // Gradient
                         const DecoratedBox(
@@ -313,7 +383,11 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(12),
                                     child: profileUrl != null
-                                        ? Image.network(profileUrl, fit: BoxFit.cover)
+                                        ? Image.network(
+                                            profileUrl, 
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_,__,___) => Container(color: Colors.grey[800], child: const Icon(Icons.person, size: 64, color: Colors.white54)),
+                                          )
                                         : Container(color: Colors.grey[800], child: const Icon(Icons.person, size: 64, color: Colors.white54)),
                                   ),
                                 ),
@@ -383,12 +457,12 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
                     child: Text(
-                      widget.actor.source == CastSource.stashDb ? '' : 'Known For',
+                      _actor.source == CastSource.stashDb ? '' : 'Known For',
                       style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                   ),
                   
-                  if (widget.actor.source == CastSource.tmdb)
+                  if (_actor.source == CastSource.tmdb)
                      SizedBox(
                       height: 280,
                       child: ListView.separated(
@@ -401,7 +475,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                     )
                   else
                   // SECTION 1: Local Scenes
-                  if (widget.actor.source == CastSource.stashDb && _localScenes.isNotEmpty) ...[
+                  if (_actor.source == CastSource.stashDb && _localScenes.isNotEmpty) ...[
                     const Padding(
                       padding: EdgeInsets.fromLTRB(24, 0, 24, 16),
                       child: Text(
@@ -426,7 +500,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                   ],
 
                   // SECTION 2: Remote Scenes
-                  if (widget.actor.source == CastSource.stashDb && _remoteScenes.isNotEmpty) ...[
+                  if (_actor.source == CastSource.stashDb && _remoteScenes.isNotEmpty) ...[
                     Padding(
                       padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
                       child: Text(
@@ -467,7 +541,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                      ),
                 ],
               ),
-            ),
-    );
+            );
+  }  );
   }
 }

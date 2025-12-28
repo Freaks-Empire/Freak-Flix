@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:go_router/go_router.dart';
 import '../models/tmdb_item.dart';
 import '../models/media_item.dart';
 import '../providers/library_provider.dart';
@@ -19,15 +20,12 @@ class DiscoverCard extends StatelessWidget {
         final library = context.read<LibraryProvider>();
         final local = library.findByTmdbId(item.id);
         if (local != null) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (ctx) => DetailsScreen(item: local),
-            ),
-          );
+          context.push('/media/${local.id}', extra: local);
         } else {
           // Convert TMDB item to a stub MediaItem for viewing details
+          final prefix = item.type == TmdbMediaType.tv ? 'tv:' : 'movie:';
           final stub = MediaItem(
-            id: 'tmdb_${item.id}',
+            id: '$prefix${item.id}',
             filePath: '', // Empty path indicates not in library
             fileName: item.title,
             folderPath: '',
@@ -37,17 +35,13 @@ class DiscoverCard extends StatelessWidget {
             year: item.releaseYear,
             type: item.type == TmdbMediaType.tv ? MediaType.tv : MediaType.movie,
             posterUrl: item.posterUrl,
-            backdropUrl: null, // TMDB item currently doesn't have backdrop in list response, could fetch later or ignore
+            backdropUrl: null, 
             overview: item.overview,
             rating: item.voteAverage,
             tmdbId: item.id,
           );
           
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (ctx) => DetailsScreen(item: stub),
-            ),
-          );
+          context.push('/media/${stub.id}', extra: stub);
         }
       },
       child: SizedBox(

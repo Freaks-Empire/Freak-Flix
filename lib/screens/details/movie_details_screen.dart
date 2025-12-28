@@ -518,7 +518,7 @@ class _CastCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ActorDetailsScreen(actor: actor)),
+        MaterialPageRoute(builder: (_) => ActorDetailsScreen(actorId: actor.id, actor: actor)),
       ),
       child: SizedBox(
         width: 100,

@@ -179,6 +179,44 @@ class StashDbService {
     }
   ''';
 
+  static const String _queryFindPerformer = r'''
+    query FindPerformer($id: ID!) {
+      findPerformer(id: $id) {
+        id
+        name
+        birthdate
+        country
+        gender
+        url
+        twitter
+        instagram
+        details
+        image_path
+        scene_count
+      }
+    }
+  ''';
+
+  static const String _queryPerformerBox = r'''
+    query PerformerBox($id: ID!) {
+      performer(id: $id) {
+        id
+        name
+        birth_date
+        country
+        gender
+        urls
+        twitter
+        instagram
+        details
+        images {
+          url
+        }
+        scene_count
+      }
+    }
+  ''';
+  
   static const String _queryFindSceneById = r'''
     query FindScene($id: ID!) {
       findScene(id: $id) {
@@ -339,6 +377,44 @@ class StashDbService {
     }
 
     return [];
+  }
+
+  /// Gets performer details by ID.
+  Future<CastMember?> getPerformer(String id, String apiKey, String baseUrl) async {
+    if (apiKey.trim().isEmpty) return null;
+    
+    final isStashBox = baseUrl.contains('stashdb.org');
+    
+    try {
+      final data = await _executeQuery(
+        query: isStashBox ? _queryPerformerBox : _queryFindPerformer,
+        operationName: isStashBox ? 'PerformerBox' : 'FindPerformer',
+        variables: {'id': id},
+        apiKey: apiKey,
+        baseUrl: baseUrl,
+      );
+
+      final p = isStashBox ? data?['performer'] : data?['findPerformer'];
+      if (p != null) {
+          String? profileUrl;
+          if (p['image_path'] != null) {
+            profileUrl = p['image_path'];
+          } else if (p['images'] != null && (p['images'] as List).isNotEmpty) {
+            profileUrl = p['images'][0]['url'];
+          }
+          
+          return CastMember(
+            id: p['id'],
+            name: p['name'] ?? 'Unknown',
+            character: 'Performer',
+            profileUrl: profileUrl,
+            source: CastSource.stashDb,
+          );
+      }
+    } catch (e) {
+      debugPrint('StashDB: Get Performer failed: $e');
+    }
+    return null;
   }
 
   // --- Helper Methods ---

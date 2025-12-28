@@ -351,7 +351,7 @@ class _TvDetailsScreenState extends State<TvDetailsScreen> {
                           final actor = (_details?.cast ?? _current.cast)[i];
                           return GestureDetector(
                             onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => ActorDetailsScreen(actor: actor)),
+                              MaterialPageRoute(builder: (_) => ActorDetailsScreen(actorId: actor.id, actor: actor)),
                             ),
                             child: Container(
                               width: 240,

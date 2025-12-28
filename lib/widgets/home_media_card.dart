@@ -27,7 +27,7 @@ class HomeMediaCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => DetailsScreen(item: item)),
+        MaterialPageRoute(builder: (_) => DetailsScreen(itemId: item.id, item: item)),
       ),
       child: SizedBox(
         width: 150,

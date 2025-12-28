@@ -18,6 +18,8 @@ import 'services/tmdb_discover_service.dart';
 import 'screens/movies_screen.dart';
 import 'screens/tv_screen.dart';
 import 'screens/anime_screen.dart';
+import 'package:go_router/go_router.dart';
+import 'router.dart';
 import 'screens/adult_screen.dart';
 
 class FreakFlixApp extends StatefulWidget {
@@ -28,27 +30,20 @@ class FreakFlixApp extends StatefulWidget {
 }
 
 class _FreakFlixAppState extends State<FreakFlixApp> {
-  int _index = 0;
-  late final PageController _pageController;
+  late final GoRouter _router;
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: _index);
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
+    // Initialize Router
+    final settings = context.read<SettingsProvider>();
+    final profiles = context.read<ProfileProvider>();
+    _router = createRouter(settings, profiles);
   }
 
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final library = context.watch<LibraryProvider>();
-    final profileProvider = context.watch<ProfileProvider>();
-
     final dark = settings.isDarkMode;
     
     // Theme Config
@@ -63,99 +58,14 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
         useMaterial3: true,
       );
 
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'Freak-Flix',
       scrollBehavior: CustomScrollBehavior(),
       debugShowCheckedModeBanner: false,
       themeMode: dark ? ThemeMode.dark : ThemeMode.light,
       theme: themeData,
       darkTheme: darkThemeData,
-      home: profileProvider.isLoading 
-          ? const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator()))
-          : (!settings.isSetupCompleted) 
-              ? const SetupScreen()
-              : (profileProvider.activeProfile == null 
-                  ? const ProfileSelectionScreen()
-                  : Scaffold(
-              extendBodyBehindAppBar: true, // Allow content to go behind
-              body: Stack(
-                children: [
-                   // Main Content
-                   Positioned.fill(
-                     child: PageView(
-                       controller: _pageController,
-                       onPageChanged: (index) => setState(() => _index = index),
-                       children: [
-                         const DiscoverScreen(type: DiscoverType.all),
-                         const MoviesScreen(),
-                         const TvScreen(),
-                         const AnimeScreen(),
-                         if (settings.enableAdultContent) const AdultScreen(),
-                         const SearchScreen(),
-                         const SettingsScreen(),
-                       ],
-                     ),
-                   ),
-                   
-                   // Navigation Dock (Top Center)
-                   Align(
-                     alignment: Alignment.topCenter,
-                     child: SafeArea(
-                       child: NavigationDock(
-                         index: _index,
-                         onTap: (i) {
-                            setState(() => _index = i);
-                            _pageController.animateToPage(
-                              i,
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                            );
-                         },
-                       ),
-                     ),
-                   ),
-
-                   // Scanning Indicator
-                    if (library.isLoading)
-                      Positioned(
-                        top: 24+60, // Push down below dock
-                        left: 24,
-                        right: 24,
-                        child: Center(
-                          child: Material(
-                            elevation: 4,
-                            borderRadius: BorderRadius.circular(20),
-                            color: Colors.grey[900]?.withOpacity(0.95),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const SizedBox(
-                                    height: 16,
-                                    width: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.redAccent),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    library.scanningStatus.isNotEmpty
-                                        ? library.scanningStatus
-                                        : 'Scanning library...',
-                                    style: const TextStyle(fontSize: 12, color: Colors.white),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                ],
-              ),
-            )
-        )
+      routerConfig: _router,
     );
   }
 }

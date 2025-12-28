@@ -22,6 +22,8 @@ import 'providers/playback_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/profile_provider.dart';
 
+import 'package:flutter_web_plugins/url_strategy.dart';
+
 import 'services/metadata_service.dart';
 import 'services/tmdb_service.dart';
 import 'services/graph_auth_service.dart';
@@ -31,6 +33,8 @@ import 'models/discover_filter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  usePathUrlStrategy();
+
   try {
     await dotenv.load(fileName: '.env'); 
   } catch (e) {

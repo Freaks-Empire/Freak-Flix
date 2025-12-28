@@ -15,7 +15,7 @@ class MediaCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => DetailsScreen(item: item)),
+        MaterialPageRoute(builder: (_) => DetailsScreen(itemId: item.id, item: item)),
       ),
       child: SizedBox(
         width: 140,
