@@ -60,7 +60,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 final realItemId = _currentItem.id.substring(idPrefix.length);
                 
                 debugPrint('Refreshing OneDrive URL for item $realItemId account $accountId');
-                final fresh = await GraphAuthService.instance.getDownloadUrl(accountId, realItemId);
+                
+                // Try HLS first for quality selection
+                String? fresh = await GraphAuthService.instance.getHlsUrl(accountId, realItemId);
+                if (fresh == null) {
+                    debugPrint('HLS unavailable, falling back to download URL');
+                    fresh = await GraphAuthService.instance.getDownloadUrl(accountId, realItemId);
+                }
+
                 if (fresh != null) {
                    path = fresh;
                    debugPrint('Got fresh URL: $fresh');

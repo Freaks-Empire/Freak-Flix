@@ -514,11 +514,6 @@ class GraphAuthService {
   Future<String?> getDownloadUrl(String accountId, String itemId) async {
     try {
       final token = await getFreshAccessToken(accountId);
-      // itemId might come in as "onedrive:{accountId}:{realItemId}" or just "{realItemId}"
-      // Logic in LibraryProvider and MediaItem construction usually separates them.
-      // If we store just the ID in MediaItem.id, we use that.
-      // NOTE: MediaItem.id for OneDrive items is usually the actual saved ID.
-      // Let's assume itemId is the Graph ID.
       
       final url = Uri.parse('$graphBaseUrl/me/drive/items/$itemId');
       final res = await http.get(url, headers: {'Authorization': 'Bearer $token'});
@@ -533,6 +528,38 @@ class GraphAuthService {
     } catch (e) {
       debugPrint('getDownloadUrl error: $e');
       return null;
+    }
+  }
+
+  /// Fetches an HLS stream manifest URL for a video item.
+  /// Returns null if HLS is not available or fails.
+  Future<String?> getHlsUrl(String accountId, String itemId) async {
+    try {
+       final token = await getFreshAccessToken(accountId);
+       
+       // Request content with format=hls
+       // We must disable following redirects to capture the 302 Location header
+       final url = Uri.parse('$graphBaseUrl/me/drive/items/$itemId/content?format=hls');
+       
+       final request = http.Request('GET', url)
+         ..followRedirects = false
+         ..headers['Authorization'] = 'Bearer $token';
+         
+       final streamedRes = await request.send();
+       
+       if (streamedRes.statusCode == 302) {
+          final location = streamedRes.headers['location'];
+          if (location != null && location.isNotEmpty) {
+             debugPrint('Got HLS URL for $itemId: $location');
+             return location;
+          }
+       }
+       
+       debugPrint('getHlsUrl failed: ${streamedRes.statusCode} (Expected 302)');
+       return null;
+    } catch (e) {
+       debugPrint('getHlsUrl error: $e');
+       return null;
     }
   }
 

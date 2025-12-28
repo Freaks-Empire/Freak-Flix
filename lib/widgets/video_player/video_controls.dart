@@ -287,6 +287,48 @@ class _VideoControlsState extends State<VideoControls> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (tracks.video.length > 1) ...[
+                  const Text('Quality', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  
+                  // Auto Option
+                  RadioListTile<VideoTrack>(
+                    title: const Text('Auto', style: TextStyle(color: Colors.white)),
+                    value: VideoTrack.auto(),
+                    groupValue: widget.player.state.track.video,
+                    onChanged: (val) {
+                      if (val != null) widget.player.setVideoTrack(val);
+                      Navigator.pop(ctx);
+                    },
+                    activeColor: Colors.redAccent,
+                  ),
+                  
+                  ...tracks.video.map((t) {
+                     // Parse bitrate/res from title or ID if needed, 
+                     // but usually 'title' or 'w x h' is good enough.
+                     // OneDrive HLS typically sends: "1080p (6264 kbps)" in title or similar.
+                     String label = t.title ?? t.id;
+                     if (t.w != null && t.h != null) {
+                        label = '${t.w}x${t.h}';
+                        if (t.bitrate != null) {
+                           label += ' (${(t.bitrate! / 1000).round()} kbps)';
+                        }
+                     }
+                     
+                     return RadioListTile<VideoTrack>(
+                        title: Text(label, style: const TextStyle(color: Colors.white)),
+                        value: t,
+                        groupValue: widget.player.state.track.video,
+                        onChanged: (val) {
+                          if (val != null) widget.player.setVideoTrack(val);
+                          Navigator.pop(ctx);
+                        },
+                        activeColor: Colors.redAccent,
+                     );
+                  }),
+                  const SizedBox(height: 16),
+                ],
+
                 if (tracks.audio.length > 1) ...[
                   const Text('Audio', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
