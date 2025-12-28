@@ -25,13 +25,21 @@ class ActorDetailsScreen extends StatefulWidget {
 
 class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  int _currentPage = 1;
+  static const int _perPage = 40;
+  bool _hasMore = true;
+  final ScrollController _scrollController = ScrollController();
+
   TmdbPerson? _tmdbPerson;
   List<TmdbItem> _tmdbCredits = [];
   List<MediaItem> _localScenes = [];
   List<MediaItem> _remoteScenes = [];
 
-  Widget _buildSceneCard(BuildContext context, MediaItem item, bool isLocal) {
-     return GestureDetector(
+   Widget _buildSceneCard(BuildContext context, MediaItem item, bool isLocal) {
+      final imageUrl = item.backdropUrl ?? item.posterUrl;
+      
+      return GestureDetector(
        onTap: () {
          Navigator.of(context).push(
            MaterialPageRoute(
@@ -47,9 +55,9 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                borderRadius: BorderRadius.circular(12),
                child: Stack(
                  children: [
-                    if (item.posterUrl != null)
+                    if (imageUrl != null)
                       Image.network(
-                        item.posterUrl!,
+                        imageUrl,
                         fit: BoxFit.cover, 
                         width: double.infinity,
                         height: double.infinity,
@@ -87,10 +95,77 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
      );
   }
 
+// ...
+
+                    // SECTION 1: Local Scenes
+                    if (widget.actor.source == CastSource.stashDb && _localScenes.isNotEmpty) ...[
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(24, 0, 24, 16),
+                        child: Text(
+                          'In Library',
+                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      GridView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 280,
+                          childAspectRatio: 16 / 9,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                        itemCount: _localScenes.length,
+                        itemBuilder: (ctx, i) => _buildSceneCard(ctx, _localScenes[i], true),
+                      ),
+                      const SizedBox(height: 32),
+                    ],
+
+                    // SECTION 2: Remote Scenes
+                    if (widget.actor.source == CastSource.stashDb && _remoteScenes.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                        child: Text(
+                          _localScenes.isEmpty ? 'Scenes' : 'More Scenes',
+                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      GridView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 280,
+                          childAspectRatio: 16 / 9,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                        itemCount: _remoteScenes.length,
+                        itemBuilder: (ctx, i) => _buildSceneCard(ctx, _remoteScenes[i], false),
+                      ),
+                    ],
+
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _loadDetails();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 500) {
+      if (!_isLoadingMore && _hasMore && !_isLoading) {
+        _loadNextPage();
+      }
+    }
   }
 
   Future<void> _loadDetails() async {
@@ -109,39 +184,101 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
       }
     } else {
       // StashDB
-      final settings = context.read<SettingsProvider>();
-      final service = StashDbService(); // Should probably be a provider or singleton
-      // Note: StashDbService is currently stateless/mixed. 
-      // We need to instantiate it or use static if it were static.
-      // It's defined as a class `StashDbService`.
-      // It's defined as a class `StashDbService`.
       
-      final scenes = await service.getPerformerScenes(widget.actor.id, settings.stashApiKey, settings.stashUrl);
+      // 1. Load Local Scenes Immediately
       if (mounted) {
-        final library = context.read<LibraryProvider>();
-        
-        final local = <MediaItem>[];
-        final remote = <MediaItem>[];
+         final library = context.read<LibraryProvider>();
+         // Filter library items for this performer
+         // Note: We need to search all items. Ideally LibraryProvider has a map, but iteration is fine for < 10k items usually.
+         // Matching by ID is safest: "stashdb:PERFORMER_ID" logic? 
+         // No, MediaItem cast has CastMembers. We need to check if ANY cast member matches current actor ID.
+         
+         final actorId = widget.actor.id;
+         final actorName = widget.actor.name; // Fallback?
 
-        for (final s in scenes) {
-           final rawId = s.id.replaceFirst('stashdb:', '');
-           try {
-             // Find the actual local MediaItem if it exists to get the file path/real details
-             final match = library.items.firstWhere((l) => l.stashId == rawId);
-             local.add(match);
-           } catch (_) {
-             remote.add(s);
-           }
-        }
-        
-        // Sort by date/year descending
-        local.sort((a,b) => (b.year ?? 0).compareTo(a.year ?? 0));
-        remote.sort((a,b) => (b.year ?? 0).compareTo(a.year ?? 0));
+         final local = library.items.where((item) {
+             return item.cast.any((c) => c.id == actorId || (c.id.isEmpty && c.name == actorName));
+         }).toList();
 
+         // Sort by date descending
+         local.sort((a,b) => (b.year ?? 0).compareTo(a.year ?? 0));
+
+         setState(() {
+           _localScenes = local;
+           // Don't set isLoading false yet, we want to fetch first page of remote too?
+           // Actually let's show local results ASAP then loading indicator for remote.
+           _isLoading = local.isEmpty; // If we have local, show them. If not, keep loading spinner.
+         });
+      }
+
+      // 2. Load First Page of Remote
+      await _loadNextPage();
+      
+      if (mounted) {
         setState(() {
-          _localScenes = local;
-          _remoteScenes = remote;
-          _isLoading = false;
+          _isLoading = false; 
+        });
+      }
+    }
+  }
+
+  Future<void> _loadNextPage() async {
+    if (_isLoadingMore) return;
+    
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    try {
+      final settings = context.read<SettingsProvider>();
+      final service = StashDbService();
+      
+      final scenes = await service.getPerformerScenes(
+          widget.actor.id, 
+          settings.stashApiKey, 
+          settings.stashUrl,
+          page: _currentPage,
+          perPage: _perPage,
+      );
+      
+      if (!mounted) return;
+
+      if (scenes.isEmpty) {
+        setState(() {
+          _hasMore = false;
+          _isLoadingMore = false;
+        });
+        return;
+      }
+      
+      // Filter out scenes that are already in _localScenes to avoid dupes in "Remote" list
+      // (Optional, but requested implication of "local vs remote")
+      final library = context.read<LibraryProvider>();
+      final filtered = <MediaItem>[];
+      
+      for (final s in scenes) {
+         // Check if s.id (stashdb:ID) corresponds to any item in library
+         // Library items have stashId property if enriched.
+         final rawId = s.id.replaceFirst('stashdb:', '');
+         final isLocal = library.items.any((l) => l.stashId == rawId);
+         
+         if (!isLocal) {
+           filtered.add(s);
+         }
+      }
+
+      setState(() {
+        _remoteScenes.addAll(filtered);
+        _currentPage++;
+        if (scenes.length < _perPage) _hasMore = false;
+        _isLoadingMore = false;
+      });
+
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingMore = false;
+          _hasMore = false; // Stop on error to avoid loop?
         });
       }
     }
@@ -172,6 +309,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.redAccent))
           : SingleChildScrollView(
+              controller: _scrollController,
               padding: const EdgeInsets.only(bottom: 48),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -363,6 +501,17 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                       padding: EdgeInsets.symmetric(horizontal: 24),
                       child: Text("No known works found.", style: TextStyle(color: Colors.white30)),
                     ),
+                  // Loading More Spinner
+                  if (_isLoadingMore)
+                     const Padding(
+                       padding: EdgeInsets.all(24.0),
+                       child: Center(
+                         child: SizedBox(
+                           width: 24, height: 24, 
+                           child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2),
+                         ),
+                       ),
+                     ),
                 ],
               ),
             ),

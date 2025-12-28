@@ -302,68 +302,43 @@ class StashDbService {
     return null;
   }
 
-  /// Gets all scenes for a specific performer (paginated).
-  Future<List<MediaItem>> getPerformerScenes(String performerId, String apiKey, String baseUrl) async {
+  /// Gets scenes for a specific performer (paginated, single page).
+  Future<List<MediaItem>> getPerformerScenes(String performerId, String apiKey, String baseUrl, {int page = 1, int perPage = 20}) async {
     if (apiKey.trim().isEmpty) return [];
 
     final isStashBox = baseUrl.contains('stashdb.org');
-    final allScenes = <MediaItem>[];
-    
-    int page = 1;
-    const perPage = 80; 
-    bool hasMore = true;
-
-    // Safety limit to prevent infinite loops if something goes wrong (e.g. 50 pages * 80 = 4000 scenes)
-    int maxPages = 50; 
 
     try {
-      while (hasMore && page <= maxPages) {
-        debugPrint('StashDB: Fetching performer scenes page $page');
-        
-        final data = await _executeQuery(
-          query: isStashBox ? _queryPerformerScenesBox : _queryPerformerScenes,
-          operationName: isStashBox ? 'PerformerScenesBox' : 'PerformerScenes',
-          variables: {
-            'performerId': performerId,
-            'page': page,
-            'per_page': perPage,
-          },
-          apiKey: apiKey,
-          baseUrl: baseUrl,
-        );
+      debugPrint('StashDB: Fetching performer scenes page $page');
+      final data = await _executeQuery(
+        query: isStashBox ? _queryPerformerScenesBox : _queryPerformerScenes,
+        operationName: isStashBox ? 'PerformerScenesBox' : 'PerformerScenes',
+        variables: {
+          'performerId': performerId,
+          'page': page,
+          'per_page': perPage,
+        },
+        apiKey: apiKey,
+        baseUrl: baseUrl,
+      );
 
-        List<dynamic>? scenes;
-        if (isStashBox) {
-          scenes = data?['queryScenes']?['scenes'] as List?;
-        } else {
-          scenes = data?['findScenes']?['scenes'] as List?;
-        }
-
-        if (scenes != null && scenes.isNotEmpty) {
-          final mapped = scenes
-            .map((s) => _mapSceneToMediaItem(s, s['title'] ?? 'Unknown'))
-            .toList();
-          
-          allScenes.addAll(mapped);
-          
-          if (scenes.length < perPage) {
-            hasMore = false; // Last page
-          } else {
-            page++;
-          }
-        } else {
-          hasMore = false;
-        }
+      List<dynamic>? scenes;
+      if (isStashBox) {
+        scenes = data?['queryScenes']?['scenes'] as List?;
+      } else {
+        scenes = data?['findScenes']?['scenes'] as List?;
       }
-      
-      debugPrint('StashDB: Fetched total ${allScenes.length} scenes for performer $performerId');
-      return allScenes;
 
+      if (scenes != null) {
+        return scenes
+          .map((s) => _mapSceneToMediaItem(s, s['title'] ?? 'Unknown'))
+          .toList();
+      }
     } catch (e) {
       debugPrint('StashDB: Fetch performer scenes failed: $e');
-      // Return whatever we managed to fetch so far
-      return allScenes; 
     }
+
+    return [];
   }
 
   // --- Helper Methods ---
