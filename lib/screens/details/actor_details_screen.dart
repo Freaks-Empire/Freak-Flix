@@ -97,54 +97,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
 
 // ...
 
-                    // SECTION 1: Local Scenes
-                    if (widget.actor.source == CastSource.stashDb && _localScenes.isNotEmpty) ...[
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(24, 0, 24, 16),
-                        child: Text(
-                          'In Library',
-                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      GridView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 280,
-                          childAspectRatio: 16 / 9,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                        itemCount: _localScenes.length,
-                        itemBuilder: (ctx, i) => _buildSceneCard(ctx, _localScenes[i], true),
-                      ),
-                      const SizedBox(height: 32),
-                    ],
 
-                    // SECTION 2: Remote Scenes
-                    if (widget.actor.source == CastSource.stashDb && _remoteScenes.isNotEmpty) ...[
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-                        child: Text(
-                          _localScenes.isEmpty ? 'Scenes' : 'More Scenes',
-                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      GridView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 280,
-                          childAspectRatio: 16 / 9,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                        itemCount: _remoteScenes.length,
-                        itemBuilder: (ctx, i) => _buildSceneCard(ctx, _remoteScenes[i], false),
-                      ),
-                    ],
 
   @override
   void initState() {
@@ -447,55 +400,55 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                       ),
                     )
                   else
-                    // SECTION 1: Local Scenes
-                    if (widget.actor.source == CastSource.stashDb && _localScenes.isNotEmpty) ...[
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(24, 0, 24, 16),
-                        child: Text(
-                          'In Library',
-                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
+                  // SECTION 1: Local Scenes
+                  if (widget.actor.source == CastSource.stashDb && _localScenes.isNotEmpty) ...[
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(24, 0, 24, 16),
+                      child: Text(
+                        'In Library',
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                       ),
-                      GridView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 150,
-                          childAspectRatio: 2 / 3,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                        itemCount: _localScenes.length,
-                        itemBuilder: (ctx, i) => _buildSceneCard(ctx, _localScenes[i], true),
+                    ),
+                    GridView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 280,
+                        childAspectRatio: 16 / 9,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
                       ),
-                      const SizedBox(height: 32),
-                    ],
+                      itemCount: _localScenes.length,
+                      itemBuilder: (ctx, i) => _buildSceneCard(ctx, _localScenes[i], true),
+                    ),
+                    const SizedBox(height: 32),
+                  ],
 
-                    // SECTION 2: Remote Scenes
-                    if (widget.actor.source == CastSource.stashDb && _remoteScenes.isNotEmpty) ...[
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-                        child: Text(
-                          _localScenes.isEmpty ? 'Scenes' : 'More Scenes',
-                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
+                  // SECTION 2: Remote Scenes
+                  if (widget.actor.source == CastSource.stashDb && _remoteScenes.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                      child: Text(
+                        _localScenes.isEmpty ? 'Scenes' : 'More Scenes',
+                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                       ),
-                      GridView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 150,
-                          childAspectRatio: 2 / 3,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                        itemCount: _remoteScenes.length,
-                        itemBuilder: (ctx, i) => _buildSceneCard(ctx, _remoteScenes[i], false),
+                    ),
+                    GridView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 280,
+                        childAspectRatio: 16 / 9,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
                       ),
-                    ],
-                    
+                      itemCount: _remoteScenes.length,
+                      itemBuilder: (ctx, i) => _buildSceneCard(ctx, _remoteScenes[i], false),
+                    ),
+                  ],
+                  
                   if (_tmdbCredits.isEmpty && _localScenes.isEmpty && _remoteScenes.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 24),
