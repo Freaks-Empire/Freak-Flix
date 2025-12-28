@@ -540,6 +540,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                      ),
                 ],
               ),
-            );
+            ),
+          );
   }
 }
