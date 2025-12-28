@@ -382,7 +382,10 @@ class LibraryProvider extends ChangeNotifier {
         if (item.id.startsWith('onedrive_')) {
              parentFolder = libraryFolders.firstWhereOrNull((f) {
                  if (f.accountId.isEmpty) return false;
-                 final prefix = 'onedrive:${f.accountId}${f.path.isEmpty ? '/' : f.path}';
+                 // Ensure path has leading slash for consistency
+                 final fPath = f.path.startsWith('/') ? f.path : '/${f.path}';
+                 // If f.path is empty/root, it becomes '/'.
+                 final prefix = 'onedrive:${f.accountId}${fPath == '/' ? '/' : fPath}';
                  return item.folderPath.startsWith(prefix);
              });
         } 
@@ -676,14 +679,22 @@ class LibraryProvider extends ChangeNotifier {
     }
 
     final map = {for (var i in _allItems) i.filePath: i};
-    for (final item in newItems) {
-      // If item exists, PRESERVE it to keep rich metadata.
-      // Only add if it's new.
-      if (!map.containsKey(item.filePath)) {
-         map[item.filePath] = item;
+    for (final newItem in newItems) {
+      if (!map.containsKey(newItem.filePath)) {
+         map[newItem.filePath] = newItem;
       } else {
-         // Optional: Update lastModified or size if changed? 
-         // For now, prioritize preserving metadata.
+         // Merge Check: If existing item has WRONG classification vs new item (which comes from strict folder), update it.
+         final existing = map[newItem.filePath]!;
+         if (existing.isAdult != newItem.isAdult || 
+             existing.isAnime != newItem.isAnime ||
+             (existing.type != newItem.type && newItem.type != MediaType.other)) {
+             
+             map[newItem.filePath] = existing.copyWith(
+               isAdult: newItem.isAdult,
+               isAnime: newItem.isAnime,
+               type: newItem.type != MediaType.other ? newItem.type : existing.type,
+             );
+         }
       }
     }
     _allItems = map.values.toList()
@@ -932,7 +943,15 @@ class LibraryProvider extends ChangeNotifier {
                   _setScanStatus('Found: $name');
                   final newItem = _createMediaItemFromGraph(item, accountId, baseFolderPath);
                   // Determine if adult/anime based on folder type immediately so it shows up in filtered view
-                  final parentFolder = libraryFolders.firstWhereOrNull((f) => f.accountId == accountId && newItem.folderPath.startsWith('onedrive:${f.accountId}${f.path.isEmpty ? '/' : f.path}'));
+                  final parentFolder = libraryFolders.firstWhereOrNull((f) {
+                      if (f.accountId != accountId) return false;
+                      final fPath = f.path.startsWith('/') ? f.path : '/${f.path}';
+                      // Normalize check: baseFolderPath vs prefix
+                      // baseFolderPath = onedrive:ACCID/Path...
+                      // prefix = onedrive:ACCID/Path
+                      final prefix = 'onedrive:${f.accountId}${fPath == '/' ? '/' : fPath}';
+                      return newItem.folderPath.startsWith(prefix);
+                  });
                   
                   bool initialIsAdult = newItem.isAdult;
                   bool initialIsAnime = newItem.isAnime;
