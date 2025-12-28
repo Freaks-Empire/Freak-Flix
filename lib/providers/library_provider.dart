@@ -1521,26 +1521,42 @@ MediaItem _parseFile(PlatformFileSystemEntity f) {
   final animeHint = lowerPath.contains('anime');
 
   var parsed = FilenameParser.parse(fileName);
+  
+  // Try parsing the parent folder name too
+  final parentFolderName = p.basename(folder);
+  final folderParsed = FilenameParser.parse(parentFolderName);
 
-  // FAIL-SAFE: If filename didn't yield a Studio or Date, try parsing the PARENT FOLDER name.
-  // Scenario: Folder "Dani Daniels loves Derrick Pierce - 2013-06-13" / File "Dani.Daniels.Legs.3....mp4"
-  if (parsed.studio == null && parsed.date == null) {
-      final parentFolderName = p.basename(folder);
-      final folderParsed = FilenameParser.parse(parentFolderName);
-      
-      // If folder gave us something useful (Date or Studio), we merge/override.
-      if (folderParsed.date != null || folderParsed.studio != null) {
-          parsed = ParsedMediaName(
-              seriesTitle: folderParsed.seriesTitle.isNotEmpty ? folderParsed.seriesTitle : parsed.seriesTitle,
-              movieTitle: folderParsed.movieTitle,
-              year: folderParsed.year ?? parsed.year,
-              season: parsed.season,
-              episode: parsed.episode,
-              studio: folderParsed.studio ?? parsed.studio,
-              date: folderParsed.date ?? parsed.date,
-              performers: folderParsed.performers.isNotEmpty ? folderParsed.performers : parsed.performers,
-          );
-      }
+  // DECISION LOGIC: When to prefer folder over filename?
+  // 1. If folder matches a Scene Pattern (Studio/Date found) and filename didn't.
+  // 2. If folder matches matches Scene Pattern AND filename is just a mess (e.g. same as raw filename)
+  
+  bool preferFolder = false;
+  
+  // If folder has explicit scene info (Studio/Date)
+  if (folderParsed.studio != null || folderParsed.date != null) {
+     // If filename LACKS scene info, definitely use folder
+     if (parsed.studio == null && parsed.date == null) {
+       preferFolder = true;
+     } 
+     // If filename has info but looks like a generic repost/messy release, and folder is clean... 
+     // (Hard to judge "messy", but let's say if folder has Studio+Date and filename only has one or dates mismatch)
+     else if (folderParsed.studio != null && folderParsed.seriesTitle.isNotEmpty) {
+        // Assume folder structure "Studio - Date - Title" is authoritative
+        preferFolder = true;
+     }
+  }
+
+  if (preferFolder) {
+      parsed = ParsedMediaName(
+          seriesTitle: folderParsed.seriesTitle.isNotEmpty ? folderParsed.seriesTitle : parsed.seriesTitle,
+          movieTitle: folderParsed.movieTitle,
+          year: folderParsed.year ?? parsed.year,
+          season: parsed.season,
+          episode: parsed.episode,
+          studio: folderParsed.studio ?? parsed.studio,
+          date: folderParsed.date ?? parsed.date,
+          performers: folderParsed.performers.isNotEmpty ? folderParsed.performers : parsed.performers,
+      );
   }
 
   final type = (parsed.season != null || parsed.episode != null || animeHint)
