@@ -69,20 +69,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 // Try HLS first for quality selection
                 String? fresh = await GraphAuthService.instance.getHlsUrl(accountId, realItemId);
                 if (fresh == null) {
-                    debugPrint('HLS unavailable, falling back to download URL');
+                    debugPrint('VideoPlayerScreen: HLS unavailable (returned null), falling back to download URL');
                     fresh = await GraphAuthService.instance.getDownloadUrl(accountId, realItemId);
+                } else {
+                    debugPrint('VideoPlayerScreen: HLS URL obtained successfully: $fresh');
                 }
 
                 if (fresh != null) {
                    path = fresh;
-                   debugPrint('Got fresh URL: $fresh');
+                   debugPrint('VideoPlayerScreen: Playing with fresh URL: $path');
                 } else {
-                   debugPrint('Could not refresh download URL, using original streamUrl');
+                   debugPrint('VideoPlayerScreen: Could not refresh download URL, using original streamUrl');
                 }
              }
           }
        } catch (e) {
-          debugPrint('Error refreshing URL: $e');
+          debugPrint('VideoPlayerScreen: Error refreshing URL: $e');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('Error refreshing link: $e'), backgroundColor: Colors.red),
@@ -96,6 +98,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     setState(() => _isLoadingLink = false);
     debugPrint('VideoPlayerScreen: Opening player with path: $path');
     await player.open(Media(path));
+    
+    // Debug tracks after opening
+    await Future.delayed(const Duration(seconds: 2));
+    debugPrint('VideoPlayerScreen: Video Tracks: ${player.state.tracks.video.length}');
+    for (var t in player.state.tracks.video) {
+        debugPrint(' - Track: ${t.id} ${t.title} ${t.w}x${t.h}');
+    }
     debugPrint('VideoPlayerScreen: Player opened.');
   }
   

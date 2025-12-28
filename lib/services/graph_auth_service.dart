@@ -536,6 +536,14 @@ class GraphAuthService {
   Future<String?> getHlsUrl(String accountId, String itemId) async {
     try {
        final token = await getFreshAccessToken(accountId);
+
+       if (kIsWeb) {
+          // 'followRedirects' is not supported on Web.
+          // Getting raw m3u8 content via XHR is possible but requires complex proxying for segments.
+          // For now, disable HLS on Web and fallback to downloadUrl.
+          debugPrint('getHlsUrl: Skipped on Web (platform limitation).');
+          return null;
+       }
        
        // Request content with format=hls
        // We must disable following redirects to capture the 302 Location header
