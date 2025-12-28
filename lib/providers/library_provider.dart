@@ -1146,12 +1146,27 @@ class LibraryProvider extends ChangeNotifier {
         break;
     }
     
-    final list = pool.toList();
-    // Shuffle for variety, or Sort by Rating?
-    // "Recommended" usually implies quality. Let's sort by rating then random shuffle 
-    // or just Shuffle to surface buried content.
-    list.shuffle(); 
-    return list.take(20).toList();
+    // Group by Show to avoid showing every single episode
+    final uniqueList = <MediaItem>[];
+    final seenShows = <String>{};
+
+    for (final item in pool) {
+      if (item.type == MediaType.movie) {
+        uniqueList.add(item);
+      } else {
+        // TV / Anime
+        final key = item.showKey ?? item.tmdbId?.toString() ?? item.title ?? item.folderPath;
+        if (!seenShows.contains(key)) {
+          seenShows.add(key);
+          uniqueList.add(item);
+        }
+      }
+    }
+
+    // Shuffle for discovery
+    uniqueList.shuffle();
+    
+    return uniqueList.take(20).toList();
   }
 
 
