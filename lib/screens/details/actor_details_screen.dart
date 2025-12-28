@@ -147,7 +147,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
           } else {
               // TMDB 
               final service = context.read<TmdbService>();
-              final details = await service.getPersonDetails(int.tryParse(id) ?? 0);
+              final details = await service.getPersonDetails(id);
               
               if (details != null) {
                   _actor = CastMember(
@@ -176,8 +176,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
       // TMDB
       if (_tmdbPerson == null) {
           final service = context.read<TmdbService>();
-          final pid = int.tryParse(_actor.id) ?? 0;
-          final details = await service.getPersonDetails(pid);
+          final details = await service.getPersonDetails(_actor.id);
           if (mounted) {
             setState(() {
               _tmdbPerson = details;
@@ -542,6 +541,5 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                 ],
               ),
             );
-  }  );
   }
 }

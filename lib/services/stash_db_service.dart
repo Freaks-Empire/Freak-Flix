@@ -394,7 +394,13 @@ class StashDbService {
         baseUrl: baseUrl,
       );
 
-      final p = isStashBox ? data?['performer'] : data?['findPerformer'];
+      
+      Map<String, dynamic>? p;
+      if (isStashBox) {
+         p = data?['performer'];
+      } else {
+         p = data?['findPerformer'];
+      }
       if (p != null) {
           String? profileUrl;
           if (p['image_path'] != null) {

@@ -228,6 +228,30 @@ class TmdbService {
         .map((e) => TmdbEpisode.fromMap(e, _imageBase))
         .toList();
   }
+  Future<TmdbMovie?> getMovieDetails(int tmdbId) async {
+    final key = _key;
+    if (key == null) return null;
+
+    final uri = Uri.https(_baseHost, '/3/movie/$tmdbId', {'api_key': key});
+    final res = await _client.get(uri);
+    if (res.statusCode != 200) return null;
+
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return TmdbMovie.fromJson(data);
+  }
+
+  Future<TmdbTv?> getTvDetails(int tmdbId) async {
+    final key = _key;
+    if (key == null) return null;
+
+    final uri = Uri.https(_baseHost, '/3/tv/$tmdbId', {'api_key': key});
+    final res = await _client.get(uri);
+    if (res.statusCode != 200) return null;
+
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return TmdbTv.fromJson(data);
+  }
+
   Future<List<TmdbItem>> searchMulti(String query) async {
     final key = _key;
     if (key == null || query.trim().isEmpty) return [];

@@ -87,3 +87,64 @@ class TmdbItem {
     );
   }
 }
+
+class TmdbMovie {
+  final int id;
+  final String title;
+  final String? posterPath;
+  final String? backdropPath;
+  final String? releaseDate;
+  final String? overview;
+
+  TmdbMovie({
+    required this.id,
+    required this.title,
+    this.posterPath,
+    this.backdropPath,
+    this.releaseDate,
+    this.overview,
+  });
+
+  factory TmdbMovie.fromJson(Map<String, dynamic> json) {
+    return TmdbMovie(
+      id: json['id'] as int,
+      title: json['title'] as String? ?? '',
+      posterPath: json['poster_path'] as String?,
+      backdropPath: json['backdrop_path'] as String?,
+      releaseDate: json['release_date'] as String?,
+      overview: json['overview'] as String?,
+    );
+  }
+}
+
+class TmdbTv {
+  final int id;
+  final String name;
+  final String originalName;
+  final String? posterPath;
+  final String? backdropPath;
+  final String? firstAirDate;
+  final String? overview;
+
+  TmdbTv({
+    required this.id,
+    required this.name,
+    required this.originalName,
+    this.posterPath,
+    this.backdropPath,
+    this.firstAirDate,
+    this.overview,
+  });
+
+  factory TmdbTv.fromJson(Map<String, dynamic> json) {
+    return TmdbTv(
+      id: json['id'] as int,
+      name: json['name'] as String? ?? '',
+      originalName: json['original_name'] as String? ?? '',
+      posterPath: json['poster_path'] as String?,
+      backdropPath: json['backdrop_path'] as String?,
+      firstAirDate: json['first_air_date'] as String?,
+      overview: json['overview'] as String?,
+    );
+  }
+}
