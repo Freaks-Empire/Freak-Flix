@@ -18,7 +18,7 @@ import '../models/media_item.dart';
 import '../services/graph_auth_service.dart' as graph_auth;
 import '../services/persistence_service.dart';
 import '../services/metadata_service.dart';
-import '../services/api_service.dart';
+
 import 'settings_provider.dart';
 import '../utils/filename_parser.dart';
 import 'package:collection/collection.dart';
@@ -788,7 +788,7 @@ class LibraryProvider extends ChangeNotifier {
     error = null;
     isLoading = true;
     final folderLabel = folder.path.isEmpty ? '/' : folder.path;
-    _setScanStatus('Requesting Cloud Scan for $folderLabel...');
+    _setScanStatus('Scanning Cloud: $folderLabel...');
 
     try {
       final account = auth.accounts.firstWhere(
@@ -798,60 +798,180 @@ class LibraryProvider extends ChangeNotifier {
       );
       final token = await auth.getFreshAccessToken(account.id);
       
-      // Dispatch to Cloudflare Worker
-      await ApiService.instance.triggerScan(
-        folderId: folder.id, 
-        // Wait, LibraryFolder definition: id is local UUID usually, unless we stored provider ID there. 
-        // In previous logic: folder.id was used as folderId.
-        accessToken: token,
-        path: folder.path,
+      // Client-Side Scan
+      // 1. Determine Root Endpoint
+      // If folder.id looks like a Graph ID (not a timestamp/uuid we generated), use it.
+      // But typically we store our own IDs. We rely on path if id is not a Graph ID?
+      // Actually, let's just stick to Path-based lookup for simplicity unless we stored the DriveItem ID.
+      // Our LibraryFolder.id is usually a timestamp. So we use path.
+      
+      String requestUrl;
+      final baseUrl = '${auth.graphBaseUrl}/me/drive';
+      
+      // Normalize path
+      String path = folder.path.trim();
+      if (path.startsWith('/')) path = path.substring(1);
+      if (path.endsWith('/')) path = path.substring(0, path.length - 1);
+
+      if (path.isEmpty) {
+        requestUrl = '$baseUrl/root/children';
+      } else {
+        requestUrl = '$baseUrl/root:/$path:/children';
+      }
+
+      _setScanStatus('Listing files in $folderLabel...');
+      
+      final newItems = <MediaItem>[];
+      await _walkOneDriveFolder(
+        token: token, 
+        url: requestUrl, 
+        baseFolderPath: 'onedrive:${account.id}/${path.isEmpty ? '' : path}',
+        accountId: account.id,
+        foundItems: newItems,
       );
+
+      _setScanStatus('Processing ${newItems.length} cloud items...');
       
-      _setScanStatus('Cloud Scan Initiated. You can close the app.');
-      
-      // Polling for updates (Simplistic approach for now)
-      // Real approach: WebSocket or user Pull-to-refresh. 
-      // We'll do a quick poll after a delay just to show immediate progress if fast.
-      await Future.delayed(const Duration(seconds: 2));
-      await _pollBackendItems();
+      // Ingest
+      await _ingestItems(newItems, metadata);
 
     } catch (e) {
-      error = 'Cloud trigger failed: $e';
+      error = 'Cloud scan failed: $e';
+      debugPrint('OneDrive Scan Error: $e');
     } finally {
       isLoading = false;
       _setScanStatus('');
       await saveLibrary();
-	  _configChangedController.add(null);
+      _configChangedController.add(null);
     }
   }
 
-  Future<void> _pollBackendItems() async {
+  Future<void> _walkOneDriveFolder({
+    required String token,
+    required String url,
+    required String baseFolderPath,
+    required String accountId,
+    required List<MediaItem> foundItems,
+  }) async {
+    if (_cancelScanRequested) return;
+    
+    String? nextLink = url;
+    
+    while (nextLink != null && !_cancelScanRequested) {
       try {
-          final itemsJson = await ApiService.instance.getItems();
-          // Merge logic similar to importState
-          final backendItems = <MediaItem>[];
-          for (final raw in itemsJson) {
-              // Convert raw (from SQL) to MediaItem
-              // We need a proper factory or manual mapping
-               backendItems.add(MediaItem(
-                  id: raw['id'],
-                  filePath: raw['filename'], // Or constructing a path?
-                  fileName: raw['filename'],
-                  folderPath: 'onedrive:${raw['folder_id']}', // Simplification
-                  sizeBytes: raw['size_bytes'] ?? 0,
-                  lastModified: DateTime.now(), // stored in DB?
-                  title: raw['title'],
-                  type: raw['mime_type']?.contains('video') == true ? MediaType.movie : MediaType.movie, // Needs type inference
-                  // ... rest
-              ));
-          }
-          // Note: The above mapping is very rough. 
-          // Ideally MediaItem.fromJson should handle it if the backend returns compatible JSON.
-          // For this step, I will just create the method stub and assume the backend returns MediaItem-compatible JSON eventually.
+        // Use direct HTTP to avoid GraphAuthService proxy confusion if on Native (URL is absolute)
+        // If on Web, we might need proxy? 
+        // GraphAuthService.graphBaseUrl handles proxy prefix.
+        // But here we constructed full URL.
+        // If kIsWeb, we need to strip 'https://graph.microsoft.com/v1.0' and prepend proxy?
+        // Actually, let's rely on http.get handling it if CORS is allowed directly (usually not).
+        // WE NEED GraphAuthService HELPER TO CALL WITH CORRECT PROXY IF WEB.
+        
+        // Helper:
+        final uri = Uri.parse(nextLink);
+        // On Web, we must route these calls through our proxy if NOT using implicit flow/direct.
+        // But our GraphAuthService is configured to use /api/graph/v1.0 proxy on web.
+        // So we should construct relative URLs or use a helper.
+        // Let's use a quick helper to "proxify" if needed.
+        
+        Uri finalUri = uri;
+        if (kIsWeb && uri.host == 'graph.microsoft.com') {
+             // Replace host/scheme with relative proxy path
+             // Path usually starts with /v1.0/...
+             final path = uri.path; // /v1.0/me/drive...
+             // Proxy logic: /api/graph/v1.0/me... 
+             // graphBaseUrl returns '/api/graph/v1.0'
+             // So we just need to append the path part AFTER v1.0?
+             // Or just replace the base.
+             // Simple: 
+             final newPath = path.replaceFirst('/v1.0', graph_auth.GraphAuthService.instance.graphBaseUrl);
+             // Preserve query
+             finalUri = Uri(path: newPath, query: uri.query);
+        }
+
+        final response = await http.get(finalUri, headers: {'Authorization': 'Bearer $token'});
+        if (response.statusCode != 200) {
+           debugPrint('Graph Walk Error: ${response.statusCode} - ${response.body}');
+           return;
+        }
+
+        final map = jsonDecode(response.body);
+        final List<dynamic> value = map['value'] ?? [];
+        
+        for (final item in value) {
+            if (_cancelScanRequested) break;
+            
+            final name = item['name'] as String;
+            final isFolder = item['folder'] != null;
+            final isFile = item['file'] != null;
+            final id = item['id'] as String;
+            
+            if (isFolder) {
+               // Recurse
+               // "children" usage? Or construct new URL?
+               // If folder, we can just append :/children to its item path or use item ID.
+               // Using item ID is safer for special chars.
+               // URL: /me/drive/items/{item-id}/children
+               String childUrl = 'https://graph.microsoft.com/v1.0/me/drive/items/$id/children';
+               
+               await _walkOneDriveFolder(
+                 token: token,
+                 url: childUrl,
+                 baseFolderPath: '$baseFolderPath/$name',
+                 accountId: accountId,
+                 foundItems: foundItems,
+               );
+            } else if (isFile) {
+               // Check extension
+               if (_isVideo(name)) {
+                  foundItems.add(_createMediaItemFromGraph(item, accountId, baseFolderPath));
+                  _setScanStatus('Found: $name');
+                  scannedCount++;
+                  notifyListeners();
+               }
+            }
+        }
+        
+        nextLink = map['@odata.nextLink'];
+        
       } catch (e) {
-          debugPrint('Poll failed: $e');
+        debugPrint('Graph Walk Exception: $e');
+        nextLink = null;
       }
+    }
   }
+
+  MediaItem _createMediaItemFromGraph(Map<String, dynamic> json, String accountId, String folderPath) {
+    final id = json['id'] as String;
+    final name = json['name'] as String;
+    final size = json['size'] as int? ?? 0;
+    final lastModStr = json['lastModifiedDateTime'] as String?;
+    final lastMod = lastModStr != null ? DateTime.parse(lastModStr) : DateTime.now();
+    
+    // Construct a unique ID consistent with current app logic
+    // Usually: onedrive_{accountId}_{fileId}
+    final itemId = 'onedrive_${accountId}_$id';
+    
+    return MediaItem(
+      id: itemId,
+      filePath: name, // Display purpose mostly
+      fileName: name,
+      folderPath: folderPath, // e.g. onedrive:ACCOUNT/Movies/Action
+      sizeBytes: size,
+      lastModified: lastMod,
+      // Store actual download Url? It expires. 
+      // We rely on getting it fresh via GraphAuthService.getDownloadUrl using the ID part.
+      // We need to store original ID somewhere? 
+      // MediaItem ID has it.
+    );
+  }
+
+  bool _isVideo(String path) {
+    final ext = p.extension(path).toLowerCase();
+    return const ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v'].contains(ext);
+  }
+
+
 
   Future<void> clear() async {
     _allItems = [];
@@ -904,71 +1024,9 @@ class LibraryProvider extends ChangeNotifier {
     return sorted.take(20).toList();
   }
 
-  Future<void> scanLibraryFolder({
-    required graph_auth.GraphAuthService auth,
-    required LibraryFolder folder,
-    MetadataService? metadata,
-  }) async {
-    error = null;
-    isLoading = true;
-    _setScanStatus('Scanning ${folder.path.isEmpty ? '/' : folder.path}...');
-    notifyListeners();
 
-    try {
-      final account = auth.accounts.firstWhere(
-        (a) => a.id == folder.accountId,
-        orElse: () =>
-        throw Exception('No account found for id ${folder.accountId}'),
-      );
-      final token = await auth.getFreshAccessToken(account.id);
-      final normalizedPath = folder.path.isEmpty ? '/' : folder.path;
-      final collected = <MediaItem>[];
-      final prefix = 'onedrive:${folder.accountId}';
-      await _walkOneDriveFolder(
-        token: token,
-        folderId: folder.id,
-        currentPath: normalizedPath,
-        out: collected,
-        accountPrefix: prefix,
-        libraryFolder: folder,
-        onProgress: (path, count) {
-          _setScanStatus('OneDrive · $path ($count files)');
-        },
-      );
 
-      _setScanStatus('Found ${collected.length} videos. Ingesting...');
-      await _ingestItems(collected, metadata);
-    } catch (e) {
-      error = e.toString();
-    } finally {
-      isLoading = false;
-      _setScanStatus('');
-      await saveLibrary();
-	  _configChangedController.add(null);
-    }
-  }
 
-  Future<void> scanOneDriveFolder({
-    required graph_auth.GraphAuthService auth,
-    required String folderId,
-    required String folderPath,
-    MetadataService? metadata,
-  }) async {
-    final accountId = auth.activeAccountId;
-    if (accountId == null) {
-      error = 'No active OneDrive account';
-      notifyListeners();
-      return;
-    }
-
-    final folder = LibraryFolder(
-      id: folderId,
-      path: folderPath,
-      accountId: accountId,
-      type: LibraryType.other,
-    );
-    await scanLibraryFolder(auth: auth, folder: folder, metadata: metadata);
-  }
 
   MediaItem? findByTmdbId(int tmdbId) {
     return items.firstWhereOrNull((i) => i.tmdbId == tmdbId);
@@ -1435,9 +1493,7 @@ MediaType _inferTypeFromPath(MediaItem item) {
   return MediaType.movie;
 }
 
-bool _inferAnimeFromPath(MediaItem item) {
-  return item.isAnime || item.filePath.toLowerCase().contains('anime');
-}
+
 
 String _seriesKey(MediaItem item) {
   if (item.showKey != null && item.showKey!.isNotEmpty) return item.showKey!;
