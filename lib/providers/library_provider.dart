@@ -677,12 +677,14 @@ class LibraryProvider extends ChangeNotifier {
 
     final map = {for (var i in _allItems) i.filePath: i};
     for (final item in newItems) {
-      // If item exists, preserve its ID and user data (handled by Profile user data apply later, 
-      // but we should preserve ID at least if generated from path is stable).
-      // MediaItem IDs are usually hash of filePath, so they should be stable.
-      // But let's trust the new item's data structure, merging if necessary?
-      // Current logic just overwrites. We stick to that.
-      map[item.filePath] = item;
+      // If item exists, PRESERVE it to keep rich metadata.
+      // Only add if it's new.
+      if (!map.containsKey(item.filePath)) {
+         map[item.filePath] = item;
+      } else {
+         // Optional: Update lastModified or size if changed? 
+         // For now, prioritize preserving metadata.
+      }
     }
     _allItems = map.values.toList()
       ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
@@ -821,13 +823,21 @@ class LibraryProvider extends ChangeNotifier {
 
       _setScanStatus('Scanning cloud files in $folderLabel...');
       
+      final foundItems = <MediaItem>[];
       await _walkOneDriveFolder(
         token: token, 
         url: requestUrl, 
         baseFolderPath: 'onedrive:${account.id}/${path.isEmpty ? '' : path}',
         accountId: account.id,
-        metadata: metadata,
+        collectedItems: foundItems,
       );
+      
+      // Phase 2: Metadata Fetching (Sequential)
+      if (metadata != null) {
+         _setScanStatus('Scanning complete. Fetching metadata for ${foundItems.length} items...');
+         await _refetchMetadataForItems(foundItems, metadata, 'Cloud Scan');
+      }
+
 
 
     } catch (e) {
@@ -846,7 +856,7 @@ class LibraryProvider extends ChangeNotifier {
     required String url,
     required String baseFolderPath,
     required String accountId,
-    MetadataService? metadata,
+    required List<MediaItem> collectedItems,
   }) async {
     if (_cancelScanRequested) return;
     
@@ -914,7 +924,7 @@ class LibraryProvider extends ChangeNotifier {
                  url: childUrl,
                  baseFolderPath: '$baseFolderPath/$name',
                  accountId: accountId,
-                 metadata: metadata,
+                 collectedItems: collectedItems,
                );
             } else if (isFile) {
                // Check extension
@@ -942,7 +952,9 @@ class LibraryProvider extends ChangeNotifier {
                       type: initialType
                   );
 
-                  await _ingestItems([adjustedItem], metadata);
+                  await _ingestItems([adjustedItem], null); // No metadata fetch here!
+                  collectedItems.add(adjustedItem);
+                  
                   scannedCount++;
                   // Throttle saving to avoid UI jank
                   if (scannedCount % 50 == 0) await saveLibrary();
