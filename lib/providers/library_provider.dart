@@ -700,6 +700,8 @@ class LibraryProvider extends ChangeNotifier {
     }
     _allItems = map.values.toList()
       ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+    
+    _rebuildFilteredItems(); // Update filtered view immediately
     notifyListeners();
 
     if (settings.autoFetchAfterScan && metadata != null && itemsToEnrich.isNotEmpty) {
