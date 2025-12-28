@@ -1,6 +1,7 @@
 /// lib/services/tmdb_discover_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import '../models/discover_filter.dart';
 import '../models/tmdb_item.dart';
 import '../providers/settings_provider.dart';

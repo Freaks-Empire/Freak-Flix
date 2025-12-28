@@ -12,6 +12,7 @@ import '../../providers/library_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../widgets/discover_card.dart';
 import '../../widgets/safe_network_image.dart';
+import '../details_screen.dart';
 
 class ActorDetailsScreen extends StatefulWidget {
   final CastMember actor;
