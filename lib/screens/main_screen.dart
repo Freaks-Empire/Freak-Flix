@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/settings_provider.dart';
 import '../providers/library_provider.dart';
-import '../models/discover_filter.dart';
+import '../services/tmdb_discover_service.dart';
 
 import '../widgets/navigation_dock.dart';
 import 'discover_screen.dart';

@@ -99,7 +99,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
                  final mItem = MediaItem(
                      id: id,
                      title: movie.title,
-                     year: DateTime.tryParse(movie.releaseDate)?.year,
+                     year: DateTime.tryParse(movie.releaseDate ?? '')?.year,
                      type: MediaType.movie,
                      posterUrl: movie.posterPath != null ? 'https://image.tmdb.org/t/p/w500${movie.posterPath}' : null,
                      backdropUrl: movie.backdropPath != null ? 'https://image.tmdb.org/t/p/original${movie.backdropPath}' : null,
@@ -125,7 +125,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
                  final tItem = MediaItem(
                      id: id,
                      title: tv.originalName, 
-                     year: DateTime.tryParse(tv.firstAirDate)?.year,
+                     year: DateTime.tryParse(tv.firstAirDate ?? '')?.year,
                      type: MediaType.tv,
                      posterUrl: tv.posterPath != null ? 'https://image.tmdb.org/t/p/w500${tv.posterPath}' : null,
                      backdropUrl: tv.backdropPath != null ? 'https://image.tmdb.org/t/p/original${tv.backdropPath}' : null,
