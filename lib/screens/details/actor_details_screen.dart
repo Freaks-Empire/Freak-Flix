@@ -27,7 +27,65 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
   bool _isLoading = true;
   TmdbPerson? _tmdbPerson;
   List<TmdbItem> _tmdbCredits = [];
-  List<MediaItem> _stashScenes = [];
+  List<MediaItem> _localScenes = [];
+  List<MediaItem> _remoteScenes = [];
+
+  Widget _buildSceneCard(BuildContext context, MediaItem item, bool isLocal) {
+     return GestureDetector(
+       onTap: () {
+         Navigator.of(context).push(
+           MaterialPageRoute(
+             builder: (ctx) => DetailsScreen(item: item),
+           ),
+         );
+       },
+       child: Column(
+         crossAxisAlignment: CrossAxisAlignment.start,
+         children: [
+           Expanded(
+             child: ClipRRect(
+               borderRadius: BorderRadius.circular(12),
+               child: Stack(
+                 children: [
+                    if (item.posterUrl != null)
+                      Image.network(
+                        item.posterUrl!,
+                        fit: BoxFit.cover, 
+                        width: double.infinity,
+                        height: double.infinity,
+                        errorBuilder: (_,__,___) => Container(color: Colors.grey[900]),
+                      )
+                    else 
+                      Container(color: Colors.grey[900]),
+                      
+                    if (isLocal)
+                      Positioned(
+                        top: 6,
+                        left: 6,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.green,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.check, size: 12, color: Colors.white),
+                        ),
+                      ),
+                 ],
+               ),
+             ),
+           ),
+           const SizedBox(height: 6),
+           Text(
+             item.title ?? item.fileName,
+             maxLines: 2,
+             overflow: TextOverflow.ellipsis,
+             style: const TextStyle(color: Colors.white, fontSize: 12),
+           ),
+         ],
+       ),
+     );
+  }
 
   @override
   void initState() {
@@ -62,22 +120,27 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
       if (mounted) {
         final library = context.read<LibraryProvider>();
         
-        scenes.sort((a, b) {
-           // Prioritize locally available scenes
-           final aId = a.id.replaceFirst('stashdb:', '');
-           final bId = b.id.replaceFirst('stashdb:', '');
-           final aLocal = library.items.any((l) => l.stashId == aId);
-           final bLocal = library.items.any((l) => l.stashId == bId);
-           
-           if (aLocal && !bLocal) return -1;
-           if (!aLocal && bLocal) return 1;
-           
-           // Otherwise sort by date/year descending
-           return (b.year ?? 0).compareTo(a.year ?? 0);
-        });
+        final local = <MediaItem>[];
+        final remote = <MediaItem>[];
+
+        for (final s in scenes) {
+           final rawId = s.id.replaceFirst('stashdb:', '');
+           try {
+             // Find the actual local MediaItem if it exists to get the file path/real details
+             final match = library.items.firstWhere((l) => l.stashId == rawId);
+             local.add(match);
+           } catch (_) {
+             remote.add(s);
+           }
+        }
+        
+        // Sort by date/year descending
+        local.sort((a,b) => (b.year ?? 0).compareTo(a.year ?? 0));
+        remote.sort((a,b) => (b.year ?? 0).compareTo(a.year ?? 0));
 
         setState(() {
-          _stashScenes = List.from(scenes);
+          _localScenes = local;
+          _remoteScenes = remote;
           _isLoading = false;
         });
       }
@@ -229,7 +292,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
                     child: Text(
-                      widget.actor.source == CastSource.stashDb ? 'Scenes' : 'Known For',
+                      widget.actor.source == CastSource.stashDb ? '' : 'Known For',
                       style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -246,87 +309,56 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                       ),
                     )
                   else
-                    // StashDB Scenes Grid
-                    GridView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 150,
-                        childAspectRatio: 2 / 3,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
+                    // SECTION 1: Local Scenes
+                    if (widget.actor.source == CastSource.stashDb && _localScenes.isNotEmpty) ...[
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(24, 0, 24, 16),
+                        child: Text(
+                          'In Library',
+                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
                       ),
-                      itemCount: _stashScenes.length,
-                      itemBuilder: (ctx, i) {
-                           final item = _stashScenes[i];
-                           // library is defined in build scope now
-                           
-                           // Check if we have this locally (by stashId)
-                           final rawId = item.id.replaceFirst('stashdb:', '');
-                           MediaItem? local;
-                           try {
-                             local = library.items.firstWhere((l) => l.stashId == rawId);
-                           } catch (_) {}
+                      GridView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 150,
+                          childAspectRatio: 2 / 3,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                        itemCount: _localScenes.length,
+                        itemBuilder: (ctx, i) => _buildSceneCard(ctx, _localScenes[i], true),
+                      ),
+                      const SizedBox(height: 32),
+                    ],
 
-                           return GestureDetector(
-                             onTap: () {
-                               Navigator.of(context).push(
-                                 MaterialPageRoute(
-                                   builder: (ctx) => DetailsScreen(item: local ?? item),
-                                 ),
-                               );
-                             },
-                             child: Column(
-                               crossAxisAlignment: CrossAxisAlignment.start,
-                               children: [
-                                 Expanded(
-                                   child: ClipRRect(
-                                     borderRadius: BorderRadius.circular(12),
-                                     child: Stack(
-                                       children: [
-                                          if (item.posterUrl != null)
-                                            Image.network(
-                                              item.posterUrl!,
-                                              fit: BoxFit.cover, 
-                                              width: double.infinity,
-                                              height: double.infinity,
-                                              errorBuilder: (_,__,___) => Container(color: Colors.grey[900]),
-                                            )
-                                          else 
-                                            Container(color: Colors.grey[900]),
-                                            
-                                          if (local != null)
-                                            Positioned(
-                                              top: 6,
-                                              left: 6,
-                                              child: Container(
-                                                padding: const EdgeInsets.all(4),
-                                                decoration: const BoxDecoration(
-                                                  color: Colors.green,
-                                                  shape: BoxShape.circle,
-                                                ),
-                                                child: const Icon(Icons.check, size: 12, color: Colors.white),
-                                              ),
-                                            ),
-                                       ],
-                                     ),
-                                   ),
-                                 ),
-                                 const SizedBox(height: 6),
-                                 Text(
-                                   item.title ?? item.fileName,
-                                   maxLines: 2,
-                                   overflow: TextOverflow.ellipsis,
-                                   style: const TextStyle(color: Colors.white, fontSize: 12),
-                                 ),
-                               ],
-                             ),
-                           );
-                      },
-                    ),
+                    // SECTION 2: Remote Scenes
+                    if (widget.actor.source == CastSource.stashDb && _remoteScenes.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                        child: Text(
+                          _localScenes.isEmpty ? 'Scenes' : 'More Scenes',
+                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      GridView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 150,
+                          childAspectRatio: 2 / 3,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                        itemCount: _remoteScenes.length,
+                        itemBuilder: (ctx, i) => _buildSceneCard(ctx, _remoteScenes[i], false),
+                      ),
+                    ],
                     
-                  if (_tmdbCredits.isEmpty && _stashScenes.isEmpty)
+                  if (_tmdbCredits.isEmpty && _localScenes.isEmpty && _remoteScenes.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 24),
                       child: Text("No known works found.", style: TextStyle(color: Colors.white30)),
