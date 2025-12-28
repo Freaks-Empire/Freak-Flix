@@ -73,7 +73,7 @@ class FilenameParser {
             RegExp(r'\b(480|720|1080|2160)[pi]\b', caseSensitive: false), ' ')
         // source / quality
         .replaceAll(
-            RegExp(r'\b(bluray|bd|webrip|web-dl|hdrip|remux|dvdrip)\b',
+            RegExp(r'\b(bluray|bd|webrip|web-dl|hdrip|remux|dvdrip|dvd|vhs|hdtv)\b',
                 caseSensitive: false),
             ' ')
         // codecs / audio
