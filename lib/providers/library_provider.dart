@@ -1520,7 +1520,29 @@ MediaItem _parseFile(PlatformFileSystemEntity f) {
   final lowerPath = filePath.toLowerCase();
   final animeHint = lowerPath.contains('anime');
 
-  final parsed = FilenameParser.parse(fileName);
+  var parsed = FilenameParser.parse(fileName);
+
+  // FAIL-SAFE: If filename didn't yield a Studio or Date, try parsing the PARENT FOLDER name.
+  // Scenario: Folder "Dani Daniels loves Derrick Pierce - 2013-06-13" / File "Dani.Daniels.Legs.3....mp4"
+  if (parsed.studio == null && parsed.date == null) {
+      final parentFolderName = p.basename(folder);
+      final folderParsed = FilenameParser.parse(parentFolderName);
+      
+      // If folder gave us something useful (Date or Studio), we merge/override.
+      if (folderParsed.date != null || folderParsed.studio != null) {
+          parsed = ParsedMediaName(
+              seriesTitle: folderParsed.seriesTitle.isNotEmpty ? folderParsed.seriesTitle : parsed.seriesTitle,
+              movieTitle: folderParsed.movieTitle,
+              year: folderParsed.year ?? parsed.year,
+              season: parsed.season,
+              episode: parsed.episode,
+              studio: folderParsed.studio ?? parsed.studio,
+              date: folderParsed.date ?? parsed.date,
+              performers: folderParsed.performers.isNotEmpty ? folderParsed.performers : parsed.performers,
+          );
+      }
+  }
+
   final type = (parsed.season != null || parsed.episode != null || animeHint)
       ? MediaType.tv
       : MediaType.movie;

@@ -94,6 +94,21 @@ class FilenameParser {
           performers: performers,
        );
     }
+    
+    // --- 0.6) Check for Title - Date Pattern: Title - YYYY-MM-DD ---
+    // Example: Dani Daniels loves Derrick Pierce - 2013-06-13
+    final titleDateMatch = RegExp(r'^(.*)\s+-\s+(\d{4}-\d{2}-\d{2})$').firstMatch(nameNoExt);
+    if (titleDateMatch != null) {
+       final rawTitle = titleDateMatch.group(1)?.trim() ?? '';
+       final dateStr = titleDateMatch.group(2);
+       
+       return ParsedMediaName(
+          seriesTitle: rawTitle,
+          movieTitle: rawTitle,
+          date: DateTime.tryParse(dateStr ?? ''),
+          year: DateTime.tryParse(dateStr ?? '')?.year,
+       );
+    }
 
 
     // remove fansub tags [..] and (..)
