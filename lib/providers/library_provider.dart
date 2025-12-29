@@ -745,7 +745,8 @@ class LibraryProvider extends ChangeNotifier {
         
         for (int j = 0; j < batch.length; j++) {
           final enriched = enrichedBatch[j];
-           if (idx != -1) _allItems[idx] = enriched;
+          final index = _allItems.indexWhere((e) => e.id == enriched.id);
+          if (index != -1) _allItems[index] = enriched;
           
            // --- Persistent Metadata (Sidecar) & Renaming Logic ---
            _queuePersistentMetadata(enriched);
@@ -759,6 +760,7 @@ class LibraryProvider extends ChangeNotifier {
         }
       }
     }
+  }
 
 
   /// Manually runs the Sidecar Write & Auto-Rename logic on ALL current items.
@@ -1152,13 +1154,12 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   MediaItem _parseFile(PlatformFile f) {
-    final filePath = f.path ?? '';
-    final fileName = f.name;
+    final filePath = f.path;
+    final fileName = p.basename(filePath);
     final folder = filePath.isNotEmpty ? p.dirname(filePath) : '';
     final id = filePath.isNotEmpty ? filePath.hashCode.toString() : fileName.hashCode.toString();
     
-    // Attempt to get size/mod time
-    final size = f.size;
+    final size = f.statSync().size;
     
     final parsed = FilenameParser.parse(fileName);
     final animeHint = folder.toLowerCase().contains('anime');
@@ -1173,12 +1174,7 @@ class LibraryProvider extends ChangeNotifier {
       cast = parsed.performers.map<CastMember>((p) => CastMember(name: p, id: '', character: 'Performer', source: CastSource.stashDb)).toList();
     }
     
-    // Infer type
-    final type = parsed.studio != null ? MediaType.scene : MediaType.movie; // Default to movie, type inference normally handles TV logic separately? 
-    // Wait, type inference is usually done by `_inferTypeFromPath`?
-    // But `MediaType` is required.
-    // I'll set a basic type here and rely on _reclassifyItems or logic later?
-    // Actually, `_parseFile` should probably try to detect TV/Movie.
+    final type = parsed.studio != null ? MediaType.scene : MediaType.movie; 
     
     return MediaItem(
       id: id,
@@ -1186,14 +1182,14 @@ class LibraryProvider extends ChangeNotifier {
       fileName: fileName,
       folderPath: folder,
       sizeBytes: size,
-      lastModified: DateTime.now(), // PlatformFile doesn't always have mod time
+      lastModified: f.statSync().modified,
       title: parsed.seriesTitle,
       year: parsed.year,
       type: type,
       season: parsed.season,
       episode: parsed.episode,
       isAnime: animeHint,
-      showKey: folder.toLowerCase(), // Group by folder
+      showKey: folder.toLowerCase(),
       overview: overview,
       cast: cast,
       isAdult: parsed.studio != null,
@@ -1622,3 +1618,73 @@ List<TvShowGroup> _groupShowsToGroups(Iterable<MediaItem> source) {
     );
   }).toList();
 }
+
+// --- Top-Level Helpers and Isolate Logic ---
+
+class _ScanRequest {
+  final SendPort sendPort;
+  final String path;
+  final List<String>? keywords;
+
+  _ScanRequest(this.sendPort, this.path, {this.keywords});
+}
+
+void _scanDirectoryInIsolate(_ScanRequest request) {
+  final root = request.path;
+  final keywords = request.keywords;
+  final sendPort = request.sendPort;
+
+  try {
+    final dir = PlatformDirectory(root); 
+    if (!dir.existsSync()) {
+      sendPort.send(<MediaItem>[]);
+      return;
+    }
+
+    final entities = dir.listSync(recursive: true);
+    final items = <MediaItem>[];
+    
+    bool isVideo(String path) {
+       final ext = p.extension(path).toLowerCase();
+       return const ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v'].contains(ext);
+    }
+    
+    for (final e in entities) {
+        final pathStr = e.path;
+        if (isVideo(pathStr)) {
+            if (keywords != null && keywords.isNotEmpty) {
+                 final name = p.basename(pathStr).toLowerCase();
+                 if (!keywords.any((k) => name.contains(k))) continue;
+            }
+         
+             final filePath = pathStr;
+             final fileName = p.basename(filePath);
+             final stat = e.statSync();
+             
+             final parsed = FilenameParser.parse(fileName);
+             
+             items.add(MediaItem(
+                id: filePath.hashCode.toString(),
+                filePath: filePath,
+                fileName: fileName,
+                folderPath: p.dirname(filePath),
+                sizeBytes: stat.size,
+                lastModified: stat.modified,
+                title: parsed.seriesTitle,
+                year: parsed.year,
+                type: parsed.studio != null ? MediaType.scene : MediaType.movie, 
+                season: parsed.season,
+                episode: parsed.episode,
+                isAnime: filePath.toLowerCase().contains('anime'),
+                showKey: p.dirname(filePath).toLowerCase(),
+                isAdult: parsed.studio != null,
+             ));
+        }
+    }
+    sendPort.send(items);
+  } catch (e) {
+    debugPrint('Isolate Scan Error: $e');
+    sendPort.send(<MediaItem>[]); 
+  }
+}
+
