@@ -800,7 +800,10 @@ class LibraryProvider extends ChangeNotifier {
     final prefix = 'onedrive:$accountId';
     if (enriched.folderPath.startsWith(prefix)) {
         var relPath = enriched.folderPath.substring(prefix.length);
-        if (relPath.startsWith('/')) relPath = relPath.substring(1);
+        // Robustly remove all leading slashes
+        while (relPath.startsWith('/')) {
+           relPath = relPath.substring(1);
+        }
         final parentRef = relPath.isEmpty ? 'root' : 'root:/$relPath';
         
         final nfoName = '${p.basenameWithoutExtension(enriched.fileName)}.nfo';
@@ -959,10 +962,11 @@ class LibraryProvider extends ChangeNotifier {
       await _walkOneDriveFolder(
         token: token, 
         url: requestUrl, 
-        baseFolderPath: 'onedrive:${account.id}/${path.isEmpty ? '' : path}',
-        accountId: account.id,
-        collectedItems: foundItems,
-      );
+      // Use proper path joining prevents double slashes
+      baseFolderPath: 'onedrive:${account.id}${path.isEmpty ? '' : '/$path'}',
+      accountId: account.id,
+      collectedItems: foundItems,
+    );
       
       
       // Ingest & Enrich (Parallel)

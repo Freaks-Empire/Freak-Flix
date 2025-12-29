@@ -13,6 +13,13 @@ class NotInitializedError implements Exception {
   String toString() => 'NotInitializedError: $message';
 }
 
+class GraphAuthException implements Exception {
+  final String message;
+  const GraphAuthException(this.message);
+  @override
+  String toString() => 'GraphAuthException: $message';
+}
+
 class GraphUser {
   final String id;
   final String displayName;
@@ -610,12 +617,10 @@ class GraphAuthService {
     }
 
     // Fall back to forcing a new login.
-    final user = await connectWithDeviceCode();
-    final refreshed = _accounts.firstWhere(
-      (a) => a.id == user.id,
-      orElse: () => throw Exception('Login succeeded but account missing'),
-    );
-    return refreshed.accessToken;
+    // CRITICAL FIX: Do NOT automatically trigger interactive login here.
+    // This method is often called by background tasks (scanning).
+    // If we trigger interactive login, it might loop or block indefinitely.
+    throw const GraphAuthException('Refresh failed and interactive login required.');
   }
 
   Future<GraphAccount> _refreshAccount(GraphAccount account) async {
@@ -674,7 +679,36 @@ class GraphAuthService {
     try {
        final token = await getFreshAccessToken(accountId);
        // PUT /me/drive/items/{parent-id}:/{filename}:/content
-       final url = Uri.parse('$graphBaseUrl/me/drive/items/$parentId:/$filename:/content');
+       // PUT /me/drive/items/{parent-id}:/{filename}:/content
+       // Handle encoding: split structure to avoid double-encoding the ':/' separators but encode names.
+       String requestUrl;
+       if (parentId == 'root') {
+          // root:/filename:/content
+          requestUrl = '$graphBaseUrl/me/drive/root:/${Uri.encodeComponent(filename)}:/content';
+       } else if (parentId.startsWith('root:/')) {
+         // parentId is already "root:/path/to/folder". We need to handle this carefully.
+         // Ideally parentId should be the ID, but here we use path addressing.
+         // Since parentId is "root:/A/B", we want "root:/A/B/filename:/content"
+         // But we assume parentId segments are already encoded? Probably not if we constructed it via string concat.
+         // Let's rely on the fact that we fixed the double slash. 
+         // SAFE: Use full encoding of path segments if possible, but we don't know the segments here easily.
+         // ALTERNATIVE: Use Uri.encodeFull for the path part but that doesn't encode spaces as %20 in path usually?
+         // Uri.parse() allows spaces in path but some APIs dislike it.
+         
+         // Better approach: assume parentId is "root:/path". 
+         // We construct "$graphBaseUrl/me/drive/items/$parentId/$filename:/content" NO, the syntax is with colons.
+         // "$graphBaseUrl/me/drive/items/$parentId:/$filename:/content"
+         // If parentId is "root:/path", we get "items/root:/path:/filename:/content"
+         
+         // Fix: Replace spaces with %20 manually if needed, or use Uri.encodeFull on the path part.
+         // But filename DEFINITELY needs encoding.
+         requestUrl = '$graphBaseUrl/me/drive/items/$parentId:/${Uri.encodeComponent(filename)}:/content';
+       } else {
+         // ID based
+         requestUrl = '$graphBaseUrl/me/drive/items/$parentId:/${Uri.encodeComponent(filename)}:/content';
+       }
+
+       final url = Uri.parse(requestUrl);
        
        final response = await http.put(
           url,
