@@ -127,6 +127,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> with AutomaticKeepAlive
                       title: 'Recommended For You',
                       icon: Icons.thumb_up_alt_outlined,
                       items: context.watch<LibraryProvider>().getRecommendedLocal(widget.type),
+                      hideEpisodeInfo: true,
                     ),
 
                   // History
@@ -187,11 +188,13 @@ class _MediaItemSection extends StatelessWidget {
   final String title;
   final IconData icon;
   final List<MediaItem> items;
+  final bool hideEpisodeInfo;
   
   const _MediaItemSection({
     required this.title,
     required this.icon,
     required this.items,
+    this.hideEpisodeInfo = false,
   });
 
   @override
@@ -214,13 +217,16 @@ class _MediaItemSection extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           SizedBox(
-            height: 250,
+            height: 320, // Increased from 250 to 320 for bigger cards
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: items.length,
               separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (context, index) {
-                return HomeMediaCard(item: items[index]);
+                return HomeMediaCard(
+                  item: items[index], 
+                  hideEpisodeInfo: hideEpisodeInfo,
+                );
               },
             ),
           ),

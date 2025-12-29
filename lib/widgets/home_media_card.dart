@@ -7,7 +7,13 @@ import 'safe_network_image.dart';
 
 class HomeMediaCard extends StatelessWidget {
   final MediaItem item;
-  const HomeMediaCard({super.key, required this.item});
+  final bool hideEpisodeInfo;
+
+  const HomeMediaCard({
+    super.key,
+    required this.item,
+    this.hideEpisodeInfo = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +29,7 @@ class HomeMediaCard extends StatelessWidget {
     final remainingLabel = totalSeconds > 0
         ? '${_formatDurationShort(Duration(seconds: totalSeconds - watchedSeconds).abs())} left'
         : '';
-    final subtitle = _buildSubtitle(item);
+    final subtitle = _buildSubtitle(item, hideEpisodeInfo);
 
     return GestureDetector(
       onTap: () {
@@ -38,7 +44,7 @@ class HomeMediaCard extends StatelessWidget {
          }
       },
       child: SizedBox(
-        width: 150,
+        width: 200, // Increased from 150
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -142,7 +148,11 @@ class HomeMediaCard extends StatelessWidget {
     return '${days}d';
   }
 
-  static String _buildSubtitle(MediaItem item) {
+  static String _buildSubtitle(MediaItem item, bool hideEpisodeInfo) {
+    if (hideEpisodeInfo) {
+       return item.year != null ? '${item.year}' : '';
+    }
+
     final season = item.season;
     final episode = item.episode;
     if (season != null && episode != null) {

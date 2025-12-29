@@ -28,6 +28,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   late MediaItem _currentItem;
   late int _currentIndex;
   BoxFit _fit = BoxFit.contain;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -38,6 +39,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
     player = Player();
     controller = VideoController(player);
+    
+    // Subscribe to errors
+    player.stream.error.listen((event) {
+       debugPrint('VideoPlayerScreen MPV ERROR: $event');
+       setState(() {
+          _errorMessage = 'Player Error: $event';
+       });
+    });
+
+    // Subscribe to logs (warn/error)
+    player.stream.log.listen((event) {
+       if (event.level == 'error' || event.level == 'warn') {
+          debugPrint('VideoPlayerScreen MPV LOG [${event.level}]: ${event.message}');
+       }
+    });
     
     _playCurrent();
   }
@@ -152,6 +168,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               fit: _fit,
             ),
           ),
+          if (_errorMessage != null)
+             Container(
+                color: Colors.black87,
+                child: Center(
+                   child: Padding(
+                     padding: const EdgeInsets.all(24.0),
+                     child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                           const Icon(Icons.error, color: Colors.red, size: 48),
+                           const SizedBox(height: 16),
+                           Text(
+                              'Playback Error',
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+                           ),
+                           const SizedBox(height: 8),
+                           Text(
+                              _errorMessage!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.white70),
+                           ),
+                           const SizedBox(height: 24),
+                           ElevatedButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Go Back'),
+                           )
+                        ],
+                     ),
+                   ),
+                ),
+             ),
           VideoControls(
             player: player,
             controller: controller,
