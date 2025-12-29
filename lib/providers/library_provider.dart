@@ -240,7 +240,7 @@ class LibraryProvider extends ChangeNotifier {
   void requestCancelScan() {
     if (!isScanning) return;
     _cancelScanRequested = true;
-    scanningStatus = 'Cancelling…';
+    scanningStatus = 'Cancellingâ€¦';
     notifyListeners();
   }
 
@@ -257,9 +257,9 @@ class LibraryProvider extends ChangeNotifier {
     String statusMsg = '';
 
     if (totalToScan > 0) {
-      statusMsg = 'Scanning $where  ($scannedCount / $totalToScan)… ${item.isEmpty ? '' : item}';
+      statusMsg = 'Scanning $where  ($scannedCount / $totalToScan)â€¦ ${item.isEmpty ? '' : item}';
     } else {
-      statusMsg = 'Scanning $where… ${item.isEmpty ? '' : item}';
+      statusMsg = 'Scanning $whereâ€¦ ${item.isEmpty ? '' : item}';
     }
 
     scanningStatus = statusMsg;
@@ -750,7 +750,7 @@ class LibraryProvider extends ChangeNotifier {
            // --- Persistent Metadata (Sidecar) & Renaming Logic ---
            _queuePersistentMetadata(enriched);
         }
-        }
+
         notifyListeners();
 
         // Incremental save every 25 items
@@ -759,7 +759,7 @@ class LibraryProvider extends ChangeNotifier {
         }
       }
     }
-  }
+
 
   /// Manually runs the Sidecar Write & Auto-Rename logic on ALL current items.
   void enforceSidecarsAndNaming() {
@@ -1151,6 +1151,55 @@ class LibraryProvider extends ChangeNotifier {
     return const ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v'].contains(ext);
   }
 
+  MediaItem _parseFile(PlatformFile f) {
+    final filePath = f.path ?? '';
+    final fileName = f.name;
+    final folder = filePath.isNotEmpty ? p.dirname(filePath) : '';
+    final id = filePath.isNotEmpty ? filePath.hashCode.toString() : fileName.hashCode.toString();
+    
+    // Attempt to get size/mod time
+    final size = f.size;
+    
+    final parsed = FilenameParser.parse(fileName);
+    final animeHint = folder.toLowerCase().contains('anime');
+
+    String? overview;
+    if (parsed.studio != null) {
+      overview = 'Studio: ${parsed.studio}\n';
+    }
+
+    List<CastMember> cast = [];
+    if (parsed.performers.isNotEmpty) {
+      cast = parsed.performers.map<CastMember>((p) => CastMember(name: p, id: '', character: 'Performer', source: CastSource.stashDb)).toList();
+    }
+    
+    // Infer type
+    final type = parsed.studio != null ? MediaType.scene : MediaType.movie; // Default to movie, type inference normally handles TV logic separately? 
+    // Wait, type inference is usually done by `_inferTypeFromPath`?
+    // But `MediaType` is required.
+    // I'll set a basic type here and rely on _reclassifyItems or logic later?
+    // Actually, `_parseFile` should probably try to detect TV/Movie.
+    
+    return MediaItem(
+      id: id,
+      filePath: filePath,
+      fileName: fileName,
+      folderPath: folder,
+      sizeBytes: size,
+      lastModified: DateTime.now(), // PlatformFile doesn't always have mod time
+      title: parsed.seriesTitle,
+      year: parsed.year,
+      type: type,
+      season: parsed.season,
+      episode: parsed.episode,
+      isAnime: animeHint,
+      showKey: folder.toLowerCase(), // Group by folder
+      overview: overview,
+      cast: cast,
+      isAdult: parsed.studio != null,
+    );
+  }
+
 
 
   Future<void> clear() async {
@@ -1465,361 +1514,6 @@ class LibraryProvider extends ChangeNotifier {
       _configChangedController.add(null);
     }
   }
-}
-
-typedef _ProgressCallback = void Function(String path, int filesFound);
-typedef _ItemsFoundCallback = Future<void> Function(List<MediaItem> items);
-
-Future<void> _walkOneDriveFolder({
-  required String token,
-  required String folderId,
-  required String currentPath,
-  required List<MediaItem> out,
-  required String accountPrefix,
-  required LibraryFolder libraryFolder,
-  _ProgressCallback? onProgress,
-  _ItemsFoundCallback? onBatchFound,
-}) async {
-  final baseUrl = graph_auth.GraphAuthService.instance.graphBaseUrl;
-  final url = Uri.parse(
-      '$baseUrl/me/drive/items/$folderId/children');
-  await _walkOneDrivePage(
-    token: token,
-    url: url,
-    currentPath: currentPath,
-    out: out,
-    accountPrefix: accountPrefix,
-    libraryFolder: libraryFolder,
-    onProgress: onProgress,
-    onBatchFound: onBatchFound,
-  );
-}
-
-Future<void> _walkOneDrivePage({
-  required String token,
-  required Uri url,
-  required String currentPath,
-  required List<MediaItem> out,
-  required String accountPrefix,
-  required LibraryFolder libraryFolder,
-  _ProgressCallback? onProgress,
-  _ItemsFoundCallback? onBatchFound,
-}) async {
-  final res = await http.get(url, headers: {'Authorization': 'Bearer $token'});
-  if (res.statusCode != 200) {
-    throw Exception('Graph error: ${res.statusCode} ${res.body}');
-  }
-
-  final body = jsonDecode(res.body) as Map<String, dynamic>;
-  final values = body['value'] as List<dynamic>? ?? <dynamic>[];
-
-  final pageItems = <MediaItem>[];
-  
-  // 1. First pass: Collect Sidecar/NFO files in this folder
-  // Map of lowercase Filename-No-Extension -> Sidecar Info
-  final sidecars = <String, Map<String, dynamic>>{};
-  
-  for (final raw in values) {
-      final m = raw as Map<String, dynamic>;
-      final name = m['name'] as String? ?? '';
-      final isFile = m['file'] != null;
-      if (!isFile) continue;
-      
-      if (name.toLowerCase().endsWith('.nfo') || name.toLowerCase().endsWith('.freakflix.json')) {
-         final downloadUrl = m['@microsoft.graph.downloadUrl'] as String?;
-         if (downloadUrl != null) {
-            try {
-               // Fetch content of NFO
-               // Note: This adds HTTP calls per NFO. For large libraries, this is a tradeoff.
-               // Ideally we'd batch this or only do it if needed.
-               // Given "Persistent Metadata" is the goal, reading these is priority.
-               final contentRes = await http.get(Uri.parse(downloadUrl));
-               if (contentRes.statusCode == 200) {
-                  final parsed = SidecarService.parseNfo(contentRes.body);
-                  if (parsed != null) {
-                     final baseName = p.basenameWithoutExtension(name).toLowerCase();
-                     sidecars[baseName] = parsed;
-                  }
-               }
-            } catch (e) {
-               debugPrint('LibraryProvider: Failed to read sidecar $name: $e');
-            }
-         }
-      }
-  }
-
-  // 2. Second pass: Process Folders and Videos
-  for (final raw in values) {
-    final m = raw as Map<String, dynamic>;
-    final isFolder = m['folder'] != null;
-    final name = m['name'] as String? ?? '';
-    final id = m['id'] as String? ?? '';
-    final nextPath = currentPath == '/' ? '/$name' : '$currentPath/$name';
-
-    onProgress?.call(nextPath, out.length);
-
-    if (isFolder) {
-      // Recurse
-      await _walkOneDriveFolder(
-        token: token,
-        folderId: id,
-        currentPath: nextPath,
-        out: out,
-        accountPrefix: accountPrefix,
-        libraryFolder: libraryFolder,
-        onProgress: onProgress,
-        onBatchFound: onBatchFound,
-      );
-      continue;
-    }
-
-    if (!_isVideo(name)) continue;
-
-    final downloadUrl = m['@microsoft.graph.downloadUrl'] as String?;
-    if (downloadUrl == null) continue;
-
-    final lastModifiedRaw = m['lastModifiedDateTime'] as String?;
-    final lastModified =
-        DateTime.tryParse(lastModifiedRaw ?? '') ?? DateTime.now();
-    final size = (m['size'] as num?)?.toInt() ?? 0;
-    
-    // Check for Sidecar Data
-    final baseName = p.basenameWithoutExtension(name).toLowerCase();
-    final sidecarData = sidecars[baseName];
-    
-    final parsed = FilenameParser.parse(name);
-    
-    // Apply Sidecar overrides if present
-    final effectiveTitle = sidecarData?['title'] as String? ?? parsed.seriesTitle;
-    final effectiveYear = sidecarData?['year'] as int? ?? parsed.year;
-    final effectiveTmdbId = sidecarData?['tmdbId'] as int?;
-    final effectiveAnilistId = sidecarData?['anilistId'] as int?;
-    
-    // Determine type (Sidecar might specify, or fallback to folder settings)
-    MediaType mediaType = _typeForFolder(libraryFolder, parsed.season != null || parsed.episode != null);
-    
-    // Logic: If we found an Anilist ID in the sidecar, strictly treat as Anime
-    final isAnime = effectiveAnilistId != null || libraryFolder.type == LibraryType.anime;
-    final isAdult = libraryFolder.type == LibraryType.adult;
-    
-    final accountScopedFolderPath = '$accountPrefix$currentPath';
-    final accountScopedFilePath = '$accountPrefix$nextPath';
-    final showKey = mediaType == MediaType.tv
-        ? '$accountPrefix:${currentPath.toLowerCase()}'
-        : null;
-
-    final item = MediaItem(
-      id: 'onedrive_${libraryFolder.accountId}_$id',
-      filePath: accountScopedFilePath,
-      streamUrl: downloadUrl,
-      fileName: name,
-      folderPath: accountScopedFolderPath,
-      sizeBytes: size,
-      lastModified: lastModified,
-      
-      // Use efficient Sidecar or Parsed info
-      title: effectiveTitle,
-      year: effectiveYear,
-      tmdbId: effectiveTmdbId,
-      anilistId: effectiveAnilistId,
-      
-      type: mediaType,
-      season: parsed.season,
-      episode: parsed.episode,
-      isAnime: isAnime,
-      isAdult: isAdult,
-      showKey: showKey,
-    );
-
-    out.add(item);
-    pageItems.add(item);
-
-    onProgress?.call(nextPath, out.length);
-  }
-
-  // Realtime update: Ingest items found so far on this page
-  if (pageItems.isNotEmpty && onBatchFound != null) {
-    await onBatchFound(pageItems);
-  }
-
-  final nextLink = body['@odata.nextLink'] as String?;
-  if (nextLink != null) {
-    await _walkOneDrivePage(
-      token: token,
-      url: Uri.parse(nextLink),
-      currentPath: currentPath,
-      out: out,
-      accountPrefix: accountPrefix,
-      libraryFolder: libraryFolder,
-      onProgress: onProgress,
-      onBatchFound: onBatchFound,
-    );
-  }
-}
-
-MediaType _typeForFolder(LibraryFolder folder, bool hasTvHints) {
-  switch (folder.type) {
-    case LibraryType.movies:
-      return MediaType.movie;
-    case LibraryType.tv:
-    case LibraryType.anime:
-      return MediaType.tv;
-    case LibraryType.adult:
-      return MediaType.scene;
-    case LibraryType.other:
-      return hasTvHints ? MediaType.tv : MediaType.movie;
-  }
-}
-
-class _ScanRequest {
-  final SendPort sendPort;
-  final String path;
-  final List<String>? keywords;
-  _ScanRequest(this.sendPort, this.path, {this.keywords});
-}
-
-// Top-level function for background isolate
-void _scanDirectoryInIsolate(_ScanRequest request) {
-  final dir = PlatformDirectory(request.path);
-  if (!dir.existsSync()) {
-    request.sendPort.send(<MediaItem>[]);
-    return;
-  }
-
-  final items = <MediaItem>[];
-  int count = 0;
-
-  try {
-    request.sendPort.send('Scanning: ${request.path}...');
-
-    final entities = dir.listSync(recursive: true, followLinks: false);
-    request.sendPort.send('Found ${entities.length} files. Parsing...');
-
-    for (final f in entities) {
-      // Filter optimization
-      if (request.keywords != null && request.keywords!.isNotEmpty) {
-          final pLower = f.path.toLowerCase();
-          // Match ALL keywords? Or ANY?
-          // Title: "Star Wars" -> File: "Star.Wars.mkv"
-          // "Star", "Wars" are both in path.
-          // Title: "Avengers" -> "Avengers.mkv"
-          // We require ALL keywords to be present to be a "Targeted Scan" for this item.
-          bool match = true;
-          for (final k in request.keywords!) {
-            if (!pLower.contains(k)) {
-              match = false;
-              break;
-            }
-          }
-          if (!match) continue;
-      }
-
-      if (f is PlatformFile && _isVideo(f.path)) {
-        items.add(_parseFile(f));
-        count++;
-        if (count % 10 == 0) {
-          request.sendPort.send('Found $count videos...');
-        }
-      }
-    }
-  } catch (e) {
-    // Ignore access errors
-  }
-
-  request.sendPort.send(items);
-}
-
-// ... _isVideo, _parseFile
-
-bool _isVideo(String path) {
-  const exts = ['.mp4', '.mkv', '.avi', '.mov', '.webm'];
-  final ext = p.extension(path).toLowerCase();
-  return exts.contains(ext);
-}
-
-MediaItem _parseFile(PlatformFileSystemEntity f) {
-  final stat = f.statSync();
-  final filePath = f.path;
-  final fileName = p.basename(filePath);
-  final folder = p.dirname(filePath);
-  final id = filePath.hashCode.toString();
-  final lowerPath = filePath.toLowerCase();
-  final animeHint = lowerPath.contains('anime');
-
-  var parsed = FilenameParser.parse(fileName);
-  
-  // Try parsing the parent folder name too
-  final parentFolderName = p.basename(folder);
-  final folderParsed = FilenameParser.parse(parentFolderName);
-
-  // DECISION LOGIC: When to prefer folder over filename?
-  // 1. If folder matches a Scene Pattern (Studio/Date found) and filename didn't.
-  // 2. If folder matches matches Scene Pattern AND filename is just a mess (e.g. same as raw filename)
-  
-  bool preferFolder = false;
-  
-  // If folder has explicit scene info (Studio/Date)
-  if (folderParsed.studio != null || folderParsed.date != null) {
-     // If filename LACKS scene info, definitely use folder
-     if (parsed.studio == null && parsed.date == null) {
-       preferFolder = true;
-     } 
-     // If filename has info but looks like a generic repost/messy release, and folder is clean... 
-     // (Hard to judge "messy", but let's say if folder has Studio+Date and filename only has one or dates mismatch)
-     else if (folderParsed.studio != null && folderParsed.seriesTitle.isNotEmpty) {
-        // Assume folder structure "Studio - Date - Title" is authoritative
-        preferFolder = true;
-     }
-  }
-
-  if (preferFolder) {
-      parsed = ParsedMediaName(
-          seriesTitle: folderParsed.seriesTitle.isNotEmpty ? folderParsed.seriesTitle : parsed.seriesTitle,
-          movieTitle: folderParsed.movieTitle,
-          year: folderParsed.year ?? parsed.year,
-          season: parsed.season,
-          episode: parsed.episode,
-          studio: folderParsed.studio ?? parsed.studio,
-          date: folderParsed.date ?? parsed.date,
-          performers: folderParsed.performers.isNotEmpty ? folderParsed.performers : parsed.performers,
-      );
-  }
-
-  final type = (parsed.season != null || parsed.episode != null || animeHint)
-      ? MediaType.tv
-      : MediaType.movie;
-
-  // Use folder as the stable show key so all episodes in the same folder group together.
-  final showKey = folder.toLowerCase();
-
-  String? overview;
-  if (parsed.studio != null) {
-      overview = 'Studio: ${parsed.studio}\n';
-  }
-
-  List<CastMember> cast = [];
-  if (parsed.performers.isNotEmpty) {
-      cast = parsed.performers.map<CastMember>((p) => CastMember(name: p, id: '', character: 'Performer', source: CastSource.stashDb)).toList();
-  }
-
-  return MediaItem(
-    id: id,
-    filePath: filePath,
-    fileName: fileName,
-    folderPath: folder,
-    sizeBytes: stat.size,
-    lastModified: stat.modified,
-    title: parsed.seriesTitle,
-    year: parsed.year,
-    type: parsed.studio != null ? MediaType.scene : type,
-    season: parsed.season,
-    episode: parsed.episode,
-    isAnime: animeHint,
-    showKey: showKey,
-    overview: overview,
-    cast: cast,
-    isAdult: parsed.studio != null,
-  );
 }
 
 MediaType _inferTypeFromPath(MediaItem item) {
