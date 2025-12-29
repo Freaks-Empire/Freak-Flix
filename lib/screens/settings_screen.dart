@@ -631,8 +631,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             onReorder: (oldIndex, newIndex) {
-                              // Reordering logic if needed in provider
-                              // settings.reorderStashEndpoints(oldIndex, newIndex);
+                              settings.reorderStashEndpoints(oldIndex, newIndex);
                             },
                             children: [
                               for (int i = 0; i < settings.stashEndpoints.length; i++)

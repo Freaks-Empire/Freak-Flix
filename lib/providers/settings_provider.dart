@@ -230,7 +230,18 @@ class SettingsProvider extends ChangeNotifier {
       stashEndpoints[index] = endpoint;
       await save();
       notifyListeners();
+      notifyListeners();
     }
+  }
+
+  Future<void> reorderStashEndpoints(int oldIndex, int newIndex) async {
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    final item = stashEndpoints.removeAt(oldIndex);
+    stashEndpoints.insert(newIndex, item);
+    await save();
+    notifyListeners();
   }
 
   Future<void> setLastFolder(String? path) async {
