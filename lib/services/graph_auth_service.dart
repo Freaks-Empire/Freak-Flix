@@ -659,4 +659,73 @@ class GraphAuthService {
     await _upsertAccount(updated);
     return updated;
   }
+
+  /// Uploads a text string as a file to a specific parent folder.
+  /// Used for creating metadata sidecar files (NFO/JSON).
+  /// [parentId] is the OneDrive ID of the folder to put the file in.
+  /// [filename] is the name of the file to create/overwrite.
+  Future<bool> uploadString({
+      required String accountId,
+      required String parentId,
+      required String filename,
+      required String content,
+  }) async {
+    try {
+       final token = await getFreshAccessToken(accountId);
+       // PUT /me/drive/items/{parent-id}:/{filename}:/content
+       final url = Uri.parse('$graphBaseUrl/me/drive/items/$parentId:/$filename:/content');
+       
+       final response = await http.put(
+          url,
+          headers: {
+             'Authorization': 'Bearer $token',
+             'Content-Type': 'text/plain; charset=utf-8', 
+          },
+          body: content,
+       );
+       
+       if (response.statusCode >= 200 && response.statusCode < 300) {
+           debugPrint('GraphAuthService: Uploaded $filename successfully.');
+           return true;
+       }
+       debugPrint('GraphAuthService: Upload failed: ${response.statusCode} ${response.body}');
+       return false;
+    } catch (e) {
+       debugPrint('GraphAuthService: Upload error: $e');
+       return false;
+    }
+  }
+
+  /// Renames a file on OneDrive.
+  /// [itemId] is the file ID.
+  /// [newName] is the new filename (with extension).
+  Future<bool> renameItem({
+      required String accountId,
+      required String itemId,
+      required String newName,
+  }) async {
+      try {
+          final token = await getFreshAccessToken(accountId);
+          final url = Uri.parse('$graphBaseUrl/me/drive/items/$itemId');
+          
+          final response = await http.patch(
+              url,
+              headers: {
+                 'Authorization': 'Bearer $token',
+                 'Content-Type': 'application/json',
+              },
+              body: jsonEncode({'name': newName}),
+          );
+          
+          if (response.statusCode >= 200 && response.statusCode < 300) {
+              debugPrint('GraphAuthService: Renamed item $itemId to $newName');
+              return true;
+          }
+          debugPrint('GraphAuthService: Rename failed: ${response.statusCode} ${response.body}');
+          return false;
+      } catch (e) {
+          debugPrint('GraphAuthService: Rename error: $e');
+          return false;
+      }
+  }
 }

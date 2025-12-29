@@ -21,6 +21,7 @@ import '../services/graph_auth_service.dart' as graph_auth;
 import '../services/persistence_service.dart';
 import '../services/tmdb_discover_service.dart';
 import '../services/metadata_service.dart';
+import '../services/sidecar_service.dart';
 
 import 'settings_provider.dart';
 import '../utils/filename_parser.dart';
@@ -745,6 +746,74 @@ class LibraryProvider extends ChangeNotifier {
           final enriched = enrichedBatch[j];
           final idx = _allItems.indexWhere((e) => e.filePath == enriched.filePath);
           if (idx != -1) _allItems[idx] = enriched;
+          
+          // --- Persistent Metadata (Sidecar) & Renaming Logic ---
+          if (enriched.id.startsWith('onedrive_') && enriched.tmdbId != null) {
+              final parts = enriched.id.split('_');
+               // onedrive_ACCOUNTID_ITEMID
+              if (parts.length >= 3) {
+                  final accountId = parts[1];
+                  final itemId = parts[2]; // File ID
+
+                  // 1. Write NFO Sidecar
+                  // We address folder by PATH to avoid needing folder ID lookup
+                  // enriched.folderPath format: onedrive:ACCOUNTID/Path/To/Folder
+                  final prefix = 'onedrive:$accountId';
+                  if (enriched.folderPath.startsWith(prefix)) {
+                      var relPath = enriched.folderPath.substring(prefix.length);
+                      if (relPath.startsWith('/')) relPath = relPath.substring(1);
+                      // If empty, it's root.
+                      
+                      final parentRef = relPath.isEmpty ? 'root' : 'root:/$relPath';
+                      final nfoName = '${p.basenameWithoutExtension(enriched.fileName)}.nfo';
+                      final nfoContent = SidecarService.generateNfo(enriched);
+                      
+                      // Fire and forget (don't await strictly to block UI)
+                      graph_auth.GraphAuthService.instance.uploadString(
+                          accountId: accountId,
+                          parentId: parentRef, // "root:/Path/To/Folder" works for parentId arg in my implementation? 
+                          // Wait, my uploadString expects a GUID or uses /items/ID:/name.
+                          // I need to adjust uploadString or pass a specific "root:/Path" string if my impl supports it.
+                          // My impl: Uri.parse('$graphBaseUrl/me/drive/items/$parentId:/$filename:/content');
+                          // If parentId is "root:/Folder", URL becomes .../items/root:/Folder:/filename:/content.
+                          // This is VALID Graph syntax! "items/root:/Path/To/Parent:/ChildName:/content"
+                          filename: nfoName,
+                          content: nfoContent,
+                      ).then((ok) {
+                         if (ok) debugPrint('LibraryProvider: Wrote sidecar $nfoName');
+                      });
+                  }
+
+                  // 2. Rename SCENES (Adult) if needed
+                  if (enriched.type == MediaType.scene && enriched.title != null) {
+                      final yearPart = enriched.year != null ? ' (${enriched.year})' : '';
+                      final ext = p.extension(enriched.fileName);
+                      final expectedName = '${enriched.title}$yearPart$ext';
+                      
+                      // Sanitize filename (remove / \ : * ? " < > |)
+                      final safeName = expectedName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '');
+                      
+                      if (enriched.fileName != safeName) {
+                          debugPrint('LibraryProvider: Renaming scene "${enriched.fileName}" -> "$safeName"');
+                          graph_auth.GraphAuthService.instance.renameItem(
+                              accountId: accountId,
+                              itemId: itemId,
+                              newName: safeName
+                          ).then((ok) {
+                              if (ok) {
+                                // Update local item immediately to reflect change
+                                // Note: filePath/folderPath might de-sync slightly until next scan
+                                final idx = _allItems.indexWhere((e) => e.id == enriched.id);
+                                if (idx != -1) {
+                                    _allItems[idx] = enriched.copyWith(fileName: safeName);
+                                    notifyListeners();
+                                }
+                              }
+                          });
+                      }
+                  }
+              }
+          }
         }
         notifyListeners();
 
@@ -1427,7 +1496,41 @@ Future<void> _walkOneDrivePage({
   final values = body['value'] as List<dynamic>? ?? <dynamic>[];
 
   final pageItems = <MediaItem>[];
+  
+  // 1. First pass: Collect Sidecar/NFO files in this folder
+  // Map of lowercase Filename-No-Extension -> Sidecar Info
+  final sidecars = <String, Map<String, dynamic>>{};
+  
+  for (final raw in values) {
+      final m = raw as Map<String, dynamic>;
+      final name = m['name'] as String? ?? '';
+      final isFile = m['file'] != null;
+      if (!isFile) continue;
+      
+      if (name.toLowerCase().endsWith('.nfo') || name.toLowerCase().endsWith('.freakflix.json')) {
+         final downloadUrl = m['@microsoft.graph.downloadUrl'] as String?;
+         if (downloadUrl != null) {
+            try {
+               // Fetch content of NFO
+               // Note: This adds HTTP calls per NFO. For large libraries, this is a tradeoff.
+               // Ideally we'd batch this or only do it if needed.
+               // Given "Persistent Metadata" is the goal, reading these is priority.
+               final contentRes = await http.get(Uri.parse(downloadUrl));
+               if (contentRes.statusCode == 200) {
+                  final parsed = SidecarService.parseNfo(contentRes.body);
+                  if (parsed != null) {
+                     final baseName = p.basenameWithoutExtension(name).toLowerCase();
+                     sidecars[baseName] = parsed;
+                  }
+               }
+            } catch (e) {
+               debugPrint('LibraryProvider: Failed to read sidecar $name: $e');
+            }
+         }
+      }
+  }
 
+  // 2. Second pass: Process Folders and Videos
   for (final raw in values) {
     final m = raw as Map<String, dynamic>;
     final isFolder = m['folder'] != null;
@@ -1438,6 +1541,7 @@ Future<void> _walkOneDrivePage({
     onProgress?.call(nextPath, out.length);
 
     if (isFolder) {
+      // Recurse
       await _walkOneDriveFolder(
         token: token,
         folderId: id,
@@ -1460,10 +1564,26 @@ Future<void> _walkOneDrivePage({
     final lastModified =
         DateTime.tryParse(lastModifiedRaw ?? '') ?? DateTime.now();
     final size = (m['size'] as num?)?.toInt() ?? 0;
+    
+    // Check for Sidecar Data
+    final baseName = p.basenameWithoutExtension(name).toLowerCase();
+    final sidecarData = sidecars[baseName];
+    
     final parsed = FilenameParser.parse(name);
-    final mediaType = _typeForFolder(libraryFolder, parsed.season != null || parsed.episode != null);
-    final isAnime = libraryFolder.type == LibraryType.anime;
+    
+    // Apply Sidecar overrides if present
+    final effectiveTitle = sidecarData?['title'] as String? ?? parsed.title;
+    final effectiveYear = sidecarData?['year'] as int? ?? parsed.year;
+    final effectiveTmdbId = sidecarData?['tmdbId'] as int?;
+    final effectiveAnilistId = sidecarData?['anilistId'] as int?;
+    
+    // Determine type (Sidecar might specify, or fallback to folder settings)
+    MediaType mediaType = _typeForFolder(libraryFolder, parsed.season != null || parsed.episode != null);
+    
+    // Logic: If we found an Anilist ID in the sidecar, strictly treat as Anime
+    final isAnime = effectiveAnilistId != null || libraryFolder.type == LibraryType.anime;
     final isAdult = libraryFolder.type == LibraryType.adult;
+    
     final accountScopedFolderPath = '$accountPrefix$currentPath';
     final accountScopedFilePath = '$accountPrefix$nextPath';
     final showKey = mediaType == MediaType.tv
@@ -1478,8 +1598,13 @@ Future<void> _walkOneDrivePage({
       folderPath: accountScopedFolderPath,
       sizeBytes: size,
       lastModified: lastModified,
-      title: parsed.seriesTitle,
-      year: parsed.year,
+      
+      // Use efficient Sidecar or Parsed info
+      title: effectiveTitle,
+      year: effectiveYear,
+      tmdbId: effectiveTmdbId,
+      anilistId: effectiveAnilistId,
+      
       type: mediaType,
       season: parsed.season,
       episode: parsed.episode,
