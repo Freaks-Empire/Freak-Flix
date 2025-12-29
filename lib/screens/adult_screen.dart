@@ -89,8 +89,8 @@ class _AdultScreenState extends State<AdultScreen> {
         Expanded(
           child: MediaGrid(
             items: pageItems,
-            childAspectRatio: 1.3,
-            maxCrossAxisExtent: 280,
+            childAspectRatio: 16 / 9,
+            maxCrossAxisExtent: 340,
           ),
         ),
 
