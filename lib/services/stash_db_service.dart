@@ -351,6 +351,41 @@ class StashDbService {
     }
   ''';
 
+  static const String _queryQueryMoviesBox = r'''
+    query QueryMoviesBox($title: String!) {
+      queryMovies(input: {
+        name: $title
+        per_page: 5
+      }) {
+        movies {
+          id
+          name
+          synopsis
+          date
+          duration
+          front_image {
+            url
+          }
+          back_image {
+            url
+          }
+          studio {
+            name
+          }
+          performers {
+            performer {
+              id
+              name
+              images {
+                url
+              }
+            }
+          }
+        }
+      }
+    }
+  ''';
+
   // --- Public Methods ---
 
   /// Tests the connection to StashDB using the provided API key.
@@ -424,29 +459,57 @@ class StashDbService {
       debugPrint('StashDB [${ep.name}]: Searching for "$cleanTitle"');
       final isStashBox = _isBox(ep.url);
 
-      try {
-        final data = await _executeQuery(
-          query: isStashBox ? _queryFindScenesBox : _queryFindScenes,
-          operationName: isStashBox ? 'QueryScenes' : 'FindScenes',
-          variables: {'title': cleanTitle},
-          apiKey: ep.apiKey,
-          baseUrl: ep.url,
-        );
+      // Helper to execute and parse scene search
+      Future<MediaItem?> trySearch(String query, String opName, bool isBox, {bool isMovie = false}) async {
+        try {
+           final data = await _executeQuery(
+            query: query,
+            operationName: opName,
+            variables: {'title': cleanTitle},
+            apiKey: ep.apiKey,
+            baseUrl: ep.url,
+          );
+          
+          List<dynamic>? results;
+          if (isMovie && isBox) {
+             results = data?['queryMovies']?['movies'] as List?;
+          } else if (isBox) {
+             results = data?['queryScenes']?['scenes'] as List?;
+          } else {
+             results = data?['findScenes']?['scenes'] as List?;
+          }
 
-        List<dynamic>? scenes;
-        if (isStashBox) {
-          scenes = data?['queryScenes']?['scenes'] as List?;
-        } else {
-          scenes = data?['findScenes']?['scenes'] as List?;
+          if (results != null && results.isNotEmpty) {
+            debugPrint('StashDB [${ep.name}]: Found match via $opName');
+            return _mapSceneToMediaItem(results.first, title);
+          }
+        } catch (e) {
+          // Ignore specific query errors to allow fallbacks
+          if (e.toString().contains('Cannot query field')) {
+             debugPrint('StashDB [${ep.name}]: $opName not supported by schema.');
+          } else {
+             debugPrint('StashDB [${ep.name}]: Search error ($opName): $e');
+          }
         }
-
-        if (scenes != null && scenes.isNotEmpty) {
-          debugPrint('StashDB [${ep.name}]: Found ${scenes.length} matches');
-          return _mapSceneToMediaItem(scenes.first, title);
-        }
-      } catch (e) {
-        debugPrint('StashDB [${ep.name}]: Search failed: $e');
+        return null;
       }
+
+      // 1. Try Primary Scene Search (Box or App based on URL hint)
+      MediaItem? result;
+      if (isStashBox) {
+        result = await trySearch(_queryFindScenesBox, 'QueryScenes', true);
+        // 2. Fallback: Try App Search if Box failed (maybe URL is Box but running App?)
+        if (result == null) result = await trySearch(_queryFindScenes, 'FindScenes', false);
+        // 3. Fallback: Try Movie Search (TPDB distinguishes Movies vs Scenes)
+        if (result == null) result = await trySearch(_queryQueryMoviesBox, 'QueryMoviesBox', true, isMovie: true);
+      } else {
+        result = await trySearch(_queryFindScenes, 'FindScenes', false);
+        // Fallback: Try Box Search if App failed
+        if (result == null) result = await trySearch(_queryFindScenesBox, 'QueryScenes', true);
+      }
+
+      if (result != null) return result;
+
     }
 
     return null;
