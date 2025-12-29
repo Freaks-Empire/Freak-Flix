@@ -8,16 +8,19 @@ class TmdbPerson {
   final String? birthday;
   final String? placeOfBirth;
   final String? profilePath;
-  final List<TmdbItem> knownFor;
+  final String? deathDay;
+  final Map<String, String> externalIds;
 
   const TmdbPerson({
     required this.id,
     required this.name,
     this.biography,
     this.birthday,
+    this.deathDay,
     this.placeOfBirth,
     this.profilePath,
     required this.knownFor,
+    this.externalIds = const {},
   });
 
   factory TmdbPerson.fromMap(Map<String, dynamic> map, String imageBase) {
@@ -33,21 +36,28 @@ class TmdbPerson {
            );
          })
         .whereType<TmdbItem>()
-        .take(20) // Limit to top 20
+        .take(50) // Increased limit to allow filtering into Movies/TV later
         .toList();
 
-    // Sort by popularity or date? TMDB 'cast' is usually arbitrary order or by id. 
-    // Let's sort by popularity if available, or vote_count.
-    // For now, accept TMDB return order which is often popularity.
+    // Parse External IDs
+    final externals = map['external_ids'] as Map<String, dynamic>? ?? {};
+    final exIds = <String, String>{};
+    if (externals['imdb_id'] != null) exIds['imdb'] = externals['imdb_id'].toString();
+    if (externals['facebook_id'] != null) exIds['facebook'] = externals['facebook_id'].toString();
+    if (externals['instagram_id'] != null) exIds['instagram'] = externals['instagram_id'].toString();
+    if (externals['twitter_id'] != null) exIds['twitter'] = externals['twitter_id'].toString();
+    if (externals['tiktok_id'] != null) exIds['tiktok'] = externals['tiktok_id'].toString();
 
     return TmdbPerson(
       id: map['id'] as int,
       name: map['name'] as String? ?? 'Unknown',
       biography: map['biography'] as String?,
       birthday: map['birthday'] as String?,
+      deathDay: map['deathday'] as String?,
       placeOfBirth: map['place_of_birth'] as String?,
       profilePath: map['profile_path'] != null ? '$imageBase${map['profile_path']}' : null,
       knownFor: castList,
+      externalIds: exIds,
     );
   }
 }

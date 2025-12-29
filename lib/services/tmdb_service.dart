@@ -289,7 +289,7 @@ class TmdbService {
 
     final uri = Uri.https(_baseHost, '/3/person/$tmdbId', {
       'api_key': key,
-      'append_to_response': 'combined_credits',
+      'append_to_response': 'combined_credits,external_ids',
     });
 
     final res = await _client.get(uri);

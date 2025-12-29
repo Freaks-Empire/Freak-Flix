@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/persistence_service.dart';
+import '../models/stash_endpoint.dart';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -24,8 +25,10 @@ class SettingsProvider extends ChangeNotifier {
   TmdbKeyStatus tmdbStatus = TmdbKeyStatus.unknown;
   
   bool enableAdultContent = false;
-  String stashApiKey = '';
-  String stashUrl = 'https://stashdb.org/graphql';
+  // Legacy single fields replaced by stashEndpoints
+  // String stashApiKey = '';
+  // String stashUrl = 'https://stashdb.org/graphql';
+  List<StashEndpoint> stashEndpoints = [];
 
   bool _isTestingTmdbKey = false;
 
@@ -95,8 +98,33 @@ class SettingsProvider extends ChangeNotifier {
     }
 
     enableAdultContent = data['enableAdultContent'] as bool? ?? false;
-    stashApiKey = data['stashApiKey'] as String? ?? '';
-    stashUrl = data['stashUrl'] as String? ?? 'https://stashdb.org/graphql';
+    
+    // Load endpoints
+    if (data['stashEndpoints'] != null) {
+      stashEndpoints = (data['stashEndpoints'] as List)
+          .map((e) => StashEndpoint.fromJson(e))
+          .toList();
+    }
+    
+    // Migration: If no endpoints but legacy data exists
+    if (stashEndpoints.isEmpty) {
+      final legacyUrl = data['stashUrl'] as String?;
+      final legacyKey = data['stashApiKey'] as String?;
+      if (legacyUrl != null && legacyUrl.isNotEmpty) {
+        stashEndpoints.add(StashEndpoint(
+          name: 'Default Stash',
+          url: legacyUrl,
+          apiKey: legacyKey ?? '',
+        ));
+      } else {
+        // Add default StashDB.org if completely empty/fresh
+        stashEndpoints.add(StashEndpoint(
+           name: 'StashDB.org',
+           url: 'https://stashdb.org/graphql',
+           apiKey: '',
+        ));
+      }
+    }
   }
 
   Map<String, dynamic> exportState() {
@@ -109,8 +137,7 @@ class SettingsProvider extends ChangeNotifier {
       'isSetupCompleted': _isSetupCompleted,
       'tmdbApiKey': tmdbApiKey,
       'enableAdultContent': enableAdultContent,
-      'stashApiKey': stashApiKey,
-      'stashUrl': stashUrl,
+      'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
     };
   }
 
@@ -145,8 +172,7 @@ class SettingsProvider extends ChangeNotifier {
         'tmdbApiKey': tmdbApiKey,
         _tmdbStatusKey: tmdbStatus.index,
         'enableAdultContent': enableAdultContent,
-        'stashApiKey': stashApiKey,
-        'stashUrl': stashUrl,
+        'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
         'migrated_profiles': _hasMigratedProfiles,
         'isSetupCompleted': _isSetupCompleted,
     };
@@ -186,16 +212,25 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setStashApiKey(String value) async {
-    stashApiKey = value.trim();
+  Future<void> addStashEndpoint(StashEndpoint endpoint) async {
+    stashEndpoints.add(endpoint);
     await save();
     notifyListeners();
   }
 
-  Future<void> setStashUrl(String value) async {
-    stashUrl = value.trim();
+  Future<void> removeStashEndpoint(String id) async {
+    stashEndpoints.removeWhere((e) => e.id == id);
     await save();
     notifyListeners();
+  }
+
+  Future<void> updateStashEndpoint(StashEndpoint endpoint) async {
+    final index = stashEndpoints.indexWhere((e) => e.id == endpoint.id);
+    if (index != -1) {
+      stashEndpoints[index] = endpoint;
+      await save();
+      notifyListeners();
+    }
   }
 
   Future<void> setLastFolder(String? path) async {
@@ -245,7 +280,7 @@ class SettingsProvider extends ChangeNotifier {
       'tmdbApiKey': tmdbApiKey,
       'tmdbStatus': tmdbStatus.index,
       'enableAdultContent': enableAdultContent,
-      'stashApiKey': stashApiKey,
+      'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
     };
   }
 
@@ -270,8 +305,9 @@ class SettingsProvider extends ChangeNotifier {
     if (data.containsKey('enableAdultContent')) {
       enableAdultContent = data['enableAdultContent'] ?? false;
     }
-    if (data.containsKey('stashApiKey')) {
-      stashApiKey = data['stashApiKey'] ?? '';
+    if (data.containsKey('stashEndpoints')) {
+       final list = data['stashEndpoints'] as List;
+       stashEndpoints = list.map((e) => StashEndpoint.fromJson(e)).toList();
     }
     await save();
     notifyListeners();

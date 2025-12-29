@@ -96,7 +96,64 @@ class FilenameParser {
        );
     }
     
-    // --- 0.6) Check for Title - Date Pattern: Title - YYYY-MM-DD ---
+    // --- 0.6) Namer / Stash Standard Pattern: Studio - Date - Title ---
+    // Example: Brazzers - 2023.10.25 - Big Tits at Work
+    // Regex: ^([^-]+)\s+-\s+(\d{4}[.-]\d{2}[.-]\d{2})\s+-\s+(.*)$
+    final namerStudioDate = RegExp(r'^([^-]+)\s+-\s+(\d{4}[.-]\d{2}[.-]\d{2})\s+-\s+(.*)$').firstMatch(nameNoExt);
+    if (namerStudioDate != null) {
+      studio = namerStudioDate.group(1)?.trim();
+      final dateStr = namerStudioDate.group(2)?.replaceAll('.', '-');
+      date = DateTime.tryParse(dateStr ?? '');
+      
+      var remainder = namerStudioDate.group(3)?.trim() ?? '';
+      
+      // Performers check (w/ Performer)
+      final perfMatch = RegExp(r'\(\s*w[_\s/]?\s*([^)]+)\)').firstMatch(remainder);
+      if (perfMatch != null) {
+         final rawPerfs = perfMatch.group(1)!;
+         performers = rawPerfs.split(',').map((e) => e.trim()).toList();
+         remainder = remainder.replaceAll(perfMatch.group(0)!, '').trim();
+      }
+      
+      return ParsedMediaName(
+        seriesTitle: remainder,
+        movieTitle: remainder,
+        studio: studio,
+        date: date,
+        year: date?.year,
+        performers: performers,
+      );
+    }
+
+    // --- 0.7) Namer / Stash Date First Pattern: Date - Studio - Title ---
+    // Example: 2023.10.25 - Brazzers - Big Tits at Work
+    final namerDateStudio = RegExp(r'^(\d{4}[.-]\d{2}[.-]\d{2})\s+-\s+([^-]+)\s+-\s+(.*)$').firstMatch(nameNoExt);
+    if (namerDateStudio != null) {
+       final dateStr = namerDateStudio.group(1)?.replaceAll('.', '-');
+       date = DateTime.tryParse(dateStr ?? '');
+       studio = namerDateStudio.group(2)?.trim();
+       
+       var remainder = namerDateStudio.group(3)?.trim() ?? '';
+       
+       // Performers check
+       final perfMatch = RegExp(r'\(\s*w[_\s/]?\s*([^)]+)\)').firstMatch(remainder);
+       if (perfMatch != null) {
+          final rawPerfs = perfMatch.group(1)!;
+          performers = rawPerfs.split(',').map((e) => e.trim()).toList();
+          remainder = remainder.replaceAll(perfMatch.group(0)!, '').trim();
+       }
+
+       return ParsedMediaName(
+        seriesTitle: remainder,
+        movieTitle: remainder,
+        studio: studio,
+        date: date,
+        year: date?.year,
+        performers: performers,
+      );
+    }
+
+    // --- 0.8) Check for Title - Date Pattern: Title - YYYY-MM-DD ---
     // Example: Dani Daniels loves Derrick Pierce - 2013-06-13
     final titleDateMatch = RegExp(r'^(.*)\s+-\s+(\d{4}-\d{2}-\d{2})$').firstMatch(nameNoExt);
     if (titleDateMatch != null) {

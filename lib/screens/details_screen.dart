@@ -8,6 +8,7 @@ import '../models/cast_member.dart';
 import '../providers/library_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/stash_db_service.dart';
+import '../models/stash_endpoint.dart';
 import '../services/tmdb_service.dart';
 
 import 'details/movie_details_screen.dart';
@@ -60,7 +61,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
         final settings = context.read<SettingsProvider>();
         final service = StashDbService();
         final realId = id.replaceFirst('stashdb:', '');
-        final scene = await service.getScene(realId, settings.stashApiKey, settings.stashUrl);
+        final scene = await service.getScene(realId, settings.stashEndpoints);
         
         if (mounted) {
            setState(() {

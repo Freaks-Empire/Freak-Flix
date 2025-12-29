@@ -3,6 +3,7 @@
 
 import '../models/media_item.dart';
 import '../providers/settings_provider.dart';
+import '../models/stash_endpoint.dart';
 import 'stash_db_service.dart';
 import 'anilist_service.dart';
 import 'trakt_service.dart';
@@ -34,10 +35,10 @@ class MetadataService {
 
     // 0. Manual Override Check (StashDB ID)
     if (item.stashId != null && item.stashId!.isNotEmpty) {
-       if (settings.stashApiKey.isNotEmpty) {
+       if (settings.stashEndpoints.any((e) => e.enabled)) {
           // Strip 'stashdb:' prefix if we stored it that way, though usually we'll store raw UUID
           final rawId = item.stashId!.replaceFirst('stashdb:', '');
-          final stashItem = await _stash.getScene(rawId, settings.stashApiKey, settings.stashUrl);
+          final stashItem = await _stash.getScene(rawId, settings.stashEndpoints);
           if (stashItem != null) {
             return item.copyWith(
               title: stashItem.title,
@@ -59,10 +60,10 @@ class MetadataService {
     
     // Rule A: Adult Content -> StashDB ONLY
     if (item.isAdult) {
-       if (settings.enableAdultContent && settings.stashApiKey.isNotEmpty) {
+       if (settings.enableAdultContent && settings.stashEndpoints.any((e) => e.enabled)) {
           // Attempt 1: Search by filename parsed title
           var stashItem = await _stash.searchScene(
-            parsed.seriesTitle, settings.stashApiKey, settings.stashUrl);
+            parsed.seriesTitle, settings.stashEndpoints);
           
           // Attempt 2: Search by parent folder name (Fallback)
           if (stashItem == null) {
@@ -82,7 +83,7 @@ class MetadataService {
               if (parentDir.isNotEmpty && parentDir != parentDir.toUpperCase() && parentDir != '.') { 
                  print('[metadata] StashDB: Filename search failed for "${parsed.seriesTitle}". Retrying with folder: "$parentDir"');
                  stashItem = await _stash.searchScene(
-                   parentDir, settings.stashApiKey, settings.stashUrl);
+                   parentDir, settings.stashEndpoints);
 
                  // Attempt 3: Parse parent folder name and search
                  if (stashItem == null) {
@@ -90,7 +91,7 @@ class MetadataService {
                     if (parsedFolder.seriesTitle.isNotEmpty && parsedFolder.seriesTitle != parsed.seriesTitle) {
                        print('[metadata] StashDB: Folder search failed. Retrying with parsed folder: "${parsedFolder.seriesTitle}"');
                        stashItem = await _stash.searchScene(
-                         parsedFolder.seriesTitle, settings.stashApiKey, settings.stashUrl);
+                         parsedFolder.seriesTitle, settings.stashEndpoints);
                     }
                  }
               }

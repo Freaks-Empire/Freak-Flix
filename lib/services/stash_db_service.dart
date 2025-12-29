@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import '../models/media_item.dart';
 import '../models/cast_member.dart';
+import '../models/stash_performer.dart';
+import '../models/stash_endpoint.dart';
 
 /// A robust service for interacting with the StashDB GraphQL API.
 /// 
@@ -185,14 +187,34 @@ class StashDbService {
         id
         name
         birthdate
+        height_cm
+        measurements
+        fake_tits
         country
-        gender
+        ethnicity
+        eye_color
+        hair_color
+        career_start_year
+        career_end_year
+        tattoos {
+          location
+          description
+        }
+        piercings {
+          location
+          description
+        }
+        aliases
         url
         twitter
         instagram
         details
         image_path
         scene_count
+        urls {
+            url
+            type
+        }
       }
     }
   ''';
@@ -203,9 +225,28 @@ class StashDbService {
         id
         name
         birth_date
+        height_cm
+        measurements
+        fake_tits
         country
-        gender
-        urls
+        ethnicity
+        eye_color
+        hair_color
+        career_start_year
+        career_end_year
+        tattoos {
+          location
+          description
+        }
+        piercings {
+          location
+          description
+        }
+        aliases
+        urls {
+          url
+          type
+        }
         twitter
         instagram
         details
@@ -300,151 +341,185 @@ class StashDbService {
     }
   }
 
-  /// Gets a specific scene by ID.
-  Future<MediaItem?> getScene(String id, String apiKey, String baseUrl) async {
-    if (apiKey.trim().isEmpty) return null;
+  /// Gets a specific scene by ID. Tries all provided endpoints.
+  Future<MediaItem?> getScene(String id, List<StashEndpoint> endpoints) async {
+    for (final ep in endpoints) {
+      if (!ep.enabled || ep.apiKey.isEmpty) continue;
+      
+      try {
+         final isStashBox = _isBox(ep.url);
+         final query = isStashBox ? _queryFindSceneBoxById : _queryFindSceneById;
+         final opName = isStashBox ? 'FindSceneBox' : 'FindScene';
 
-    try {
-       final isStashBox = baseUrl.contains('stashdb.org');
-       final query = isStashBox ? _queryFindSceneBoxById : _queryFindSceneById;
-       final opName = isStashBox ? 'FindSceneBox' : 'FindScene';
+         final data = await _executeQuery(
+          query: query,
+          operationName: opName,
+          variables: {'id': id},
+          apiKey: ep.apiKey,
+          baseUrl: ep.url,
+        );
 
-       final data = await _executeQuery(
-        query: query,
-        operationName: opName,
-        variables: {'id': id},
-        apiKey: apiKey,
-        baseUrl: baseUrl,
-      );
-
-      final sceneData = data?['findScene']; // Query is 'findScene', so result key is 'findScene'
-      if (sceneData != null) {
-          return _mapSceneToMediaItem(sceneData, 'Unknown');
+        final sceneData = data?['findScene'];
+        if (sceneData != null) {
+            return _mapSceneToMediaItem(sceneData, 'Unknown');
+        }
+      } catch (e) {
+        debugPrint('StashDB [${ep.name}]: Get scene $id failed: $e');
       }
-    } catch (e) {
-      debugPrint('StashDB: Get scene by ID failed: $e');
     }
     return null;
   }
 
-  /// Searches for a scene by title.
-  Future<MediaItem?> searchScene(String title, String apiKey, String baseUrl) async {
-    if (apiKey.trim().isEmpty) return null;
-
-    // Clean title for better matching
+  /// Searches for a scene by title across all endpoints. Returns first match.
+  Future<MediaItem?> searchScene(String title, List<StashEndpoint> endpoints) async {
     final cleanTitle = _cleanTitle(title);
-    debugPrint('StashDB: Searching for "$cleanTitle" (Original: "$title") at $baseUrl');
+    
+    for (final ep in endpoints) {
+      if (!ep.enabled) continue; // Allow empty API key (local stash often no auth)
+      
+      debugPrint('StashDB [${ep.name}]: Searching for "$cleanTitle"');
+      final isStashBox = _isBox(ep.url);
 
-    final isStashBox = baseUrl.contains('stashdb.org');
+      try {
+        final data = await _executeQuery(
+          query: isStashBox ? _queryFindScenesBox : _queryFindScenes,
+          operationName: isStashBox ? 'QueryScenes' : 'FindScenes',
+          variables: {'title': cleanTitle},
+          apiKey: ep.apiKey,
+          baseUrl: ep.url,
+        );
 
-    try {
-      final data = await _executeQuery(
-        query: isStashBox ? _queryFindScenesBox : _queryFindScenes,
-        operationName: isStashBox ? 'QueryScenes' : 'FindScenes',
-        variables: {'title': cleanTitle},
-        apiKey: apiKey,
-        baseUrl: baseUrl,
-      );
+        List<dynamic>? scenes;
+        if (isStashBox) {
+          scenes = data?['queryScenes']?['scenes'] as List?;
+        } else {
+          scenes = data?['findScenes']?['scenes'] as List?;
+        }
 
-      List<dynamic>? scenes;
-      if (isStashBox) {
-        scenes = data?['queryScenes']?['scenes'] as List?;
-      } else {
-        scenes = data?['findScenes']?['scenes'] as List?;
+        if (scenes != null && scenes.isNotEmpty) {
+          debugPrint('StashDB [${ep.name}]: Found ${scenes.length} matches');
+          return _mapSceneToMediaItem(scenes.first, title);
+        }
+      } catch (e) {
+        debugPrint('StashDB [${ep.name}]: Search failed: $e');
       }
-
-      if (scenes != null && scenes.isNotEmpty) {
-        debugPrint('StashDB: Found ${scenes.length} matches for "$title"');
-        return _mapSceneToMediaItem(scenes.first, title);
-      } else {
-        debugPrint('StashDB: No matches found for "$title"');
-      }
-    } catch (e) {
-      debugPrint('StashDB: Search failed: $e');
     }
 
     return null;
   }
 
   /// Gets scenes for a specific performer (paginated, single page).
-  Future<List<MediaItem>> getPerformerScenes(String performerId, String apiKey, String baseUrl, {int page = 1, int perPage = 20}) async {
-    if (apiKey.trim().isEmpty) return [];
+  /// Aggregates results from all endpoints? Or just tries all until results found?
+  /// For pagination consistency, aggregation is hard. We will return results from the first endpoint that has data.
+  Future<List<MediaItem>> getPerformerScenes(String performerId, List<StashEndpoint> endpoints, {int page = 1, int perPage = 20}) async {
+    
+    for (final ep in endpoints) {
+      if (!ep.enabled) continue;
 
-    final isStashBox = baseUrl.contains('stashdb.org');
+      final isStashBox = _isBox(ep.url);
 
-    try {
-      debugPrint('StashDB: Fetching performer scenes page $page');
-      final data = await _executeQuery(
-        query: isStashBox ? _queryPerformerScenesBox : _queryPerformerScenes,
-        operationName: isStashBox ? 'PerformerScenesBox' : 'PerformerScenes',
-        variables: {
-          'performerId': performerId,
-          'page': page,
-          'per_page': perPage,
-        },
-        apiKey: apiKey,
-        baseUrl: baseUrl,
-      );
+      try {
+        debugPrint('StashDB [${ep.name}]: Fetching performer scenes page $page');
+        final data = await _executeQuery(
+          query: isStashBox ? _queryPerformerScenesBox : _queryPerformerScenes,
+          operationName: isStashBox ? 'PerformerScenesBox' : 'PerformerScenes',
+          variables: {
+            'performerId': performerId,
+            'page': page,
+            'per_page': perPage,
+          },
+          apiKey: ep.apiKey,
+          baseUrl: ep.url,
+        );
 
-      List<dynamic>? scenes;
-      if (isStashBox) {
-        scenes = data?['queryScenes']?['scenes'] as List?;
-      } else {
-        scenes = data?['findScenes']?['scenes'] as List?;
+        List<dynamic>? scenes;
+        if (isStashBox) {
+          scenes = data?['queryScenes']?['scenes'] as List?;
+        } else {
+          scenes = data?['findScenes']?['scenes'] as List?;
+        }
+
+        if (scenes != null && scenes.isNotEmpty) {
+          return scenes
+            .map((s) => _mapSceneToMediaItem(s, s['title'] ?? 'Unknown'))
+            .toList();
+        }
+      } catch (e) {
+        debugPrint('StashDB [${ep.name}]: Fetch performer scenes failed: $e');
       }
-
-      if (scenes != null) {
-        return scenes
-          .map((s) => _mapSceneToMediaItem(s, s['title'] ?? 'Unknown'))
-          .toList();
-      }
-    } catch (e) {
-      debugPrint('StashDB: Fetch performer scenes failed: $e');
     }
 
     return [];
   }
 
-  /// Gets performer details by ID.
-  Future<CastMember?> getPerformer(String id, String apiKey, String baseUrl) async {
-    if (apiKey.trim().isEmpty) return null;
-    
-    final isStashBox = baseUrl.contains('stashdb.org');
-    
-    try {
-      final data = await _executeQuery(
-        query: isStashBox ? _queryPerformerBox : _queryFindPerformer,
-        operationName: isStashBox ? 'PerformerBox' : 'FindPerformer',
-        variables: {'id': id},
-        apiKey: apiKey,
-        baseUrl: baseUrl,
-      );
-
+  Future<StashPerformer?> getPerformerDetails(String id, List<StashEndpoint> endpoints) async {
+    for (final ep in endpoints) {
+      if (!ep.enabled) continue;
       
-      Map<String, dynamic>? p;
-      if (isStashBox) {
-         p = data?['performer'];
-      } else {
-         p = data?['findPerformer'];
+      final isStashBox = _isBox(ep.url);
+      
+      try {
+        final data = await _executeQuery(
+          query: isStashBox ? _queryPerformerBox : _queryFindPerformer,
+          operationName: isStashBox ? 'PerformerBox' : 'FindPerformer',
+          variables: {'id': id},
+          apiKey: ep.apiKey,
+          baseUrl: ep.url,
+        );
+
+        final p = isStashBox ? data?['performer'] : data?['findPerformer'];
+        if (p != null) {
+          return StashPerformer.fromJson(p as Map<String, dynamic>);
+        }
+      } catch (e) {
+        debugPrint('StashDB [${ep.name}]: Get Performer Details failed: $e');
       }
-      if (p != null) {
-          String? profileUrl;
-          if (p['image_path'] != null) {
-            profileUrl = p['image_path'];
-          } else if (p['images'] != null && (p['images'] as List).isNotEmpty) {
-            profileUrl = p['images'][0]['url'];
-          }
-          
-          return CastMember(
-            id: p['id'],
-            name: p['name'] ?? 'Unknown',
-            character: 'Performer',
-            profileUrl: profileUrl,
-            source: CastSource.stashDb,
-          );
+    }
+    return null;
+  }
+  
+  /// Gets performer details by ID (Legacy simplified).
+  Future<CastMember?> getPerformer(String id, List<StashEndpoint> endpoints) async {
+    for (final ep in endpoints) {
+      if (!ep.enabled) continue;
+      
+      final isStashBox = _isBox(ep.url);
+      
+      try {
+        final data = await _executeQuery(
+          query: isStashBox ? _queryPerformerBox : _queryFindPerformer,
+          operationName: isStashBox ? 'PerformerBox' : 'FindPerformer',
+          variables: {'id': id},
+          apiKey: ep.apiKey,
+          baseUrl: ep.url,
+        );
+
+        
+        Map<String, dynamic>? p;
+        if (isStashBox) {
+           p = data?['performer'];
+        } else {
+           p = data?['findPerformer'];
+        }
+        if (p != null) {
+            String? profileUrl;
+            if (p['image_path'] != null) {
+              profileUrl = p['image_path'];
+            } else if (p['images'] != null && (p['images'] as List).isNotEmpty) {
+              profileUrl = p['images'][0]['url'];
+            }
+            
+            return CastMember(
+              id: p['id'],
+              name: p['name'] ?? 'Unknown',
+              character: 'Performer',
+              profileUrl: profileUrl,
+              source: CastSource.stashDb,
+            );
+        }
+      } catch (e) {
+        debugPrint('StashDB [${ep.name}]: Get Performer failed: $e');
       }
-    } catch (e) {
-      debugPrint('StashDB: Get Performer failed: $e');
     }
     return null;
   }
@@ -620,5 +695,8 @@ class StashDbService {
       genres: tags,
       isAdult: true,
     );
+  }
+  bool _isBox(String url) {
+    return url.contains('stashdb.org') || url.contains('theporndb.net');
   }
 }

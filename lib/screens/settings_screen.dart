@@ -14,6 +14,7 @@ import '../providers/library_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/profile_provider.dart';
 import '../models/user_profile.dart';
+import '../models/stash_endpoint.dart';
 
 import '../services/graph_auth_service.dart';
 import '../services/metadata_service.dart';
@@ -39,10 +40,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _initializedTmdb = false;
   bool _obscureTmdb = true;
 
-  late final TextEditingController _stashKeyController;
-  late final TextEditingController _stashUrlController; // New
-  bool _initializedStash = false;
-  bool _obscureStash = true;
+  // Stash Endpoint Controllers (Transient for Dialog)
+  final _stashNameCtrl = TextEditingController();
+  final _stashUrlCtrl = TextEditingController(); 
+  final _stashKeyCtrl = TextEditingController();
+  
+  // late final TextEditingController _stashKeyController;
+  // late final TextEditingController _stashUrlController; // New
+  // bool _initializedStash = false;
+  // bool _obscureStash = true;
   bool _isTestingStash = false;
   final StashDbService _stashService = StashDbService();
 
@@ -50,8 +56,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _tmdbController = TextEditingController();
-    _stashKeyController = TextEditingController();
-    _stashUrlController = TextEditingController(); // New
+    // _stashKeyController = TextEditingController();
+    // _stashUrlController = TextEditingController(); // New
     _graphAuth.loadFromPrefs().then((_) {
       if (mounted) setState(() {});
     });
@@ -76,8 +82,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     _tmdbController.dispose();
-    _stashKeyController.dispose();
-    _stashUrlController.dispose();
+    // _stashKeyController.dispose();
+    // _stashUrlController.dispose();
+    _stashNameCtrl.dispose();
+    _stashUrlCtrl.dispose();
+    _stashKeyCtrl.dispose();
     super.dispose();
   }
 
@@ -97,6 +106,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _initializedTmdb = true;
     }
 
+    /*
     if (!_initializedStash || _stashKeyController.text != settings.stashApiKey) {
       _stashKeyController
         ..text = settings.stashApiKey
@@ -106,6 +116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _stashUrlController.text = settings.stashUrl; // No cursor management needed usually
       _initializedStash = true;
     }
+    */
 
     Widget _tmdbStatusChip() {
       switch (settings.tmdbStatus) {
@@ -603,88 +614,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         const SizedBox(height: 4),
                         const SizedBox(height: 4),
-                        Text(
-                          'Use StashDB.org metadata for matching file names. Does NOT provide streaming.',
-                          style: Theme.of(context).textTheme.bodySmall,
+                        const Text(
+                          'Configure connect to multiple StashDB instances or TPDB endpoints matches.',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                         const SizedBox(height: 12),
-                        TextField(
-                          controller: _stashUrlController,
-                          decoration: const InputDecoration(
-                            labelText: 'Stash Instance URL',
-                            hintText: 'https://stashdb.org/graphql',
-                            helperText: 'For local Stash: http://localhost:9999/graphql',
-                            border: OutlineInputBorder(),
-                          ),
-                          onChanged: (value) => settings.setStashUrl(value),
-                          onSubmitted: (value) => settings.setStashUrl(value),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _stashKeyController,
-                          obscureText: _obscureStash,
-                          decoration: InputDecoration(
-                            labelText: 'Stash API Key',
-                            hintText: 'Paste your API Key',
-                            border: const OutlineInputBorder(),
-                            suffixIcon: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  tooltip: _obscureStash ? 'Show key' : 'Hide key',
-                                  icon: Icon(
-                                      _obscureStash ? Icons.visibility : Icons.visibility_off),
-                                  onPressed: () => setState(() => _obscureStash = !_obscureStash),
-                                ),
-                                IconButton(
-                                  tooltip: 'Get API Key',
-                                  icon: const Icon(Icons.open_in_new),
-                                  onPressed: () async {
-                                    final uri = Uri.parse('https://stashdb.org/users/');
-                                    if (await canLaunchUrl(uri)) {
-                                      await launchUrl(uri,
-                                          mode: LaunchMode.externalApplication);
-                                    }
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                          onChanged: (value) => settings.setStashApiKey(value),
-                          onSubmitted: (value) => settings.setStashApiKey(value),
-                        ),
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: ElevatedButton.icon(
-                            onPressed: _isTestingStash || settings.stashApiKey.isEmpty
-                                ? null
-                                : () async {
-                                    setState(() => _isTestingStash = true);
-                                    final ok = await _stashService.testConnection(
-                                      settings.stashApiKey, 
-                                      settings.stashUrl
-                                    );
-                                    if (!mounted) return;
-                                    setState(() => _isTestingStash = false);
-                                    
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(ok
-                                            ? 'Connection Successful!'
-                                            : 'Connection Failed. Check URL and API Key.'),
-                                        backgroundColor: ok ? Colors.green : Colors.red,
+                        
+                        // List of Endpoints
+                        if (settings.stashEndpoints.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: Text('No endpoints configured.'),
+                          )
+                        else
+                          ReorderableListView(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            onReorder: (oldIndex, newIndex) {
+                              // Reordering logic if needed in provider
+                              // settings.reorderStashEndpoints(oldIndex, newIndex);
+                            },
+                            children: [
+                              for (int i = 0; i < settings.stashEndpoints.length; i++)
+                                KeyedSubtree(
+                                  key: ValueKey(settings.stashEndpoints[i].id),
+                                  child: Card(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    color: Theme.of(context).colorScheme.surfaceContainer,
+                                    child: ListTile(
+                                      title: Text(settings.stashEndpoints[i].name),
+                                      subtitle: Text(settings.stashEndpoints[i].url, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      leading: Switch(
+                                        value: settings.stashEndpoints[i].enabled,
+                                        onChanged: (val) {
+                                          final ep = settings.stashEndpoints[i];
+                                          ep.enabled = val;
+                                          settings.updateStashEndpoint(ep);
+                                        },
                                       ),
-                                    );
-                                  },
-                            icon: _isTestingStash
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.check),
-                            label: const Text('Test Connection'),
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.edit),
+                                            onPressed: () => _showEndpointDialog(context, settings, settings.stashEndpoints[i]),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete),
+                                            onPressed: () => settings.removeStashEndpoint(settings.stashEndpoints[i].id),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _showEndpointDialog(context, settings, null),
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Endpoint'),
                           ),
                         ),
                       ],
@@ -1037,19 +1030,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ],
                 )
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _typeLabel(LibraryType type) {
-    switch (type) {
-      case LibraryType.movies:
-        return 'Movies';
-      case LibraryType.tv:
         return 'TV';
       case LibraryType.anime:
         return 'Anime';
