@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
 import '../services/task_queue_service.dart';
 
-class TaskStatusOverlay extends StatelessWidget {
+class TaskStatusOverlay extends StatefulWidget {
   const TaskStatusOverlay({super.key});
+
+  @override
+  State<TaskStatusOverlay> createState() => _TaskStatusOverlayState();
+}
+
+class _TaskStatusOverlayState extends State<TaskStatusOverlay> {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -14,9 +21,6 @@ class TaskStatusOverlay extends StatelessWidget {
         
         if (tasks.isEmpty) return const SizedBox.shrink();
 
-        // Show completed tasks for a few seconds (handled by service cleanup),
-        // so we just display the whole list but styled.
-        
         return Positioned(
           bottom: 20,
           right: 20,
@@ -24,8 +28,11 @@ class TaskStatusOverlay extends StatelessWidget {
             elevation: 8,
             borderRadius: BorderRadius.circular(12),
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: Container(
-              width: 300,
+            clipBehavior: Clip.antiAlias,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              width: _expanded ? 350 : 250,
               padding: const EdgeInsets.all(12),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -34,61 +41,80 @@ class TaskStatusOverlay extends StatelessWidget {
                    Row(
                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                      children: [
-                       Text(
-                         'Background Tasks (${active.length})', 
-                         style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                       GestureDetector(
+                         onTap: () => setState(() => _expanded = !_expanded),
+                         child: Row(
+                           children: [
+                             Text(
+                               'Tasks (${active.isNotEmpty ? "${active.length} running" : "${tasks.length} done"})', 
+                               style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                             ),
+                             Icon(_expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up, size: 16),
+                           ],
+                         ),
                        ),
-                       if (active.isNotEmpty)
-                          const SizedBox(
-                            width: 12, height: 12,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
+                       Row(
+                         children: [
+                           if (active.isNotEmpty)
+                              const SizedBox(
+                                width: 12, height: 12,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                           if (_expanded && active.isEmpty)
+                              InkWell(
+                                onTap: () => TaskQueueService.instance.clearCompleted(),
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 8.0),
+                                  child: Icon(Icons.clear_all, size: 18),
+                                ),
+                              )
+                         ],
+                       ),
                      ],
                    ),
-                   const SizedBox(height: 8),
-                   Container(
-                     constraints: const BoxConstraints(maxHeight: 200),
-                     child: ListView.separated(
-                       shrinkWrap: true,
-                       itemCount: tasks.length,
-                       separatorBuilder: (_, __) => const Divider(height: 8),
-                       itemBuilder: (context, index) {
-                         final task = tasks[index];
-                         IconData icon;
-                         Color color;
-                         
-                         switch (task.state) {
-                           case TaskState.running:
-                             icon = Icons.sync;
-                             color = Colors.blue;
-                             break;
-                           case TaskState.completed:
-                             icon = Icons.check_circle;
-                             color = Colors.green;
-                             break;
-                           case TaskState.failed:
-                             icon = Icons.error;
-                             color = Colors.red;
-                             break;
-                         }
+                   if (_expanded) ...[
+                     const SizedBox(height: 8),
+                     const Divider(),
+                     Container(
+                       constraints: const BoxConstraints(maxHeight: 400),
+                       child: ListView.separated(
+                         shrinkWrap: true,
+                         itemCount: tasks.length,
+                         separatorBuilder: (_, __) => const Divider(height: 1),
+                         itemBuilder: (context, index) {
+                           final task = tasks[index];
+                           IconData icon;
+                           Color color;
+                           
+                           switch (task.state) {
+                             case TaskState.running:
+                               icon = Icons.sync;
+                               color = Colors.blue;
+                               break;
+                             case TaskState.completed:
+                               icon = Icons.check_circle;
+                               color = Colors.green;
+                               break;
+                             case TaskState.failed:
+                               icon = Icons.error;
+                               color = Colors.red;
+                               break;
+                           }
 
-                         return Row(
-                           children: [
-                             Icon(icon, size: 16, color: color),
-                             const SizedBox(width: 8),
-                             Expanded(
-                               child: Text(
-                                 task.title,
-                                 style: const TextStyle(fontSize: 12),
-                                 maxLines: 1,
-                                 overflow: TextOverflow.ellipsis,
-                               ),
+                           return ListTile(
+                             contentPadding: EdgeInsets.zero,
+                             dense: true,
+                             leading: Icon(icon, size: 16, color: color),
+                             title: Text(task.title, style: const TextStyle(fontSize: 12)),
+                             subtitle: Text(
+                               task.errorMessage ?? task.state.name, 
+                               style: TextStyle(fontSize: 10, color: color),
                              ),
-                           ],
-                         );
-                       },
+                           );
+                         },
+                       ),
                      ),
-                   ),
+                   ],
                 ],
               ),
             ),

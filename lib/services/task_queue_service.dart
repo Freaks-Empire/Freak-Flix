@@ -45,23 +45,28 @@ class TaskQueueService extends ChangeNotifier {
     try {
       final result = await action();
       task.state = TaskState.completed;
-      _delayedCleanup(id);
+      // _delayedCleanup(id); // Don't auto-remove, let user clear or cap logic handle it
+      _enforceLogLimit();
       notifyListeners();
       return result;
     } catch (e) {
       task.state = TaskState.failed;
       task.errorMessage = e.toString();
       debugPrint('Task "$title" failed: $e');
-      _delayedCleanup(id, delay: const Duration(seconds: 10)); // Keep errors longer
+      _enforceLogLimit(); // Keep errors in log
       notifyListeners();
       rethrow;
     }
   }
 
-  void _delayedCleanup(String id, {Duration delay = const Duration(seconds: 5)}) {
-    Future.delayed(delay, () {
-      _tasks.removeWhere((t) => t.id == id);
-      notifyListeners();
-    });
+  void _enforceLogLimit() {
+    if (_tasks.length > 50) {
+      _tasks.removeRange(50, _tasks.length);
+    }
+  }
+
+  void clearCompleted() {
+    _tasks.removeWhere((t) => t.state != TaskState.running);
+    notifyListeners();
   }
 }
