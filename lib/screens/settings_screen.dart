@@ -481,7 +481,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: library.isLoading
                   ? null
                   : () async {
-                      await library.refetchAllMetadata(metadata);
+                      // Show dialog to ask preference
+                      final choice = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => SimpleDialog(
+                          title: const Text('Refresh Metadata'),
+                          children: [
+                            SimpleDialogOption(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8),
+                                child: Text('Scan missing only (Fast)'),
+                              ),
+                            ),
+                            SimpleDialogOption(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8),
+                                child: Text('Rescan everything (Slow)'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (choice == null) return; // Users dismissed dialog
+
+                      await library.refetchAllMetadata(metadata, onlyMissing: choice);
+                      
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Metadata refresh completed')),

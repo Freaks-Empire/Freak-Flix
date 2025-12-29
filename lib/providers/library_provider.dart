@@ -604,26 +604,37 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> refetchAllMetadata(MetadataService metadata) async {
+  Future<void> refetchAllMetadata(MetadataService metadata, {bool onlyMissing = false}) async {
     isLoading = true;
-    scanningStatus = 'Refreshing metadata for all items...';
+    scanningStatus = 'Refreshing metadata...';
     notifyListeners();
 
     try {
+      final itemsToProcess = onlyMissing 
+          ? _allItems.where((i) => i.tmdbId == null && i.anilistId == null && !i.isAdult).toList()
+          : _allItems;
+
+      if (itemsToProcess.isEmpty) {
+        scanningStatus = 'No missing metadata found.';
+        notifyListeners();
+        return;
+      }
+
       // Parallelize metadata enrichment with a concurrency limit
       const batchSize = 5;
-      for (int i = 0; i < _allItems.length; i += batchSize) {
-        final batch = _allItems.skip(i).take(batchSize).toList();
+      for (int i = 0; i < itemsToProcess.length; i += batchSize) {
+        final batch = itemsToProcess.skip(i).take(batchSize).toList();
         scanningStatus =
-            'Refreshing metadata (${i + 1}/${_allItems.length}) ${batch.first.title ?? batch.first.fileName}';
+            'Refreshing metadata (${i + 1}/${itemsToProcess.length}) ${batch.first.title ?? batch.first.fileName}';
         notifyListeners();
         
         final enrichedBatch = await Future.wait(batch.map((item) => metadata.enrich(item)));
         
         for (int j = 0; j < batch.length; j++) {
-          final index = _allItems.indexWhere((e) => e.id == batch[j].id);
+          final enriched = enrichedBatch[j];
+          final index = _allItems.indexWhere((e) => e.id == enriched.id);
           if (index != -1) {
-            _allItems[index] = enrichedBatch[j];
+            _allItems[index] = enriched;
           }
         }
         notifyListeners();
