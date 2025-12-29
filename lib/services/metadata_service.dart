@@ -8,6 +8,7 @@ import 'anilist_service.dart';
 import 'trakt_service.dart';
 import 'tmdb_service.dart';
 import '../utils/filename_parser.dart';
+import 'package:path/path.dart' as p;
 
 class MetadataService {
   final StashDbService _stash = StashDbService();
@@ -59,8 +60,34 @@ class MetadataService {
     // Rule A: Adult Content -> StashDB ONLY
     if (item.isAdult) {
        if (settings.enableAdultContent && settings.stashApiKey.isNotEmpty) {
-          final stashItem = await _stash.searchScene(
+          // Attempt 1: Search by filename parsed title
+          var stashItem = await _stash.searchScene(
             parsed.seriesTitle, settings.stashApiKey, settings.stashUrl);
+          
+          // Attempt 2: Search by parent folder name (Fallback)
+          if (stashItem == null && item.filePath.isNotEmpty) {
+            try {
+              final parentDir = p.basename(p.dirname(item.filePath));
+              if (parentDir.isNotEmpty && parentDir != parentDir.toUpperCase()) { // Avoid drive letters etc if possible
+                 print('[metadata] StashDB: Filename search failed for "${parsed.seriesTitle}". Retrying with folder: "$parentDir"');
+                 stashItem = await _stash.searchScene(
+                   parentDir, settings.stashApiKey, settings.stashUrl);
+
+                 // Attempt 3: Parse parent folder name and search
+                 if (stashItem == null) {
+                    final parsedFolder = FilenameParser.parse(parentDir);
+                    if (parsedFolder.seriesTitle.isNotEmpty && parsedFolder.seriesTitle != parsed.seriesTitle) {
+                       print('[metadata] StashDB: Folder search failed. Retrying with parsed folder: "${parsedFolder.seriesTitle}"');
+                       stashItem = await _stash.searchScene(
+                         parsedFolder.seriesTitle, settings.stashApiKey, settings.stashUrl);
+                    }
+                 }
+              }
+            } catch (e) {
+              print('[metadata] Error extracting parent folder: $e');
+            }
+          }
+
           if (stashItem != null) {
             return item.copyWith(
               title: stashItem.title,
