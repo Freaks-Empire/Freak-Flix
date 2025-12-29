@@ -23,7 +23,6 @@ class HomeMediaCard extends StatelessWidget {
     final remainingLabel = totalSeconds > 0
         ? '${_formatDurationShort(Duration(seconds: totalSeconds - watchedSeconds).abs())} left'
         : '';
-    final daysLabel = _formatDaysAgo(item.lastModified);
     final subtitle = _buildSubtitle(item);
 
     return GestureDetector(
@@ -81,7 +80,6 @@ class HomeMediaCard extends StatelessWidget {
                           _pillText(watchedLabel),
                           if (remainingLabel.isNotEmpty)
                             _pillText(remainingLabel),
-                          _pillText(daysLabel),
                         ],
                       ),
                     ),
