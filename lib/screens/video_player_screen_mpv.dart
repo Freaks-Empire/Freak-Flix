@@ -67,10 +67,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     debugPrint('VideoPlayerScreen: _playCurrent called for item ${_currentItem.id}');
     debugPrint('VideoPlayerScreen: Initial path: $path');
     
-    // Check if this is a OneDrive item that needs a fresh link
-    // IDs start with 'onedrive_' (underscore), not colon. folderPath starts with 'onedrive:'.
-    if (_currentItem.streamUrl != null && _currentItem.id.startsWith('onedrive_')) {
-       debugPrint('VideoPlayerScreen: OneDrive item detected. Attempting refresh...');
+    // Check if this is a OneDrive item (needs a network link)
+    // IDs start with 'onedrive_' (underscore).
+    final isOneDrive = _currentItem.id.startsWith('onedrive_');
+    
+    if (isOneDrive) {
+       debugPrint('VideoPlayerScreen: OneDrive item detected. Attempting refresh/fetch...');
        try {
           if (_currentItem.folderPath.startsWith('onedrive:')) {
              final pathAfterPrefix = _currentItem.folderPath.substring('onedrive:'.length);
@@ -112,6 +114,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     }
 
     setState(() => _isLoadingLink = false);
+    
+    // Final check: If path is still an internal ID, fail.
+    if (path.startsWith('onedrive') && !path.startsWith('http') && !path.contains('/') && !path.contains('\\')) {
+       // A bit loose check but 'onedrive_account_id' has no slashes usually, except inside the ID part?
+       // Better: check if it looks like a URL or absolute path.
+       // Windows path: C:\... or \\Server...
+       // URL: http...
+       // Our OneDrive internal IDs: onedrive_...
+       
+       if (path.startsWith('onedrive_')) {
+          setState(() {
+             _errorMessage = 'Could not resolve playback URL for cloud item.\nPlease try rescanning or check your internet connection.';
+          });
+          return;
+       }
+    }
+
     debugPrint('VideoPlayerScreen: Opening player with path: $path');
     await player.open(Media(path));
     

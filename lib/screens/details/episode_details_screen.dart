@@ -111,6 +111,7 @@ class EpisodeDetailsScreen extends StatelessWidget {
                         textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       onPressed: () {
+                         debugPrint('EpisodeDetailsScreen: Play button pressed for ${matchedFile?.id}');
                          Navigator.of(context).push(
                            MaterialPageRoute(
                              builder: (_) => VideoPlayerScreen(

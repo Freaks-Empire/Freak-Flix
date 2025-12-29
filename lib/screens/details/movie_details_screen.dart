@@ -428,6 +428,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: _current.filePath.isNotEmpty ? () {
+                 debugPrint('MovieDetailsScreen: Play button pressed for ${_current.id}');
                  playback.start(_current);
                  Navigator.of(context).push(
                    MaterialPageRoute(
