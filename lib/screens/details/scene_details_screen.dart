@@ -131,7 +131,8 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildHeroPoster(context),
+                      children: [
+                        _buildHeroPoster(context, true),
                         const SizedBox(width: 48),
                         Expanded(child: _buildHeroDetails(context, library, playback, theme, textColor, mutedTextColor)),
                       ],
@@ -140,7 +141,8 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Center(child: _buildHeroPoster(context)),
+                      children: [
+                        Center(child: _buildHeroPoster(context, false)),
                         const SizedBox(height: 24),
                         _buildHeroDetails(context, library, playback, theme, textColor, mutedTextColor),
                       ],
@@ -229,17 +231,14 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
     );
   }
 
-  Widget _buildHeroPoster(BuildContext context) {
-    // For scenes, maybe Landscape poster? Or standard portrait if we have it?
-    // StashDB often gives landscape thumbnails (screenshots).
-    // Let's check aspect ratio of posterUrl.
-    // Assuming Portrait for uniformity with Movies, but if it's a screenshot it might look cropped.
-    // Let's use a flexible container.
+  Widget _buildHeroPoster(BuildContext context, bool isDesktop) {
+    // Landscape 16:9 for scenes
+    final width = isDesktop ? 480.0 : 340.0;
+    final height = width * 9 / 16;
+    
     return Container(
-      width: 300, 
-      height: 450, // Force portrait for consistency? Or 300x200 for landscape?
-                   // User said "similar look", usually means vertical poster.
-                   // If StashDB provides landscape, we might want to `fit: BoxFit.cover` which crops it centrally.
+      width: width, 
+      height: height,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
