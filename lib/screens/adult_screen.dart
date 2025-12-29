@@ -176,11 +176,8 @@ class _AdultScreenState extends State<AdultScreen> {
         // Pagination Footer
         if (totalPages > 1)
           Padding(
-        if (totalPages > 1)
-          Padding(
             padding: const EdgeInsets.symmetric(vertical: 24.0, horizontal: 16.0),
             child: _buildPagination(context, totalPages),
-          ),
           ),
       ],
     );

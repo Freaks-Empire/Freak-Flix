@@ -467,7 +467,7 @@ class StashDbService {
           baseUrl: ep.url,
         );
 
-        final p = isStashBox ? data?['performer'] : data?['findPerformer'];
+        final p = (isStashBox ? data?['performer'] : data?['findPerformer']) as Map<String, dynamic>?;
         if (p != null) {
           return StashPerformer.fromJson(p as Map<String, dynamic>);
         }

@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/profile_provider.dart';
 import '../models/user_profile.dart';
+import '../models/stash_endpoint.dart';
+import 'package:uuid/uuid.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -70,7 +72,15 @@ class _SetupScreenState extends State<SetupScreen> {
       await settings.setTmdbApiKey(_tmdbKeyController.text);
     }
     if (_stashKeyController.text.isNotEmpty) {
-      await settings.setStashApiKey(_stashKeyController.text);
+       // Create a default endpoint
+       final ep = StashEndpoint(
+          id: const Uuid().v4(), 
+          name: 'StashDB', 
+          url: 'https://stashdb.org/graphql', 
+          apiKey: _stashKeyController.text, 
+          enabled: true
+       );
+       settings.addStashEndpoint(ep);
     }
 
     final name = _profileNameController.text.trim();

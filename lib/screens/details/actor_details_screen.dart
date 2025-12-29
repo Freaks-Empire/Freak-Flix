@@ -79,7 +79,6 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                final settings = context.read<SettingsProvider>();
                final service = StashDbService();
                final realId = id.replaceFirst('stashdb:', '');
-               final realId = id.replaceFirst('stashdb:', '');
                final fetched = await service.getPerformer(realId, settings.stashEndpoints);
                
                if (fetched != null) {

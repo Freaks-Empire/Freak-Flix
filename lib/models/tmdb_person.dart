@@ -9,6 +9,7 @@ class TmdbPerson {
   final String? placeOfBirth;
   final String? profilePath;
   final String? deathDay;
+  final List<TmdbItem> knownFor;
   final Map<String, String> externalIds;
 
   const TmdbPerson({

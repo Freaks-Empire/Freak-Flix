@@ -56,7 +56,7 @@ class StashPerformer {
                  return desc != null && desc.isNotEmpty ? '$loc ($desc)' : loc; 
               }
               return item.toString();
-           }).toList();
+           }).cast<String>().toList();
         }
         return [];
     }

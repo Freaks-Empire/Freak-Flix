@@ -5,6 +5,7 @@ class TmdbItem {
   final int id;
   final String title;
   final String? posterUrl;
+  final String? backdropUrl;
   final TmdbMediaType type;
   final int? releaseYear;
   final double? voteAverage;
@@ -17,6 +18,7 @@ class TmdbItem {
     required this.title,
     required this.type,
     this.posterUrl,
+    this.backdropUrl,
     this.releaseYear,
     this.voteAverage,
     this.voteCount,
@@ -39,6 +41,7 @@ class TmdbItem {
         '';
 
     final posterPath = map['poster_path'] as String?;
+    final backdropPath = map['backdrop_path'] as String?;
     final dateStr = (mediaType == TmdbMediaType.tv
             ? map['first_air_date']
             : map['release_date'])
@@ -52,6 +55,7 @@ class TmdbItem {
       title: title,
       type: mediaType,
       posterUrl: posterPath != null ? '$imageBase$posterPath' : null,
+      backdropUrl: backdropPath != null ? '$imageBase$backdropPath' : null,
       releaseYear: year,
       voteAverage: (map['vote_average'] as num?)?.toDouble(),
       voteCount: (map['vote_count'] as num?)?.toInt(),
@@ -65,6 +69,7 @@ class TmdbItem {
       'title': title,
       'type': type == TmdbMediaType.tv ? 'tv' : 'movie',
       'posterUrl': posterUrl,
+      'backdropUrl': backdropUrl,
       'releaseYear': releaseYear,
       'voteAverage': voteAverage,
       'voteCount': voteCount,
@@ -79,6 +84,7 @@ class TmdbItem {
       title: json['title'] as String,
       type: json['type'] == 'tv' ? TmdbMediaType.tv : TmdbMediaType.movie,
       posterUrl: json['posterUrl'] as String?,
+      backdropUrl: json['backdropUrl'] as String?,
       releaseYear: json['releaseYear'] as int?,
       voteAverage: (json['voteAverage'] as num?)?.toDouble(),
       voteCount: json['voteCount'] as int?,
