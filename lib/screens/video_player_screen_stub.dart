@@ -28,6 +28,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   late MediaItem _currentItem;
   late int _currentIndex;
   BoxFit _fit = BoxFit.contain;
+  String? _errorMessage;
+  bool _isLoadingLink = false;
 
   @override
   void initState() {
@@ -39,16 +41,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     player = Player();
     controller = VideoController(player);
     
+    // Subscribe to errors
+    player.stream.error.listen((event) {
+       debugPrint('VideoPlayerScreen Web ERROR: $event');
+       setState(() {
+          _errorMessage = 'Player Error: $event';
+       });
+    });
+
+    // Subscribe to logs (warn/error)
+    player.stream.log.listen((event) {
+       if (event.level == 'error' || event.level == 'warn') {
+          debugPrint('VideoPlayerScreen Web LOG [${event.level}]: ${event.message}');
+       }
+    });
+
     _playCurrent();
   }
 
   Future<void> _playCurrent() async {
+    setState(() => _isLoadingLink = true);
     String path = _currentItem.streamUrl ?? _currentItem.filePath;
     
-    // Check if this is a OneDrive item that needs a fresh link
-    if (_currentItem.streamUrl != null && _currentItem.id.startsWith('onedrive:')) {
+    debugPrint('VideoPlayerScreen Web: _playCurrent called for item ${_currentItem.id}');
+    
+    // Check if this is a OneDrive item (needs a network link)
+    // IDs start with 'onedrive_' (underscore).
+    final isOneDrive = _currentItem.id.startsWith('onedrive_');
+
+    if (isOneDrive) {
+       debugPrint('VideoPlayerScreen Web: OneDrive item detected. Attempting refresh/fetch...');
        try {
-          // folderPath format: onedrive:{accountId}/path/to/folder
           if (_currentItem.folderPath.startsWith('onedrive:')) {
              final pathAfterPrefix = _currentItem.folderPath.substring('onedrive:'.length);
              final accountId = pathAfterPrefix.split('/').first;
@@ -58,18 +81,49 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 final realItemId = _currentItem.id.substring(idPrefix.length);
                 
                 debugPrint('Refreshing OneDrive URL for item $realItemId account $accountId');
-                final fresh = await GraphAuthService.instance.getDownloadUrl(accountId, realItemId);
+                
+                // Try HLS first for quality selection
+                String? fresh = await GraphAuthService.instance.getHlsUrl(accountId, realItemId);
+                if (fresh == null) {
+                    debugPrint('VideoPlayerScreen Web: HLS unavailable (returned null), falling back to download URL');
+                    fresh = await GraphAuthService.instance.getDownloadUrl(accountId, realItemId);
+                } else {
+                    debugPrint('VideoPlayerScreen Web: HLS URL obtained successfully: $fresh');
+                }
+
                 if (fresh != null) {
                    path = fresh;
-                   debugPrint('Got fresh URL: $fresh');
+                   debugPrint('VideoPlayerScreen Web: Playing with fresh URL: $path');
+                } else {
+                   debugPrint('VideoPlayerScreen Web: Could not refresh download URL, using original streamUrl');
                 }
              }
           }
        } catch (e) {
-          debugPrint('Error refreshing URL: $e');
+          debugPrint('VideoPlayerScreen Web: Error refreshing URL: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error refreshing link: $e'), backgroundColor: Colors.red),
+            );
+          }
+       }
+    } else {
+       debugPrint('VideoPlayerScreen Web: Local/Static item. Skipping OneDrive refresh.');
+    }
+
+    setState(() => _isLoadingLink = false);
+    
+    // Final check: If path is still an internal ID, fail.
+    if (path.startsWith('onedrive') && !path.startsWith('http') && !path.contains('/') && !path.contains('\\')) {
+       if (path.startsWith('onedrive_')) {
+          setState(() {
+             _errorMessage = 'Could not resolve playback URL for cloud item.\nPlease try rescanning or check your internet connection.';
+          });
+          return;
        }
     }
 
+    debugPrint('VideoPlayerScreen Web: Opening player with path: $path');
     await player.open(Media(path));
   }
   
@@ -117,6 +171,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               fit: _fit,
             ),
           ),
+          if (_errorMessage != null)
+             Container(
+                color: Colors.black87,
+                child: Center(
+                   child: Padding(
+                     padding: const EdgeInsets.all(24.0),
+                     child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                           const Icon(Icons.error, color: Colors.red, size: 48),
+                           const SizedBox(height: 16),
+                           Text(
+                              'Playback Error',
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+                           ),
+                           const SizedBox(height: 8),
+                           Text(
+                              _errorMessage!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.white70),
+                           ),
+                           const SizedBox(height: 24),
+                           ElevatedButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Go Back'),
+                           )
+                        ],
+                     ),
+                   ),
+                ),
+             ),
           VideoControls(
             player: player,
             controller: controller,
@@ -129,6 +214,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             fit: _fit,
             onFitChanged: (v) => setState(() => _fit = v),
           ),
+          if (_isLoadingLink)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Refreshing link...', style: TextStyle(color: Colors.white)),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
