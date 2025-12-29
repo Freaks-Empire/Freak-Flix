@@ -321,6 +321,36 @@ class StashDbService {
     }
   ''';
 
+  static const String _queryFindMovieBox = r'''
+    query FindMovieBox($id: ID!) {
+      findMovie(id: $id) {
+        id
+        name
+        synopsis
+        date
+        duration
+        front_image {
+          url
+        }
+        back_image {
+          url
+        }
+        studio {
+          name
+        }
+        performers {
+          performer {
+            id
+            name
+            images {
+              url
+            }
+          }
+        }
+      }
+    }
+  ''';
+
   // --- Public Methods ---
 
   /// Tests the connection to StashDB using the provided API key.
@@ -362,6 +392,20 @@ class StashDbService {
         final sceneData = data?['findScene'];
         if (sceneData != null) {
             return _mapSceneToMediaItem(sceneData, 'Unknown');
+        } else if (isStashBox) {
+          // Fallback: Check if it's a Movie (TPDB often distinguishes strictly)
+          debugPrint('StashDB [${ep.name}]: Scene not found, trying Movie...');
+          final movieData = await _executeQuery(
+            query: _queryFindMovieBox,
+            operationName: 'FindMovieBox',
+            variables: {'id': id},
+            apiKey: ep.apiKey,
+            baseUrl: ep.url,
+          );
+          final movie = movieData?['findMovie'];
+          if (movie != null) {
+             return _mapSceneToMediaItem(movie, 'Unknown');
+          }
         }
       } catch (e) {
         debugPrint('StashDB [${ep.name}]: Get scene $id failed: $e');

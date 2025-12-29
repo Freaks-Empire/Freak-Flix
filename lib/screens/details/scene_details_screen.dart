@@ -441,11 +441,18 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
               String input = controller.text.trim();
               
               // Basic logic to extract UUID if full URL pasted
-              // UUID regex: [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
+              // 1. Try extracting UUID
               final uuidRegex = RegExp(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', caseSensitive: false);
-              final match = uuidRegex.firstMatch(input);
-              if (match != null) {
-                input = match.group(0)!;
+              final uuidMatch = uuidRegex.firstMatch(input);
+              if (uuidMatch != null) {
+                input = uuidMatch.group(0)!;
+              } else if (input.startsWith('http')) {
+                // 2. If it's a URL but no UUID, assume the last segment is the ID/Slug (e.g. TPDB slug)
+                // Example: https://theporndb.net/movies/some-slug-name
+                final uri = Uri.tryParse(input);
+                if (uri != null && uri.pathSegments.isNotEmpty) {
+                  input = uri.pathSegments.last;
+                }
               }
               
               if (input.isNotEmpty) {
