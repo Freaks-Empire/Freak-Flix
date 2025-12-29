@@ -131,7 +131,6 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                      children: [
                         _buildHeroPoster(context, true),
                         const SizedBox(width: 48),
                         Expanded(child: _buildHeroDetails(context, library, playback, theme, textColor, mutedTextColor)),
@@ -140,7 +139,6 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                   else
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
                       children: [
                         Center(child: _buildHeroPoster(context, false)),
                         const SizedBox(height: 24),
