@@ -65,10 +65,21 @@ class MetadataService {
             parsed.seriesTitle, settings.stashApiKey, settings.stashUrl);
           
           // Attempt 2: Search by parent folder name (Fallback)
-          if (stashItem == null && item.filePath.isNotEmpty) {
+          if (stashItem == null) {
             try {
-              final parentDir = p.basename(p.dirname(item.filePath));
-              if (parentDir.isNotEmpty && parentDir != parentDir.toUpperCase()) { // Avoid drive letters etc if possible
+              String parentDir = '';
+              
+              // Local File Strategy
+              if (item.id.startsWith('onedrive')) {
+                  // OneDrive items: filePath is just filename. Use folderPath.
+                  // folderPath format: onedrive:ACCOUNT_ID/Path/To/Folder
+                  parentDir = p.basename(item.folderPath);
+              } else if (item.filePath.isNotEmpty) {
+                  // Local items: filePath is absolute path.
+                  parentDir = p.basename(p.dirname(item.filePath));
+              }
+
+              if (parentDir.isNotEmpty && parentDir != parentDir.toUpperCase() && parentDir != '.') { 
                  print('[metadata] StashDB: Filename search failed for "${parsed.seriesTitle}". Retrying with folder: "$parentDir"');
                  stashItem = await _stash.searchScene(
                    parentDir, settings.stashApiKey, settings.stashUrl);
