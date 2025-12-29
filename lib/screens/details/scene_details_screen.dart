@@ -230,10 +230,21 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
   }
 
   Widget _buildHeroPoster(BuildContext context, bool isDesktop) {
-    // Landscape 16:9 for scenes
-    final width = isDesktop ? 480.0 : 340.0;
-    final height = width * 9 / 16;
+    // Condition: Movies = Portrait (2:3), Scenes = Landscape (16:9)
+    final isMovie = _current.type == MediaType.movie;
     
+    // Adjust dimensions based on orientation
+    final double width = isDesktop 
+        ? (isMovie ? 300.0 : 480.0) 
+        : (isMovie ? 220.0 : 340.0); // Mobile width
+        
+    final double height = isMovie ? (width * 1.5) : (width * 9 / 16);
+    
+    // Prioritize Poster for Movies, Backdrop for Scenes
+    final imageUrl = isMovie 
+        ? (_current.posterUrl ?? _current.backdropUrl) 
+        : (_current.backdropUrl ?? _current.posterUrl);
+
     return Container(
       width: width, 
       height: height,
@@ -245,7 +256,7 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
       ),
       clipBehavior: Clip.antiAlias,
       child: SafeNetworkImage(
-        url: _current.backdropUrl ?? _current.posterUrl, 
+        url: imageUrl, 
         fit: BoxFit.cover,
         errorBuilder: (_,__,___) => Container(color: Colors.grey[900], child: const Icon(Icons.movie, size: 50, color: Colors.white24)),
       ),

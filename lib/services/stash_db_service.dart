@@ -439,7 +439,7 @@ class StashDbService {
           );
           final movie = movieData?['findMovie'];
           if (movie != null) {
-             return _mapSceneToMediaItem(movie, 'Unknown');
+             return _mapSceneToMediaItem(movie, 'Unknown', type: MediaType.movie);
           }
         }
       } catch (e) {
@@ -481,7 +481,11 @@ class StashDbService {
 
           if (results != null && results.isNotEmpty) {
             debugPrint('StashDB [${ep.name}]: Found match via $opName');
-            return _mapSceneToMediaItem(results.first, title);
+            return _mapSceneToMediaItem(
+                results.first, 
+                title, 
+                type: isMovie ? MediaType.movie : MediaType.scene
+            );
           }
         } catch (e) {
           // Ignore specific query errors to allow fallbacks
@@ -703,7 +707,7 @@ class StashDbService {
     return cleaned;
   }
 
-  MediaItem _mapSceneToMediaItem(dynamic sceneData, String originalFileName) {
+  MediaItem _mapSceneToMediaItem(dynamic sceneData, String originalFileName, {MediaType type = MediaType.scene}) {
     final scene = sceneData as Map<String, dynamic>;
     
     // Extract Poster
@@ -802,7 +806,7 @@ class StashDbService {
       sizeBytes: 0, 
       lastModified: date ?? DateTime.now(),
       year: date?.year,
-      type: MediaType.movie, 
+      type: type, 
       posterUrl: poster,
       backdropUrl: backdrop,
       runtimeMinutes: (durationSeconds != null) ? (durationSeconds / 60).round() : null,
