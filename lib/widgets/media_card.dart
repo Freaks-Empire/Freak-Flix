@@ -10,7 +10,8 @@ import 'safe_network_image.dart';
 class MediaCard extends StatelessWidget {
   final MediaItem item;
   final String? badge;
-  const MediaCard({super.key, required this.item, this.badge});
+  final double? posterAspectRatio;
+  const MediaCard({super.key, required this.item, this.badge, this.posterAspectRatio});
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +44,7 @@ class MediaCard extends StatelessWidget {
                   child: SizedBox(
                     height: posterHeight,
                     child: AspectRatio(
-                      aspectRatio: 2 / 3,
+                      aspectRatio: posterAspectRatio ?? 2 / 3,
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                       child: Stack(
