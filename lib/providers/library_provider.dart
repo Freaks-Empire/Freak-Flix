@@ -1572,7 +1572,7 @@ Future<void> _walkOneDrivePage({
     final parsed = FilenameParser.parse(name);
     
     // Apply Sidecar overrides if present
-    final effectiveTitle = sidecarData?['title'] as String? ?? parsed.title;
+    final effectiveTitle = sidecarData?['title'] as String? ?? parsed.seriesTitle;
     final effectiveYear = sidecarData?['year'] as int? ?? parsed.year;
     final effectiveTmdbId = sidecarData?['tmdbId'] as int?;
     final effectiveAnilistId = sidecarData?['anilistId'] as int?;

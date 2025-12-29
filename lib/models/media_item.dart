@@ -116,6 +116,7 @@ class MediaItem {
 
   // Manual or StashDB ID for overriding/enrichment
   String? stashId;
+  String? imdbId; // Added for NFO support
 
   MediaItem({
     required this.id,
@@ -148,6 +149,7 @@ class MediaItem {
     this.cast = const [],
     this.voteCount,
     this.stashId,
+    this.imdbId,
   });
 
   MediaItem copyWith({
@@ -174,11 +176,13 @@ class MediaItem {
     List<CastMember>? cast,
     int? voteCount,
     String? stashId,
+    String? imdbId,
+    String? fileName, 
   }) {
     return MediaItem(
       id: id,
       filePath: filePath,
-      fileName: fileName,
+      fileName: fileName ?? this.fileName,
       folderPath: folderPath,
       sizeBytes: sizeBytes,
       lastModified: lastModified,
@@ -236,6 +240,7 @@ class MediaItem {
         'cast': cast.map((c) => c.toJson()).toList(),
         'voteCount': voteCount,
         'stashId': stashId,
+        'imdbId': imdbId,
       };
 
   factory MediaItem.fromJson(Map<String, dynamic> json) {
@@ -275,6 +280,7 @@ class MediaItem {
           .toList(),
       voteCount: json['voteCount'] as int?,
       stashId: json['stashId'] as String?,
+      imdbId: json['imdbId'] as String?,
     );
   }
 

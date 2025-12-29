@@ -175,6 +175,7 @@ class GraphAuthService {
   static const _scopes = [
     'User.Read',
     'Files.Read',
+    'Files.ReadWrite', // Required for Sidecar Upload & Renaming
     'offline_access', // Needed to receive refresh tokens.
   ];
 
