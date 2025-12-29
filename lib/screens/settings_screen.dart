@@ -24,6 +24,7 @@ import '../services/data_backup_service.dart'; // NEW
 import 'onedrive_folder_picker.dart';
 
 import 'package:file_picker/file_picker.dart';
+import '../widgets/activity_command_center.dart'; // NEW
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -149,6 +150,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Header
         Text('Settings', style: Theme.of(context).textTheme.headlineMedium),
         const SizedBox(height: 16),
+        
+        // Command Center (Activity Dashboard)
+        const ActivityCommandCenter(),
+        const SizedBox(height: 24),
         
         // Profile Section
         if (profileProvider.activeProfile != null) ...[
