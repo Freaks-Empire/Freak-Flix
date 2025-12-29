@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../providers/library_provider.dart';
 import '../widgets/navigation_dock.dart';
+import '../widgets/task_status_overlay.dart';
 
 class MainScreen extends StatelessWidget {
   final StatefulNavigationShell? navigationShell;
@@ -82,6 +83,9 @@ class MainScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+              
+              // Task Queue Overlay
+              const TaskStatusOverlay(),
           ],
         ),
      );

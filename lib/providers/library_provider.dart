@@ -22,6 +22,7 @@ import '../services/persistence_service.dart';
 import '../services/tmdb_discover_service.dart';
 import '../services/metadata_service.dart';
 import '../services/sidecar_service.dart';
+import '../services/task_queue_service.dart';
 
 import 'settings_provider.dart';
 import '../utils/filename_parser.dart';
@@ -757,30 +758,23 @@ class LibraryProvider extends ChangeNotifier {
 
                   // 1. Write NFO Sidecar
                   // We address folder by PATH to avoid needing folder ID lookup
-                  // enriched.folderPath format: onedrive:ACCOUNTID/Path/To/Folder
                   final prefix = 'onedrive:$accountId';
                   if (enriched.folderPath.startsWith(prefix)) {
                       var relPath = enriched.folderPath.substring(prefix.length);
                       if (relPath.startsWith('/')) relPath = relPath.substring(1);
-                      // If empty, it's root.
                       
                       final parentRef = relPath.isEmpty ? 'root' : 'root:/$relPath';
                       final nfoName = '${p.basenameWithoutExtension(enriched.fileName)}.nfo';
                       final nfoContent = SidecarService.generateNfo(enriched);
                       
-                      // Fire and forget (don't await strictly to block UI)
-                      graph_auth.GraphAuthService.instance.uploadString(
-                          accountId: accountId,
-                          parentId: parentRef, // "root:/Path/To/Folder" works for parentId arg in my implementation? 
-                          // Wait, my uploadString expects a GUID or uses /items/ID:/name.
-                          // I need to adjust uploadString or pass a specific "root:/Path" string if my impl supports it.
-                          // My impl: Uri.parse('$graphBaseUrl/me/drive/items/$parentId:/$filename:/content');
-                          // If parentId is "root:/Folder", URL becomes .../items/root:/Folder:/filename:/content.
-                          // This is VALID Graph syntax! "items/root:/Path/To/Parent:/ChildName:/content"
-                          filename: nfoName,
-                          content: nfoContent,
-                      ).then((ok) {
-                         if (ok) debugPrint('LibraryProvider: Wrote sidecar $nfoName');
+                      // Track in Task Queue
+                      TaskQueueService.instance.run('Saving metadata: $nfoName', () async {
+                           await graph_auth.GraphAuthService.instance.uploadString(
+                              accountId: accountId,
+                              parentId: parentRef, 
+                              filename: nfoName,
+                              content: nfoContent,
+                          );
                       });
                   }
 
@@ -794,15 +788,14 @@ class LibraryProvider extends ChangeNotifier {
                       final safeName = expectedName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '');
                       
                       if (enriched.fileName != safeName) {
-                          debugPrint('LibraryProvider: Renaming scene "${enriched.fileName}" -> "$safeName"');
-                          graph_auth.GraphAuthService.instance.renameItem(
-                              accountId: accountId,
-                              itemId: itemId,
-                              newName: safeName
-                          ).then((ok) {
+                          TaskQueueService.instance.run('Renaming: ${enriched.fileName} -> $safeName', () async {
+                              final ok = await graph_auth.GraphAuthService.instance.renameItem(
+                                  accountId: accountId,
+                                  itemId: itemId,
+                                  newName: safeName
+                              );
                               if (ok) {
                                 // Update local item immediately to reflect change
-                                // Note: filePath/folderPath might de-sync slightly until next scan
                                 final idx = _allItems.indexWhere((e) => e.id == enriched.id);
                                 if (idx != -1) {
                                     _allItems[idx] = enriched.copyWith(fileName: safeName);
