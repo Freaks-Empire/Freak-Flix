@@ -448,6 +448,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: const Icon(Icons.sync),
               label: const Text('Rescan All Libraries'),
             ),
+            FilledButton.icon(
+              onPressed: library.isLoading
+                  ? null
+                  : () {
+                      library.enforceSidecarsAndNaming();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Enforcing metadata and naming rules...')),
+                        );
+                      }
+                    },
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.tertiary,
+                foregroundColor: Theme.of(context).colorScheme.onTertiary,
+              ),
+              icon: const Icon(Icons.file_present),
+              label: const Text('Enforce Metadata & Naming'),
+            ),
             OutlinedButton.icon(
               onPressed: library.isLoading
                   ? null

@@ -745,68 +745,11 @@ class LibraryProvider extends ChangeNotifier {
         
         for (int j = 0; j < batch.length; j++) {
           final enriched = enrichedBatch[j];
-          final idx = _allItems.indexWhere((e) => e.filePath == enriched.filePath);
-          if (idx != -1) _allItems[idx] = enriched;
+           if (idx != -1) _allItems[idx] = enriched;
           
-          // --- Persistent Metadata (Sidecar) & Renaming Logic ---
-          if (enriched.id.startsWith('onedrive_') && enriched.tmdbId != null) {
-              final parts = enriched.id.split('_');
-               // onedrive_ACCOUNTID_ITEMID
-              if (parts.length >= 3) {
-                  final accountId = parts[1];
-                  final itemId = parts[2]; // File ID
-
-                  // 1. Write NFO Sidecar
-                  // We address folder by PATH to avoid needing folder ID lookup
-                  final prefix = 'onedrive:$accountId';
-                  if (enriched.folderPath.startsWith(prefix)) {
-                      var relPath = enriched.folderPath.substring(prefix.length);
-                      if (relPath.startsWith('/')) relPath = relPath.substring(1);
-                      
-                      final parentRef = relPath.isEmpty ? 'root' : 'root:/$relPath';
-                      final nfoName = '${p.basenameWithoutExtension(enriched.fileName)}.nfo';
-                      final nfoContent = SidecarService.generateNfo(enriched);
-                      
-                      // Track in Task Queue
-                      TaskQueueService.instance.run('Saving metadata: $nfoName', () async {
-                           await graph_auth.GraphAuthService.instance.uploadString(
-                              accountId: accountId,
-                              parentId: parentRef, 
-                              filename: nfoName,
-                              content: nfoContent,
-                          );
-                      });
-                  }
-
-                  // 2. Rename SCENES (Adult) if needed
-                  if (enriched.type == MediaType.scene && enriched.title != null) {
-                      final yearPart = enriched.year != null ? ' (${enriched.year})' : '';
-                      final ext = p.extension(enriched.fileName);
-                      final expectedName = '${enriched.title}$yearPart$ext';
-                      
-                      // Sanitize filename (remove / \ : * ? " < > |)
-                      final safeName = expectedName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '');
-                      
-                      if (enriched.fileName != safeName) {
-                          TaskQueueService.instance.run('Renaming: ${enriched.fileName} -> $safeName', () async {
-                              final ok = await graph_auth.GraphAuthService.instance.renameItem(
-                                  accountId: accountId,
-                                  itemId: itemId,
-                                  newName: safeName
-                              );
-                              if (ok) {
-                                // Update local item immediately to reflect change
-                                final idx = _allItems.indexWhere((e) => e.id == enriched.id);
-                                if (idx != -1) {
-                                    _allItems[idx] = enriched.copyWith(fileName: safeName);
-                                    notifyListeners();
-                                }
-                              }
-                          });
-                      }
-                  }
-              }
-          }
+           // --- Persistent Metadata (Sidecar) & Renaming Logic ---
+           _queuePersistentMetadata(enriched);
+        }
         }
         notifyListeners();
 
@@ -815,6 +758,88 @@ class LibraryProvider extends ChangeNotifier {
            await saveLibrary();
         }
       }
+    }
+  }
+
+  /// Manually runs the Sidecar Write & Auto-Rename logic on ALL current items.
+  void enforceSidecarsAndNaming() {
+    _setScanStatus('Enforcing metadata & naming rules...');
+    notifyListeners();
+    
+    int processed = 0;
+    for (final item in _allItems) {
+       _queuePersistentMetadata(item);
+       processed++;
+       if (processed % 50 == 0) notifyListeners();
+    }
+    
+    // We don't await the queue here, just the scheduling.
+    Future.delayed(const Duration(seconds: 1), () {
+        _setScanStatus(''); // Clear status
+        notifyListeners();
+    });
+  }
+
+  /// Helper to queue Sidecar writes and Renaming for an item
+  void _queuePersistentMetadata(MediaItem enriched) {
+    if (!enriched.id.startsWith('onedrive_')) return;
+    
+    // Check if we have enough metadata to be useful
+    final hasMeta = enriched.tmdbId != null || enriched.anilistId != null || enriched.type == MediaType.scene;
+    if (!hasMeta) return;
+
+    final parts = enriched.id.split('_');
+    if (parts.length < 3) return;
+    
+    final accountId = parts[1];
+    final itemId = parts[2];
+
+    // 1. Write NFO Sidecar
+    final prefix = 'onedrive:$accountId';
+    if (enriched.folderPath.startsWith(prefix)) {
+        var relPath = enriched.folderPath.substring(prefix.length);
+        if (relPath.startsWith('/')) relPath = relPath.substring(1);
+        final parentRef = relPath.isEmpty ? 'root' : 'root:/$relPath';
+        
+        final nfoName = '${p.basenameWithoutExtension(enriched.fileName)}.nfo';
+        
+        // "Enforce" implies ensuring it exists.
+        final nfoContent = SidecarService.generateNfo(enriched);
+        
+        TaskQueueService.instance.run('Saving metadata: $nfoName', () async {
+             await graph_auth.GraphAuthService.instance.uploadString(
+                accountId: accountId,
+                parentId: parentRef, 
+                filename: nfoName,
+                content: nfoContent,
+            );
+        });
+    }
+
+    // 2. Rename SCENES (Adult) if needed
+    if (enriched.type == MediaType.scene && enriched.title != null) {
+        final yearPart = enriched.year != null ? ' (${enriched.year})' : '';
+        final ext = p.extension(enriched.fileName);
+        final expectedName = '${enriched.title}$yearPart$ext';
+        
+        final safeName = expectedName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '');
+        
+        if (enriched.fileName != safeName) {
+            TaskQueueService.instance.run('Renaming: ${enriched.fileName} -> $safeName', () async {
+                final ok = await graph_auth.GraphAuthService.instance.renameItem(
+                    accountId: accountId,
+                    itemId: itemId,
+                    newName: safeName
+                );
+                if (ok) {
+                  final idx = _allItems.indexWhere((e) => e.id == enriched.id);
+                  if (idx != -1) {
+                      _allItems[idx] = enriched.copyWith(fileName: safeName);
+                      notifyListeners();
+                  }
+                }
+            });
+        }
     }
   }
 
