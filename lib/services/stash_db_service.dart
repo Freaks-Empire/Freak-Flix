@@ -250,6 +250,36 @@ class StashDbService {
     }
   ''';
 
+  static const String _queryFindSceneBoxById = r'''
+    query FindSceneBox($id: ID!) {
+      findScene(id: $id) {
+        id
+        title
+        details
+        date
+        duration
+        tags {
+          name
+        }
+        images {
+          url
+        }
+        studio {
+          name
+        }
+        performers {
+          performer {
+            id
+            name
+            images {
+              url
+            }
+          }
+        }
+      }
+    }
+  ''';
+
   // --- Public Methods ---
 
   /// Tests the connection to StashDB using the provided API key.
@@ -275,13 +305,9 @@ class StashDbService {
     if (apiKey.trim().isEmpty) return null;
 
     try {
-       // Note: StashBox uses 'scene' query for ID lookup, StashApp uses 'findScene'.
-       // Error investigation suggests 'scene' is NOT valid on stashdb.org (StashBox).
-       // We will try 'findScene' for both.
-       
        final isStashBox = baseUrl.contains('stashdb.org');
-       final query = isStashBox ? _queryFindSceneById : _queryFindSceneById; // Explicitly same for now
-       final opName = 'FindScene';
+       final query = isStashBox ? _queryFindSceneBoxById : _queryFindSceneById;
+       final opName = isStashBox ? 'FindSceneBox' : 'FindScene';
 
        final data = await _executeQuery(
         query: query,
