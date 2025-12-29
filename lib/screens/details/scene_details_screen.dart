@@ -245,7 +245,7 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
       ),
       clipBehavior: Clip.antiAlias,
       child: SafeNetworkImage(
-        url: _current.posterUrl ?? _current.backdropUrl, 
+        url: _current.backdropUrl ?? _current.posterUrl, 
         fit: BoxFit.cover,
         errorBuilder: (_,__,___) => Container(color: Colors.grey[900], child: const Icon(Icons.movie, size: 50, color: Colors.white24)),
       ),

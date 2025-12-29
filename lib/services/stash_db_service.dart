@@ -648,6 +648,8 @@ class StashDbService {
     final images = scene['images'] as List?;
     if (images != null && images.isNotEmpty) {
       poster = images.first['url'];
+    } else if (scene['front_image'] != null) {
+      poster = scene['front_image']['url'];
     }
 
     // Extract Cast
@@ -703,6 +705,8 @@ class StashDbService {
       if (paths['screenshot'] != null && (paths['screenshot'] as String).isNotEmpty) {
         backdrop = paths['screenshot'];
       }
+    } else if (scene['back_image'] != null) {
+       backdrop = scene['back_image']['url'];
     }
     // Fallback to primary poster if no specific backdrop for now
     backdrop ??= poster;
