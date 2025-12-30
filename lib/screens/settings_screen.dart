@@ -1006,9 +1006,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 48), // Bottom padding
-      ],
-    );
-  }
+      ], // Close Column children
+    ), // Close Column
+   ], // Close ListView children
+  ); // Close ListView
+} // Close build
 
   Future<void> _pickAndAddFolder(
     BuildContext context,
@@ -1481,6 +1483,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             );
           },
         );
+      },
+    );
+  }
+
   Future<void> _exportLocalData(BuildContext context, SettingsProvider settings) async {
     final backupService = DataBackupService(
       settings: settings,
