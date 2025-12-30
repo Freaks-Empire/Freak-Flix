@@ -25,6 +25,7 @@ class SettingsProvider extends ChangeNotifier {
   TmdbKeyStatus tmdbStatus = TmdbKeyStatus.unknown;
   
   bool enableAdultContent = false;
+  String? primaryBackupAccountId; // <--- Add this field
   // Legacy single fields replaced by stashEndpoints
   // String stashApiKey = '';
   // String stashUrl = 'https://stashdb.org/graphql';
@@ -96,6 +97,8 @@ class SettingsProvider extends ChangeNotifier {
     } else {
       tmdbStatus = TmdbKeyStatus.unknown;
     }
+    
+    primaryBackupAccountId = data['primaryBackupAccountId'] as String?;
 
     enableAdultContent = data['enableAdultContent'] as bool? ?? false;
     
@@ -138,6 +141,7 @@ class SettingsProvider extends ChangeNotifier {
       'tmdbApiKey': tmdbApiKey,
       'enableAdultContent': enableAdultContent,
       'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
+      'primaryBackupAccountId': primaryBackupAccountId,
     };
   }
 
@@ -174,7 +178,9 @@ class SettingsProvider extends ChangeNotifier {
         'enableAdultContent': enableAdultContent,
         'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
         'migrated_profiles': _hasMigratedProfiles,
+        'migrated_profiles': _hasMigratedProfiles,
         'isSetupCompleted': _isSetupCompleted,
+        'primaryBackupAccountId': primaryBackupAccountId,
     };
     await PersistenceService.instance.saveString(_storageFile, jsonEncode(data));
   }
@@ -263,6 +269,12 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setPrimaryBackupAccountId(String? id) async {
+    primaryBackupAccountId = id;
+    await save();
+    notifyListeners();
+  }
+
   Future<void> testTmdbKey(Future<bool> Function(String key) validator) async {
     if (!hasTmdbKey) {
       await _setTmdbStatus(TmdbKeyStatus.invalid);
@@ -319,6 +331,9 @@ class SettingsProvider extends ChangeNotifier {
     if (data.containsKey('stashEndpoints')) {
        final list = data['stashEndpoints'] as List;
        stashEndpoints = list.map((e) => StashEndpoint.fromJson(e)).toList();
+    }
+    if (data.containsKey('primaryBackupAccountId')) {
+      primaryBackupAccountId = data['primaryBackupAccountId'];
     }
     await save();
     notifyListeners();

@@ -182,7 +182,7 @@ class GraphAuthService {
   static const _scopes = [
     'User.Read',
     'Files.Read',
-    'Files.ReadWrite', // Required for Sidecar Upload & Renaming
+    'Files.ReadWrite', // Required for Sidecar Upload & Renaming, and Backups
     'offline_access', // Needed to receive refresh tokens.
   ];
 
@@ -762,5 +762,40 @@ class GraphAuthService {
           debugPrint('GraphAuthService: Rename error: $e');
           return false;
       }
+  }
+  /// Uploads a string content (JSON) to the root of the user's Drive
+  Future<void> uploadFile(String accountId, String fileName, String content) async {
+    final token = await getFreshAccessToken(accountId);
+    // Uploads to root folder. Use a specific folder if preferred (e.g. /Backup/...)
+    final url = Uri.parse('$graphBaseUrl/me/drive/root:/$fileName:/content');
+    
+    final res = await http.put(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: content,
+    );
+
+    if (res.statusCode != 201 && res.statusCode != 200) {
+      throw Exception('Upload failed: ${res.statusCode} ${res.body}');
+    }
+  }
+
+  /// Downloads a file's content as string from the root of the user's Drive
+  Future<String> downloadFileContent(String accountId, String fileName) async {
+    final token = await getFreshAccessToken(accountId);
+    final url = Uri.parse('$graphBaseUrl/me/drive/root:/$fileName:/content');
+    
+    final res = await http.get(
+      url, 
+      headers: {'Authorization': 'Bearer $token'}
+    );
+
+    if (res.statusCode != 200) {
+      throw Exception('Download failed: ${res.statusCode} ${res.body}');
+    }
+    return res.body;
   }
 }
