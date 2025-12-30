@@ -125,6 +125,8 @@ class AniListService {
           coverImage { large }
           description
           episodes
+          status
+          genres
           recommendations(perPage: 10, sort: RATING_DESC) {
              nodes {
                mediaRecommendation {
@@ -174,10 +176,17 @@ class AniListService {
           .whereType<TmdbItem>()
           .toList();
 
+      final genres = (media['genres'] as List<dynamic>? ?? [])
+          .map((g) => TmdbGenre(id: 0, name: g.toString()))
+          .toList();
+
       return TmdbExtendedDetails(
         cast: [], // TODO: fetch characters
         videos: [], // TODO: fetch trailer
         recommendations: recs,
+        genres: genres,
+        status: media['status'] as String? ?? 'Unknown',
+        numberOfEpisodes: media['episodes'] as int? ?? 0,
         seasons: [
            TmdbSeason(
              id: id,

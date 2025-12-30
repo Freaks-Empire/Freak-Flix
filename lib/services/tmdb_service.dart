@@ -199,13 +199,22 @@ class TmdbService {
     if (externals['instagram_id'] != null) exIds['instagram'] = externals['instagram_id'].toString();
     if (externals['twitter_id'] != null) exIds['twitter'] = externals['twitter_id'].toString();
 
+    // Parse Genres
+    final genreList = (data['genres'] as List<dynamic>? ?? [])
+        .map((g) => TmdbGenre(id: g['id'] as int, name: g['name'] as String))
+        .toList();
+
     return TmdbExtendedDetails(
-      cast: castList,
-      videos: vidList,
-      recommendations: combinedRecs,
-      seasons: seasonList,
-      reviews: reviewsList,
-      externalIds: exIds,
+       cast: castList,
+       videos: vidList,
+       recommendations: combinedRecs,
+       seasons: seasonList,
+       reviews: reviewsList,
+       externalIds: exIds,
+       genres: genreList,
+       status: data['status'] as String? ?? 'Unknown',
+       numberOfEpisodes: data['number_of_episodes'] as int? ?? 0,
+       tagline: (data['tagline'] as String?)?.isNotEmpty == true ? data['tagline'] : null,
     );
   }
 

@@ -8,6 +8,14 @@ class TmdbExtendedDetails {
   final List<TmdbVideo> videos;
   final List<TmdbItem> recommendations;
   final List<TmdbSeason> seasons;
+  final List<TmdbReview> reviews;
+  final Map<String, String> externalIds;
+  
+  // New Fields for Anime/Extended Details
+  final List<TmdbGenre> genres;
+  final String status;
+  final int numberOfEpisodes;
+  final String? tagline;
 
   const TmdbExtendedDetails({
     required this.cast,
@@ -16,10 +24,17 @@ class TmdbExtendedDetails {
     required this.seasons,
     this.reviews = const [],
     this.externalIds = const {},
+    this.genres = const [],
+    this.status = '',
+    this.numberOfEpisodes = 0,
+    this.tagline,
   });
+}
 
-  final List<TmdbReview> reviews;
-  final Map<String, String> externalIds;
+class TmdbGenre {
+  final int id;
+  final String name;
+  const TmdbGenre({required this.id, required this.name});
 }
 
 class TmdbReview {

@@ -13,7 +13,7 @@ import '../services/tmdb_service.dart';
 
 import 'details/movie_details_screen.dart';
 import 'details/tv_details_screen.dart';
-import 'details/scene_details_screen.dart';
+import 'details/anime_details_screen.dart';
 
 class DetailsScreen extends StatefulWidget {
   final String itemId;
@@ -170,7 +170,11 @@ class _DetailsScreenState extends State<DetailsScreen> {
     if (item.isAdult || item.type == MediaType.scene) {
       return SceneDetailsScreen(item: item);
     }
-    if (item.type == MediaType.tv || item.isAnime) {
+    // Updated routing: Anime -> AnimeDetailsScreen
+    if (item.isAnime) {
+      return AnimeDetailsScreen(item: item);
+    }
+    if (item.type == MediaType.tv) {
       return TvDetailsScreen(item: item);
     }
     return MovieDetailsScreen(item: item);
