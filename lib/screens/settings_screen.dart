@@ -102,6 +102,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
+    // Get the account object (Put this inside the build method or class)
+    final primaryAccount = settings.primaryBackupAccountId == null 
+        ? null 
+        : _graphAuth.accounts.cast<GraphAccount?>().firstWhere(
+            (a) => a?.id == settings.primaryBackupAccountId,
+            orElse: () => null,
+          );
+    
     final library = context.watch<LibraryProvider>();
     final profileProvider = context.watch<ProfileProvider>();
     final metadata = Provider.of<MetadataService>(context, listen: false);
@@ -733,251 +741,265 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
 
         const SizedBox(height: 24),
-        Row(
-          children: [
-            const Icon(Icons.dataset, size: 20),
-            const SizedBox(width: 8),
-            Text('Data Management', style: Theme.of(context).textTheme.titleMedium),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        const SizedBox(height: 24),
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+          child: Row(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text('Cloud Backup', style: Theme.of(context).textTheme.titleMedium),
-              ),
-              
-              // Account Selector
-              if (_graphAuth.accounts.isNotEmpty)
-                ListTile(
-                  title: const Text('Primary Backup Account'),
-                  subtitle: Text(_getPrimaryAccount(settings)?.userPrincipalName ?? 'Select an account'),
-                  leading: const Icon(Icons.account_circle, color: Colors.indigo),
-                  trailing: const Icon(Icons.arrow_drop_down),
-                  onTap: () {
-                    showModalBottomSheet(
-                      context: context,
-                      builder: (ctx) => Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Padding(
-                            padding: EdgeInsets.all(16.0),
-                            child: Text('Select Backup Account', style: TextStyle(fontWeight: FontWeight.bold)),
-                          ),
-                          ..._graphAuth.accounts.map((acc) => ListTile(
-                            leading: const Icon(Icons.cloud),
-                            title: Text(acc.displayName),
-                            subtitle: Text(acc.userPrincipalName),
-                            trailing: settings.primaryBackupAccountId == acc.id 
-                                ? const Icon(Icons.check, color: Colors.green) 
-                                : null,
-                            onTap: () {
-                              settings.setPrimaryBackupAccountId(acc.id);
-                              Navigator.pop(ctx);
-                            },
-                          )),
-                          ListTile(
-                            leading: const Icon(Icons.add),
-                            title: const Text('Connect New Account'),
-                            onTap: () {
-                              Navigator.pop(ctx);
-                              // Scroll up to Accounts section or trigger logic
-                              // For now just close, user can scroll up
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Please add account in the Library section above')),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                )
-              else
-                const ListTile(
-                  leading: Icon(Icons.cloud_off),
-                  title: Text('No accounts connected'),
-                  subtitle: Text('Connect a OneDrive account above to enable cloud backup'),
+              Icon(Icons.cloud_sync_outlined, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              Text('Sync & Backup', style: Theme.of(context).textTheme.titleMedium),
+            ],
+          ),
+        ),
+        
+        Card(
+          clipBehavior: Clip.antiAlias,
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Column(
+            children: [
+              // --- CLOUD SECTION HEADER ---
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Theme.of(context).colorScheme.primaryContainer,
+                      Theme.of(context).colorScheme.surface,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                 ),
-
-              const Divider(),
-
-              // Backup Actions
-              ListTile(
-                enabled: settings.primaryBackupAccountId != null,
-                title: const Text('Backup to Cloud'),
-                subtitle: const Text('Upload settings & library index'),
-                leading: const Icon(Icons.cloud_upload),
-                onTap: () async {
-                  final accountId = settings.primaryBackupAccountId;
-                  if (accountId == null) return;
-
-                  final messenger = ScaffoldMessenger.of(context);
-                  messenger.showSnackBar(const SnackBar(content: Text('Backing up...')));
-
-                  try {
-                    final backupService = DataBackupService(
-                      settings: settings,
-                      library: Provider.of<LibraryProvider>(context, listen: false),
-                      profiles: Provider.of<ProfileProvider>(context, listen: false),
-                    );
-
-                    final jsonStr = await backupService.createBackupJson();
-                    await _graphAuth.uploadFile(accountId, 'freakflix_backup.json', jsonStr);
-
-                    messenger.hideCurrentSnackBar();
-                    messenger.showSnackBar(const SnackBar(content: Text('Backup successful!')));
-                  } catch (e) {
-                    messenger.hideCurrentSnackBar();
-                    messenger.showSnackBar(SnackBar(content: Text('Backup failed: $e')));
-                  }
-                },
-              ),
-
-              ListTile(
-                enabled: settings.primaryBackupAccountId != null,
-                title: const Text('Restore from Cloud'),
-                subtitle: const Text('Overwrite local data'),
-                leading: const Icon(Icons.cloud_download),
-                onTap: () async {
-                  final accountId = settings.primaryBackupAccountId;
-                  if (accountId == null) return;
-
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Restore Backup?'),
-                      content: const Text('This will overwrite ALL local data. Are you sure?'),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Restore')),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'CLOUD SYNC', 
+                          style: TextStyle(
+                            fontSize: 11, 
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                            color: Theme.of(context).colorScheme.primary,
+                          )
+                        ),
+                        if (primaryAccount != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.check_circle, size: 12, color: Colors.green),
+                                SizedBox(width: 4),
+                                Text('Connected', style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
-                  );
-
-                  if (confirm == true) {
-                    final messenger = ScaffoldMessenger.of(context);
-                    messenger.showSnackBar(const SnackBar(content: Text('Restoring...')));
-
-                    try {
-                      final jsonStr = await _graphAuth.downloadFileContent(accountId, 'freakflix_backup.json');
-                      final backupService = DataBackupService(
-                        settings: settings,
-                        library: Provider.of<LibraryProvider>(context, listen: false),
-                        profiles: Provider.of<ProfileProvider>(context, listen: false),
-                      );
-
-                      await backupService.restoreBackup(jsonStr);
-                      messenger.hideCurrentSnackBar();
-                      messenger.showSnackBar(const SnackBar(content: Text('Restore complete!')));
-                      
-                      // UI Refresh
-                      setState(() {});
-                    } catch (e) {
-                      messenger.hideCurrentSnackBar();
-                      messenger.showSnackBar(SnackBar(content: Text('Restore failed: $e')));
-                    }
-                  }
-                },
+                    const SizedBox(height: 12),
+                    
+                    // Account Selector / Display
+                    InkWell(
+                      onTap: () {
+                        // Show account picker
+                        showModalBottomSheet(
+                          context: context,
+                          builder: (ctx) => Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Text('Select Backup Account', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                              if (_graphAuth.accounts.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.all(16.0),
+                                  child: Text('No accounts found. Please add one in Library settings first.'),
+                                ),
+                              ..._graphAuth.accounts.map((acc) => ListTile(
+                                leading: const Icon(Icons.cloud_queue),
+                                title: Text(acc.displayName),
+                                subtitle: Text(acc.userPrincipalName),
+                                trailing: settings.primaryBackupAccountId == acc.id 
+                                    ? const Icon(Icons.check, color: Colors.blue) 
+                                    : null,
+                                onTap: () {
+                                  settings.setPrimaryBackupAccountId(acc.id);
+                                  Navigator.pop(ctx);
+                                },
+                              )),
+                            ],
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Theme.of(context).dividerColor.withOpacity(0.1),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 18,
+                              backgroundColor: Theme.of(context).colorScheme.primary,
+                              child: Icon(Icons.person, size: 20, color: Theme.of(context).colorScheme.onPrimary),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    primaryAccount?.displayName ?? 'No Account Selected',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  Text(
+                                    primaryAccount?.userPrincipalName ?? 'Tap to configure OneDrive',
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.arrow_drop_down),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               
-              const Divider(),
+              // --- MAIN ACTIONS ---
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: Text('Manual Backup', style: Theme.of(context).textTheme.titleMedium),
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: primaryAccount == null ? null : () async {
+                           final messenger = ScaffoldMessenger.of(context);
+                           try {
+                             messenger.showSnackBar(const SnackBar(content: Text('Syncing to cloud...')));
+                             final backupService = DataBackupService(
+                               settings: settings,
+                               library: Provider.of<LibraryProvider>(context, listen: false),
+                               profiles: Provider.of<ProfileProvider>(context, listen: false),
+                             );
+                             final jsonStr = await backupService.createBackupJson();
+                             await _graphAuth.uploadFile(primaryAccount.id, 'freakflix_backup.json', jsonStr);
+                             messenger.clearSnackBars();
+                             messenger.showSnackBar(const SnackBar(
+                               content: Text('✅ Backup successful'), 
+                               behavior: SnackBarBehavior.floating,
+                             ));
+                           } catch (e) {
+                             messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+                           }
+                        },
+                        icon: const Icon(Icons.cloud_upload_outlined),
+                        label: const Text('Backup'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: primaryAccount == null ? null : () async {
+                           final confirm = await showDialog<bool>(
+                             context: context,
+                             builder: (ctx) => AlertDialog(
+                               title: const Text('Restore from Cloud?'),
+                               content: const Text('This will overwrite all local settings and libraries.'),
+                               actions: [
+                                 TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                                 FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Restore')),
+                               ],
+                             ),
+                           );
+                           if (confirm == true) {
+                             final messenger = ScaffoldMessenger.of(context);
+                             try {
+                               messenger.showSnackBar(const SnackBar(content: Text('Downloading...')));
+                               final jsonStr = await _graphAuth.downloadFileContent(primaryAccount.id, 'freakflix_backup.json');
+                               final backupService = DataBackupService(
+                                 settings: settings,
+                                 library: Provider.of<LibraryProvider>(context, listen: false),
+                                 profiles: Provider.of<ProfileProvider>(context, listen: false),
+                               );
+                               await backupService.restoreBackup(jsonStr);
+                               messenger.showSnackBar(const SnackBar(content: Text('✅ Restore complete')));
+                               setState(() {});
+                             } catch (e) {
+                               messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+                             }
+                           }
+                        },
+                        icon: const Icon(Icons.cloud_download_outlined),
+                        label: const Text('Restore'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-
+              
+              const Divider(height: 1),
+              
+              // --- LOCAL ACTIONS (Footer) ---
               ListTile(
-                title: const Text('Export Data'),
-                subtitle: const Text('Save backup locally'),
-                leading: const Icon(Icons.save_alt),
-                onTap: () async {
-                  final backupService = DataBackupService(
-                    settings: settings,
-                    library: Provider.of<LibraryProvider>(context, listen: false),
-                    profiles: Provider.of<ProfileProvider>(context, listen: false),
-                  );
-                  
-                  final jsonStr = await backupService.createBackupJson();
-
-                  if (kIsWeb) {
-                    // OPTIMIZATION: Trigger file download on Web instead of clipboard
-                    final bytes = utf8.encode(jsonStr);
-                    final base64 = base64Encode(bytes);
-                    final uri = 'data:application/json;base64,$base64';
-                    await launchUrl(Uri.parse(uri));
-                    
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Backup download started')),
-                      );
-                    }
-                  } else {
-                    // Native File Save
-                    final String? outputFile = await FilePicker.platform.saveFile(
-                      dialogTitle: 'Save Backup',
-                      fileName: 'freakflix_backup_${DateTime.now().millisecondsSinceEpoch}.json',
-                      allowedExtensions: ['json'],
-                      type: FileType.custom,
-                    );
-
-                    if (outputFile != null) {
-                      try {
-                        await backupService.exportBackupToFile(outputFile);
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Backup saved to $outputFile')),
-                          );
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Export failed: $e')),
-                          );
-                        }
-                      }
-                    }
-                  }
-                },
-              ),
-              ListTile(
-                title: const Text('Import Data'),
-                subtitle: const Text('Restore from local JSON file'),
-                leading: const Icon(Icons.file_open),
-                onTap: () async {
-                   if (kIsWeb) {
-                      _showImportDialog(context); 
-                   } else {
-                      final result = await FilePicker.platform.pickFiles(
-                        type: FileType.custom,
-                        allowedExtensions: ['json'],
-                      );
-                      if (result != null && result.files.single.path != null) {
-                         try {
-                            final backupService = DataBackupService(
-                              settings: settings,
-                              library: Provider.of<LibraryProvider>(context, listen: false),
-                              profiles: Provider.of<ProfileProvider>(context, listen: false),
-                            );
-                            await backupService.importBackupFromFile(result.files.single.path!);
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Restore successful!')),
-                              );
-                              setState(() {});
-                            }
-                         } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Import failed: $e')),
-                              );
-                            }
-                         }
-                      }
-                   }
+                dense: true,
+                title: const Text('Local File Import/Export'),
+                trailing: const Icon(Icons.chevron_right, size: 16),
+                onTap: () {
+                   showModalBottomSheet(
+                     context: context,
+                     builder: (ctx) => Column(
+                       mainAxisSize: MainAxisSize.min,
+                       children: [
+                         ListTile(
+                           leading: const Icon(Icons.save),
+                           title: const Text('Export to JSON file'),
+                           onTap: () { 
+                             Navigator.pop(ctx); 
+                             _exportLocalData(context, settings);
+                           },
+                         ),
+                         ListTile(
+                           leading: const Icon(Icons.file_open),
+                           title: const Text('Import from JSON file'),
+                           onTap: () { 
+                             Navigator.pop(ctx); 
+                             _importLocalData(context, settings);
+                           },
+                         ),
+                       ],
+                     ),
+                   );
                 },
               ),
             ],
@@ -1459,7 +1481,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
             );
           },
         );
-      },
+  Future<void> _exportLocalData(BuildContext context, SettingsProvider settings) async {
+    final backupService = DataBackupService(
+      settings: settings,
+      library: Provider.of<LibraryProvider>(context, listen: false),
+      profiles: Provider.of<ProfileProvider>(context, listen: false),
     );
+    
+    final jsonStr = await backupService.createBackupJson();
+
+    if (kIsWeb) {
+      final bytes = utf8.encode(jsonStr);
+      final base64 = base64Encode(bytes);
+      final uri = 'data:application/json;base64,$base64';
+      await launchUrl(Uri.parse(uri));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Backup download started')),
+        );
+      }
+    } else {
+      final String? outputFile = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Backup',
+        fileName: 'freakflix_backup_${DateTime.now().millisecondsSinceEpoch}.json',
+        allowedExtensions: ['json'],
+        type: FileType.custom,
+      );
+
+      if (outputFile != null) {
+        try {
+          await backupService.exportBackupToFile(outputFile);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Backup saved to $outputFile')),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Export failed: $e')),
+            );
+          }
+        }
+      }
+    }
+  }
+
+  Future<void> _importLocalData(BuildContext context, SettingsProvider settings) async {
+      if (kIsWeb) {
+        _showImportDialog(context); 
+      } else {
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['json'],
+        );
+        if (result != null && result.files.single.path != null) {
+            try {
+              final backupService = DataBackupService(
+                settings: settings,
+                library: Provider.of<LibraryProvider>(context, listen: false),
+                profiles: Provider.of<ProfileProvider>(context, listen: false),
+              );
+              await backupService.importBackupFromFile(result.files.single.path!);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Restore successful!')),
+                );
+                setState(() {}); // Refresh UI
+              }
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Import failed: $e')),
+                );
+              }
+            }
+        }
+      }
   }
 }

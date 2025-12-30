@@ -51,7 +51,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     // Subscribe to logs (warn/error)
     player.stream.log.listen((event) {
        if (event.level == 'error' || event.level == 'warn') {
-          debugPrint('VideoPlayerScreen MPV LOG [${event.level}]: ${event.message}');
+          debugPrint('VideoPlayerScreen MPV LOG [${event.level}]: ${event.text}');
        }
     });
     
