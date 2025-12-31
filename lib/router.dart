@@ -61,6 +61,11 @@ GoRouter createRouter(
       // 3. Root Redirect
       if (state.uri.path == '/') return '/discover';
 
+      // 4. Adult Content Protection
+      if (!settings.enableAdultContent) {
+         if (state.uri.path.startsWith('/adult')) return '/discover';
+      }
+
       return null;
     },
 
