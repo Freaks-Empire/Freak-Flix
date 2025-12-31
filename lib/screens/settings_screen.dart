@@ -1533,34 +1533,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _importLocalData(BuildContext context, SettingsProvider settings) async {
-      if (kIsWeb) {
-        _showImportDialog(context); 
-      } else {
+      try {
         final result = await FilePicker.platform.pickFiles(
           type: FileType.custom,
           allowedExtensions: ['json'],
+          withData: kIsWeb, // Important: Request bytes on Web
         );
-        if (result != null && result.files.single.path != null) {
-            try {
-              final backupService = DataBackupService(
+
+        if (result != null && result.files.isNotEmpty) {
+            final file = result.files.single;
+            final backupService = DataBackupService(
                 settings: settings,
                 library: Provider.of<LibraryProvider>(context, listen: false),
                 profiles: Provider.of<ProfileProvider>(context, listen: false),
-              );
-              await backupService.importBackupFromFile(result.files.single.path!);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Restore successful!')),
-                );
-                setState(() {}); // Refresh UI
-              }
-            } catch (e) {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Import failed: $e')),
-                );
-              }
+            );
+
+            if (kIsWeb) {
+               // Web: Use bytes
+               if (file.bytes != null) {
+                  final jsonStr = utf8.decode(file.bytes!);
+                  await backupService.restoreBackup(jsonStr);
+               } else {
+                  throw Exception('Failed to read file content on Web');
+               }
+            } else {
+               // Desktop/Mobile: Use path
+               if (file.path != null) {
+                  await backupService.importBackupFromFile(file.path!);
+               }
             }
+            
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Restore successful!')),
+              );
+              setState(() {}); // Refresh UI
+            }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Import failed: $e')),
+          );
         }
       }
   }
