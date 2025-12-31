@@ -59,6 +59,12 @@ class FreakflixDashboard extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     HomeSectionRow(
+                      title: 'Recently Watched',
+                      items: library.historyItems.take(15).toList(),
+                      cardBuilder: (item) => PosterCard(item: item),
+                    ),
+                    const SizedBox(height: 16),
+                    HomeSectionRow(
                       title: 'Start Watching',
                       items: startWatching.isNotEmpty
                           ? startWatching.take(15).toList()
