@@ -43,6 +43,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     
     // Subscribe to errors
     player.stream.error.listen((event) {
+       final errorString = event.toString();
+       // Ignore benign browser errors
+       if (errorString.contains('interrupted') || 
+           errorString.contains('save power') || 
+           errorString.contains('AbortError')) {
+          debugPrint('VideoPlayerScreen Web WARNING: Ignored benign error: $errorString');
+          return;
+       }
+       
        debugPrint('VideoPlayerScreen Web ERROR: $event');
        setState(() {
           _errorMessage = 'Player Error: $event';

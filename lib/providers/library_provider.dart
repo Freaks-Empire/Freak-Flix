@@ -206,7 +206,7 @@ class LibraryProvider extends ChangeNotifier {
       FlutterForegroundTask.stopService();
     }
     
-    if (!Platform.isWeb && !Platform.isIOS) {
+    if (!Platform.isIOS) {
        _showCompletionNotification();
     }
 
@@ -214,10 +214,16 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   Future<void> _requestNotificationPermission() async {
-    if (Platform.isAndroid) {
       if (await Permission.notification.isDenied) {
         await Permission.notification.request();
       }
+    } else if (Platform.isWeb) {
+       await _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
+       // Web equivalent
+       await _notifications.resolvePlatformSpecificImplementation<MacOSFlutterLocalNotificationsPlugin>()?.requestPermissions(alert: true, badge: true, sound: true);
+       // Note: flutter_local_notifications for web might not need explicit resolving if using standard API, but often does.
+       // Actually, for web, we rely on browser prompt on first init or show. 
+       // But let's be explicit if possible.
     }
   }
 
@@ -294,8 +300,8 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   LibraryProvider(this.settings) {
-    if (!Platform.isWeb) {
-      _initNotifications();
+    if (!Platform.isIOS) { // Only exclude iOS from this specific init if desired, but general init is safe
+       _initNotifications();
     }
     if (Platform.isAndroid) {
       _initForegroundTask();
