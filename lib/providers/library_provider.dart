@@ -204,7 +204,10 @@ class LibraryProvider extends ChangeNotifier {
     
     if (Platform.isAndroid) {
       FlutterForegroundTask.stopService();
-      _showCompletionNotification();
+    }
+    
+    if (!Platform.isWeb && !Platform.isIOS) {
+       _showCompletionNotification();
     }
 
     notifyListeners();
@@ -226,7 +229,14 @@ class LibraryProvider extends ChangeNotifier {
       importance: Importance.high,
       priority: Priority.high,
     );
-    const details = NotificationDetails(android: androidDetails);
+    const linuxDetails = LinuxNotificationDetails(
+      defaultActionName: 'Open',
+    );
+    const details = NotificationDetails(
+      android: androidDetails,
+      linux: linuxDetails,
+      // Windows uses default behavior if not specified, or native implementation implies basic toast.
+    );
     await _notifications.show(
       0,
       'Scan Complete',
@@ -284,6 +294,9 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   LibraryProvider(this.settings) {
+    if (!Platform.isWeb) {
+      _initNotifications();
+    }
     if (Platform.isAndroid) {
       _initForegroundTask();
     }
@@ -291,17 +304,26 @@ class LibraryProvider extends ChangeNotifier {
 
   final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
 
-  void _initForegroundTask() {
-    // Init Local Notifications
+  Future<void> _initNotifications() async {
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestSoundPermission: false,
       requestBadgePermission: false,
       requestAlertPermission: false,
     );
-    const initSettings = InitializationSettings(android: androidSettings, iOS: iosSettings);
-    _notifications.initialize(initSettings);
+    // Linux/Windows use default settings or specific if needed.
+    // Windows requires no specific init settings class in basic usage, but we pass generic init.
+    const initSettings = InitializationSettings(
+      android: androidSettings, 
+      iOS: iosSettings,
+      linux: LinuxInitializationSettings(defaultActionName: 'Open'),
+      macOS: iosSettings, // Reusing darwin settings
+    );
+    
+    await _notifications.initialize(initSettings);
+  }
 
+  void _initForegroundTask() {
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'scanning_channel',
