@@ -25,6 +25,7 @@ import 'onedrive_folder_picker.dart';
 
 import 'package:file_picker/file_picker.dart';
 import '../widgets/activity_command_center.dart'; // NEW
+import '../utils/downloader/downloader.dart'; // NEW
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -1497,10 +1498,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final jsonStr = await backupService.createBackupJson();
 
     if (kIsWeb) {
-      final bytes = utf8.encode(jsonStr);
-      final base64 = base64Encode(bytes);
-      final uri = 'data:application/json;base64,$base64';
-      await launchUrl(Uri.parse(uri));
+      final fileName = 'freakflix_backup_${DateTime.now().millisecondsSinceEpoch}.json';
+      await downloadJson(jsonStr, fileName);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Backup download started')),
