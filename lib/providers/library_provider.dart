@@ -214,16 +214,13 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   Future<void> _requestNotificationPermission() async {
+    if (Platform.isAndroid) {
       if (await Permission.notification.isDenied) {
         await Permission.notification.request();
       }
     } else if (Platform.isWeb) {
        await _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
-       // Web equivalent
        await _notifications.resolvePlatformSpecificImplementation<MacOSFlutterLocalNotificationsPlugin>()?.requestPermissions(alert: true, badge: true, sound: true);
-       // Note: flutter_local_notifications for web might not need explicit resolving if using standard API, but often does.
-       // Actually, for web, we rely on browser prompt on first init or show. 
-       // But let's be explicit if possible.
     }
   }
 
