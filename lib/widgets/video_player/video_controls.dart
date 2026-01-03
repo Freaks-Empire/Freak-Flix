@@ -273,8 +273,13 @@ class _VideoControlsState extends State<VideoControls> {
 
   void _showTracksDialog() async {
     _hideTimer?.cancel();
-    final tracks = widget.player.state.tracks;
+    final stateTracks = widget.player.state.tracks;
     
+    // Filter out system tracks ("auto", "no") from the lists we display
+    final videoTracks = stateTracks.video.where((t) => t.id != 'auto' && t.id != 'no').toList();
+    final audioTracks = stateTracks.audio.where((t) => t.id != 'auto' && t.id != 'no').toList();
+    final subtitleTracks = stateTracks.subtitle.where((t) => t.id != 'auto' && t.id != 'no').toList();
+
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -287,11 +292,12 @@ class _VideoControlsState extends State<VideoControls> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (tracks.video.length > 1) ...[
+                // Video Quality
+                if (videoTracks.isNotEmpty) ...[
                   const Text('Quality', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   
-                  // Auto Option
+                  // Explicit Auto Option for Video
                   RadioListTile<VideoTrack>(
                     title: const Text('Auto', style: TextStyle(color: Colors.white)),
                     value: VideoTrack.auto(),
@@ -303,10 +309,7 @@ class _VideoControlsState extends State<VideoControls> {
                     activeColor: Colors.redAccent,
                   ),
                   
-                  ...tracks.video.map((t) {
-                     // Parse bitrate/res from title or ID if needed, 
-                     // but usually 'title' or 'w x h' is good enough.
-                     // OneDrive HLS typically sends: "1080p (6264 kbps)" in title or similar.
+                  ...videoTracks.map((t) {
                      String label = t.title ?? t.id;
                      if (t.w != null && t.h != null) {
                         label = '${t.w}x${t.h}';
@@ -329,10 +332,24 @@ class _VideoControlsState extends State<VideoControls> {
                   const SizedBox(height: 16),
                 ],
 
-                if (tracks.audio.length > 1) ...[
+                // Audio
+                if (audioTracks.isNotEmpty) ...[
                   const Text('Audio', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
-                  ...tracks.audio.map((t) => RadioListTile<AudioTrack>(
+                  
+                  // Explicit Auto Option for Audio (often useful)
+                  RadioListTile<AudioTrack>(
+                    title: const Text('Auto', style: TextStyle(color: Colors.white)),
+                    value: AudioTrack.auto(),
+                    groupValue: widget.player.state.track.audio,
+                    onChanged: (val) {
+                      if (val != null) widget.player.setAudioTrack(val);
+                      Navigator.pop(ctx);
+                    },
+                    activeColor: Colors.redAccent,
+                  ),
+
+                  ...audioTracks.map((t) => RadioListTile<AudioTrack>(
                     title: Text(t.title ?? t.language ?? t.id, style: const TextStyle(color: Colors.white)),
                     value: t,
                     groupValue: widget.player.state.track.audio,
@@ -345,28 +362,48 @@ class _VideoControlsState extends State<VideoControls> {
                   const SizedBox(height: 16),
                 ],
                 
-                const Text('Subtitles', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                 RadioListTile<SubtitleTrack>(
-                    title: const Text('None', style: TextStyle(color: Colors.white)),
-                    value: SubtitleTrack.no(),
+                // Subtitles
+                // Always show Subtitles section if there are tracks OR just to show "None"/"Auto"
+                // But valid check: if (subtitleTracks.isNotEmpty)
+                if (subtitleTracks.isNotEmpty) ...[
+                  const Text('Subtitles', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  
+                   // Explicit None Option
+                   RadioListTile<SubtitleTrack>(
+                      title: const Text('None', style: TextStyle(color: Colors.white)),
+                      value: SubtitleTrack.no(),
+                      groupValue: widget.player.state.track.subtitle,
+                      onChanged: (val) {
+                        widget.player.setSubtitleTrack(SubtitleTrack.no());
+                        Navigator.pop(ctx);
+                      },
+                      activeColor: Colors.redAccent,
+                    ),
+                    
+                    // Explicit Auto Option (optional, but good practice)
+                   RadioListTile<SubtitleTrack>(
+                      title: const Text('Auto', style: TextStyle(color: Colors.white)),
+                      value: SubtitleTrack.auto(),
+                      groupValue: widget.player.state.track.subtitle,
+                      onChanged: (val) {
+                        widget.player.setSubtitleTrack(SubtitleTrack.auto());
+                        Navigator.pop(ctx);
+                      },
+                      activeColor: Colors.redAccent,
+                    ),
+
+                  ...subtitleTracks.map((t) => RadioListTile<SubtitleTrack>(
+                    title: Text(t.title ?? t.language ?? t.id, style: const TextStyle(color: Colors.white)),
+                    value: t,
                     groupValue: widget.player.state.track.subtitle,
                     onChanged: (val) {
-                      widget.player.setSubtitleTrack(SubtitleTrack.no());
+                      if (val != null) widget.player.setSubtitleTrack(val);
                       Navigator.pop(ctx);
                     },
                     activeColor: Colors.redAccent,
-                  ),
-                ...tracks.subtitle.map((t) => RadioListTile<SubtitleTrack>(
-                  title: Text(t.title ?? t.language ?? t.id, style: const TextStyle(color: Colors.white)),
-                  value: t,
-                  groupValue: widget.player.state.track.subtitle,
-                  onChanged: (val) {
-                    if (val != null) widget.player.setSubtitleTrack(val);
-                    Navigator.pop(ctx);
-                  },
-                  activeColor: Colors.redAccent,
-                )),
+                  )),
+                ],
               ],
             ),
           ),
