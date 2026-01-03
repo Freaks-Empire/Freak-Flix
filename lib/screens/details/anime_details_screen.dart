@@ -5,11 +5,13 @@ import 'package:provider/provider.dart';
 import '../../models/media_item.dart';
 import '../../models/tmdb_episode.dart';
 import '../../models/tmdb_extended_details.dart';
+import '../../models/cast_member.dart';
 import '../../providers/library_provider.dart';
 import '../../services/metadata_service.dart';
 import '../../services/tmdb_service.dart';
 import '../../widgets/safe_network_image.dart';
 import 'episode_details_screen.dart';
+import 'actor_details_screen.dart';
 
 class AnimeDetailsScreen extends StatefulWidget {
   final MediaItem item;
@@ -603,55 +605,96 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> with SingleTick
          // Right: Actor Name/Lang + Actor Image
          
          return Container(
-           decoration: BoxDecoration(
-             color: const Color(0xFF151F2E),
-             borderRadius: BorderRadius.circular(4),
-           ),
-           clipBehavior: Clip.antiAlias,
-           child: Row(
-             children: [
-               // --- LEFT: CHARACTER ---
-               if (actor.characterImageUrl != null)
-                 Image.network(actor.characterImageUrl!, width: 60, height: double.infinity, fit: BoxFit.cover)
-               else
-                 Container(width: 60, color: Colors.white10),
-                 
-               const SizedBox(width: 12),
-               
-               Expanded(
-                 child: Column(
-                   mainAxisAlignment: MainAxisAlignment.center,
-                   crossAxisAlignment: CrossAxisAlignment.start,
-                   children: [
-                     Text(actor.character, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-                     Text(actor.role ?? 'Main', style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                   ],
-                 ),
-               ),
-               
-               const SizedBox(width: 8),
-               
-               // --- RIGHT: ACTOR ---
-               Expanded(
-                 child: Column(
-                   mainAxisAlignment: MainAxisAlignment.center,
-                   crossAxisAlignment: CrossAxisAlignment.end,
-                   children: [
-                     Text(actor.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right),
-                     const Text('Japanese', style: TextStyle(color: Colors.white54, fontSize: 12), textAlign: TextAlign.right),
-                   ],
-                 ),
-               ),
-               
-               const SizedBox(width: 12),
-               
-               if (actor.profileUrl != null)
-                 Image.network(actor.profileUrl!, width: 60, height: double.infinity, fit: BoxFit.cover)
-               else
-                 Container(width: 60, color: Colors.white10),
-             ],
-           ),
-         );
+            decoration: BoxDecoration(
+              color: const Color(0xFF151F2E),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Row(
+              children: [
+                // --- LEFT: CHARACTER ---
+                Expanded(
+                  child: InkWell(
+                    onTap: actor.characterId != null ? () {
+                       Navigator.of(context).push(MaterialPageRoute(
+                         builder: (_) => ActorDetailsScreen(
+                           actorId: actor.characterId!,
+                           actor: CastMember(
+                              id: actor.characterId!,
+                              name: actor.character,
+                              character: 'Character',
+                              source: CastSource.aniList,
+                              profileUrl: actor.characterImageUrl,
+                              characterImageUrl: actor.characterImageUrl,
+                              role: actor.role,
+                              characterId: actor.characterId,
+                           ),
+                         ),
+                       ));
+                    } : null,
+                    child: Row(
+                      children: [
+                        if (actor.characterImageUrl != null)
+                          Image.network(actor.characterImageUrl!, width: 60, height: double.infinity, fit: BoxFit.cover)
+                        else
+                          Container(width: 60, color: Colors.white10),
+                          
+                        const SizedBox(width: 12),
+                        
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(actor.character, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                              Text(actor.role ?? 'Main', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                
+                Container(width: 1, color: Colors.white10),
+                
+                // --- RIGHT: ACTOR ---
+                Expanded(
+                  child: InkWell(
+                    onTap: () {
+                         Navigator.of(context).push(MaterialPageRoute(
+                           builder: (_) => ActorDetailsScreen(
+                             actorId: actor.id,
+                             actor: actor,
+                           ),
+                         ));
+                    },
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(actor.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right),
+                              const Text('Japanese', style: TextStyle(color: Colors.white54, fontSize: 12), textAlign: TextAlign.right),
+                            ],
+                          ),
+                        ),
+                        
+                        const SizedBox(width: 12),
+
+                        if (actor.profileUrl != null)
+                          Image.network(actor.profileUrl!, width: 60, height: double.infinity, fit: BoxFit.cover)
+                        else
+                          Container(width: 60, color: Colors.white10),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
        },
      );
   }

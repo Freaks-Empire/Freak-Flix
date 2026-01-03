@@ -223,16 +223,21 @@ class AniListService {
           
           final actorName = va?['name']?['full'] as String? ?? charName; // Fallback to char name if no VA
           final actorImage = va?['image']?['large'] as String?; // Fallback null
-          final actorId = va?['id']?.toString() ?? 'char_${node['id']}'; // Unique ID
+          
+          final staffId = va?['id']?.toString();
+          final charId = node['id']?.toString();
+          
+          final mainId = staffId != null ? 'anilist_staff:$staffId' : 'anilist_char:$charId';
 
           cast.add(CastMember(
-            id: actorId,
+            id: mainId,
             name: actorName,
-            character: charName, // Specifically Character Name
-            profileUrl: actorImage, // Actor Image
-            source: CastSource.tmdb, // Using tmdb enum for generic api source
-            characterImageUrl: charImage, // Character Image
-            role: role != null ? (role[0] + role.substring(1).toLowerCase()) : null, // "Main", "Supporting"
+            character: charName,
+            profileUrl: actorImage,
+            source: CastSource.aniList,
+            characterImageUrl: charImage,
+            role: role != null ? (role[0] + role.substring(1).toLowerCase()) : null,
+            characterId: charId != null ? 'anilist_char:$charId' : null, // New Field
           ));
         }
       }
@@ -341,6 +346,93 @@ class AniListService {
       return list;
     } catch (_) {
       return [];
+    }
+  Future<Map<String, dynamic>?> getPersonDetails(int id) async {
+    const url = 'https://graphql.anilist.co';
+    const query = r'''
+      query ($id: Int) {
+        Staff(id: $id) {
+          id
+          name { full }
+          image { large }
+          description
+          dateOfBirth { year month day }
+          dateOfDeath { year month day }
+          homeTown
+          characterMedia(sort: START_DATE_DESC, perPage: 25) {
+             nodes {
+               id
+               title { romaji english }
+               coverImage { large }
+               startDate { year }
+               format # TV, MOVIE
+             }
+             edges {
+               characterRole # MAIN, SUPPORTING
+               node { id } # The media
+               characters { name { full } } # The character played
+             }
+          }
+        }
+      }
+    ''';
+
+    try {
+      final res = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'query': query, 'variables': {'id': id}}),
+      );
+      
+      if (res.statusCode != 200) return null;
+      
+      final body = jsonDecode(res.body);
+      final staff = body['data']?['Staff'];
+      return staff;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getCharacterDetails(int id) async {
+    const url = 'https://graphql.anilist.co';
+    const query = r'''
+      query ($id: Int) {
+        Character(id: $id) {
+          id
+          name { full }
+          image { large }
+          description
+          dateOfBirth { year month day }
+          media(sort: START_DATE_DESC, perPage: 25) {
+             nodes {
+               id
+               title { romaji english }
+               coverImage { large }
+               startDate { year }
+               format # TV, MOVIE
+             }
+             edges {
+               characterRole
+             }
+          }
+        }
+      }
+    ''';
+
+    try {
+      final res = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'query': query, 'variables': {'id': id}}),
+      );
+      
+      if (res.statusCode != 200) return null;
+      
+      final body = jsonDecode(res.body);
+      return body['data']?['Character'];
+    } catch (_) {
+      return null;
     }
   }
 }

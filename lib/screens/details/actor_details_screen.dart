@@ -12,6 +12,7 @@ import '../../services/tmdb_service.dart';
 import '../../services/stash_db_service.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../services/metadata_service.dart'; // Import MetadataService
 import '../../models/stash_endpoint.dart';
 import '../../models/stash_performer.dart';
 import '../../widgets/discover_card.dart';
@@ -138,6 +139,69 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
           setState(() => _isLoading = false);
        }
 
+    } else if (_actor.source == CastSource.aniList) {
+        // AniList Logic
+        if (_tmdbPerson == null) {
+            final service = context.read<MetadataService>().aniListService;
+            Map<String, dynamic>? data;
+            int rawId = 0;
+
+            if (_actor.id.startsWith('anilist_staff:')) {
+               rawId = int.tryParse(_actor.id.replaceFirst('anilist_staff:', '')) ?? 0;
+               data = await service.getPersonDetails(rawId);
+            } else if (_actor.id.startsWith('anilist_char:')) {
+               rawId = int.tryParse(_actor.id.replaceFirst('anilist_char:', '')) ?? 0;
+               data = await service.getCharacterDetails(rawId);
+            } else if (_actor.id.startsWith('anilist:')) {
+               // Legacy fallback
+               rawId = int.tryParse(_actor.id.replaceFirst('anilist:', '')) ?? 0;
+               data = await service.getPersonDetails(rawId);
+            }
+            
+            if (mounted && data != null) {
+                // Map to TmdbPerson-like structure
+                final name = data['name']?['full'] as String? ?? _actor.name;
+                final image = data['image']?['large'] as String?;
+                final bio = data['description'] as String?;
+                final dob = data['dateOfBirth'];
+                String? birthday;
+                if (dob != null && dob['year'] != null) {
+                    birthday = '${dob['year']}-${dob['month']}-${dob['day']}';
+                }
+                
+                // Map Credits
+                final shows = <TmdbItem>[];
+                // characterMedia (Staff) or media (Character) -> nodes
+                final nodes = (data['characterMedia']?['nodes'] as List<dynamic>?) 
+                           ?? (data['media']?['nodes'] as List<dynamic>?) 
+                           ?? [];
+                
+                for (var node in nodes) {
+                    shows.add(TmdbItem(
+                        id: node['id'],
+                        title: node['title']?['english'] ?? node['title']?['romaji'] ?? '',
+                        posterUrl: node['coverImage']?['large'],
+                        type: TmdbMediaType.tv,
+                        releaseYear: node['startDate']?['year'].toString(),
+                    ));
+                }
+
+                setState(() {
+                    _tmdbPerson = TmdbPerson(
+                        id: rawId, // This is AniList ID, potentially conflicting with TMDB ID but scope is separated
+                        name: name,
+                        biography: bio,
+                        birthday: birthday,
+                        profilePath: image,
+                        knownFor: shows, // Put all in knownFor
+                    );
+                    _tmdbShows = shows; // Populate Anime as Shows
+                    _isLoading = false;
+                });
+            } else if (mounted) {
+                 setState(() => _isLoading = false);
+            }
+        }
     } else {
       // StashDB
       if (_stashPerformer == null) {
