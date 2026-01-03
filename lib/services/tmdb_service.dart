@@ -42,37 +42,40 @@ class TmdbService {
     if (item.type == MediaType.scene || item.type == MediaType.unknown) return item;
     if (item.title == null || item.title!.trim().isEmpty) return item;
 
-    final searchPath = '/3/search/${item.type == MediaType.tv ? 'tv' : 'movie'}';
-    final query = Uri.https(
-      _baseHost,
-      searchPath,
-      {
-        'api_key': key,
-        'query': item.title!,
-        if (item.year != null) 'year': item.year.toString(),
-        'include_adult': settings.enableAdultContent.toString(),
-      },
-    );
+    int tmdbId;
+    // If ID is already set manually, use it. Otherwise search.
+    if (item.tmdbId != null) {
+      tmdbId = item.tmdbId!;
+    } else {
+      final searchPath = '/3/search/${item.type == MediaType.tv ? 'tv' : 'movie'}';
+      final query = Uri.https(
+        _baseHost,
+        searchPath,
+        {
+          'api_key': key,
+          'query': item.title!,
+          if (item.year != null) 'year': item.year.toString(),
+          'include_adult': settings.enableAdultContent.toString(),
+        },
+      );
 
-    final res = await _client.get(query);
-    if (res.statusCode != 200) return item;
+      final res = await _client.get(query);
+      if (res.statusCode != 200) return item;
 
-    final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-    final results = decoded['results'] as List<dynamic>?;
-    if (results == null || results.isEmpty) return item;
+      final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+      final results = decoded['results'] as List<dynamic>?;
+      if (results == null || results.isEmpty) return item;
 
-    final best = results.first as Map<String, dynamic>;
-    final int tmdbId = best['id'] as int;
-    final String? posterPath = best['poster_path'] as String?;
-    final String? backdropPath = best['backdrop_path'] as String?;
-    final String? overview = best['overview'] as String?;
-    final num? voteAverage = best['vote_average'] as num?;
-    final String? date = (item.type == MediaType.tv
-            ? best['first_air_date']
-            : best['release_date'])
-        as String?;
-    final int? year =
-        date != null && date.length >= 4 ? int.tryParse(date.substring(0, 4)) : null;
+      final best = results.first as Map<String, dynamic>;
+      tmdbId = best['id'] as int;
+      // We could also update best match details here but the details call below covers it
+    }
+
+    String? posterPath;
+    String? backdropPath;
+    String? overview;
+    num? voteAverage;
+    int? year;
 
     int? runtimeMinutes;
     List<String> genres = [];

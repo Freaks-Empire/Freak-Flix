@@ -111,6 +111,105 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
     );
   }
 
+  void _showMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.info_outline, color: Colors.white),
+              title: const Text('File Info', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showFileInfo(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_note, color: Colors.white),
+              title: const Text('Identify', style: TextStyle(color: Colors.white)),
+              subtitle: const Text('Fix incorrect match', style: TextStyle(color: Colors.white54, fontSize: 12)),
+              onTap: () {
+                Navigator.pop(ctx);
+                showDialog(
+                  context: context,
+                  builder: (_) => _IdentifyDialog(item: _current),
+                ).then((_) => _loadDetails()); // Reload details after potential update
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showFileInfo(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Video Information', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 24),
+            _buildInfoRow('File Name', _current.fileName),
+            _buildInfoRow('Location', _current.filePath),
+            _buildInfoRow('Size', _formatBytes(_current.sizeBytes)),
+            if (_current.tmdbId != null) _buildInfoRow('TMDB ID', _current.tmdbId.toString()),
+            if (_current.stashId != null) _buildInfoRow('Stash ID', _current.stashId!),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(label, style: const TextStyle(color: Colors.white54, fontSize: 13)),
+          ),
+          Expanded(
+            child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 14)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes <= 0) return "0 B";
+    const suffixes = ["B", "KB", "MB", "GB", "TB"];
+    var i = 0;
+    double size = bytes.toDouble();
+    while (size >= 1024 && i < suffixes.length - 1) {
+      size /= 1024;
+      i++;
+    }
+    return '${size.toStringAsFixed(2)} ${suffixes[i]}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -475,9 +574,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 fixedSize: const Size(60, 60),
               ),
-              onPressed: () {
-                // More options
-              },
+              onPressed: () => _showMenu(context),
                icon: const Icon(Icons.more_vert),
             ),
           ],
@@ -638,6 +735,150 @@ class _TrailerCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(video.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: textColor, fontSize: 12)),
             const Text('YouTube', style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _IdentifyDialog extends StatefulWidget {
+  final MediaItem item;
+  const _IdentifyDialog({required this.item});
+
+  @override
+  State<_IdentifyDialog> createState() => _IdentifyDialogState();
+}
+
+class _IdentifyDialogState extends State<_IdentifyDialog> {
+  late TextEditingController _controller;
+  List<TmdbItem> _results = [];
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.item.title ?? widget.item.fileName);
+    _search();
+  }
+
+  Future<void> _search() async {
+    if (_controller.text.trim().isEmpty) return;
+    
+    setState(() {
+      _loading = true;
+      _error = null;
+      _results = [];
+    });
+
+    try {
+      final tmdb = context.read<TmdbService>();
+      final results = await tmdb.searchMulti(_controller.text);
+      if (mounted) setState(() => _results = results);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _select(TmdbItem match) async {
+    setState(() => _loading = true);
+    
+    try {
+      final meta = context.read<MetadataService>();
+      final lib = context.read<LibraryProvider>();
+      
+      var updated = widget.item.copyWith(
+         tmdbId: match.id,
+         type: match.mediaType == TmdbMediaType.movie ? MediaType.movie : MediaType.tv,
+         title: match.title,
+         overview: match.overview,
+         posterUrl: match.posterUrl,
+         backdropUrl: match.backdropUrl,
+         year: match.year,
+         isAnime: false,
+      );
+      
+      updated = await meta.enrich(updated);
+      await lib.updateItem(updated);
+      
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Failed to update: $e';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+        child: Column(
+          children: [
+            Text('Identify', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _controller,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Search for Title...',
+                hintStyle: const TextStyle(color: Colors.white38),
+                filled: true,
+                fillColor: Colors.white10,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.search, color: Colors.white70),
+                  onPressed: _search,
+                ),
+              ),
+              onSubmitted: (_) => _search(),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: _loading 
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null 
+                      ? Center(child: Text(_error!, style: const TextStyle(color: Colors.redAccent)))
+                      : _results.isEmpty 
+                          ? const Center(child: Text('No results found', style: TextStyle(color: Colors.white38)))
+                          : ListView.separated(
+                              itemCount: _results.length,
+                              separatorBuilder: (_, __) => const Divider(color: Colors.white10),
+                              itemBuilder: (ctx, i) {
+                                final r = _results[i];
+                                return ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: r.posterUrl != null 
+                                        ? Image.network(r.posterUrl!, width: 40, height: 60, fit: BoxFit.cover)
+                                        : Container(width: 40, height: 60, color: Colors.grey[800]),
+                                  ),
+                                  title: Text(r.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  subtitle: Text(
+                                    '${r.year ?? "Unknown"} • ${r.mediaType == TmdbMediaType.movie ? "Movie" : "TV"}',
+                                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                  ),
+                                  onTap: () => _select(r),
+                                );
+                              },
+                            ),
+            ),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ),
           ],
         ),
       ),

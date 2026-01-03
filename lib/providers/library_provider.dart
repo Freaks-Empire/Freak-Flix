@@ -566,6 +566,15 @@ class LibraryProvider extends ChangeNotifier {
     await saveLibrary();
   }
 
+  Future<void> updateItem(MediaItem item) async {
+    final index = _allItems.indexWhere((i) => i.id == item.id);
+    if (index != -1) {
+      _allItems[index] = item;
+      await saveLibrary();
+      notifyListeners();
+    }
+  }
+
   Future<void> rescanAll({
     required graph_auth.GraphAuthService auth,
     MetadataService? metadata,
