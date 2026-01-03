@@ -17,7 +17,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
   
   // Calculate items per page dynamically
   int _calculateItemsPerPage(BoxConstraints constraints) {
-    // MediaGrid uses SliverGridDelegateWithMaxCrossAxisExtent with maxCrossAxisExtent = 150
+    // MediaGrid uses SliverGridDelegateWithMaxCrossAxisExtent with maxCrossAxisExtent = 250
     // and aspect ratio 2/3.
     // Let's emulate that logic to find how many columns fit.
     
@@ -26,7 +26,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
     // Pagination controls height: approx 60-80? Let's assume some saved space.
     
     final double gridWidth = constraints.maxWidth - 24; // 12 padding each side
-    const double maxCrossAxisExtent = 150;
+    const double maxCrossAxisExtent = 250;
     const double childAspectRatio = 2 / 3;
     const double spacing = 12;
 
@@ -70,7 +70,10 @@ class _MoviesScreenState extends State<MoviesScreen> {
           body: Column(
             children: [
               Expanded(
-                child: MediaGrid(items: pageItems),
+                child: MediaGrid(
+                  items: pageItems,
+                  maxCrossAxisExtent: 250,
+                ),
               ),
               PaginationControls(
                 currentPage: _page, 

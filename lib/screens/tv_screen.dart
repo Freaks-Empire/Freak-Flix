@@ -18,7 +18,7 @@ class _TvScreenState extends State<TvScreen> {
   int _calculateItemsPerPage(BoxConstraints constraints) {
     // Similar logic to MoviesScreen / MediaGrid
     final double gridWidth = constraints.maxWidth - 24; 
-    const double maxCrossAxisExtent = 150;
+    const double maxCrossAxisExtent = 250;
     const double childAspectRatio = 2 / 3;
     const double spacing = 12;
 
@@ -83,7 +83,7 @@ class _TvScreenState extends State<TvScreen> {
                   padding: const EdgeInsets.fromLTRB(12, 100, 12, 12),
                   // Use same responsive delegate as MediaGrid
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 150,
+                    maxCrossAxisExtent: 250,
                     childAspectRatio: 2 / 3,
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
