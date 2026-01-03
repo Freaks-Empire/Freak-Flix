@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'dart:html' as html;
 import 'dart:ui' as ui;
+import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/media_item.dart';
@@ -94,7 +95,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
       // Register View Factory
       // ignore: undefined_prefixed_name
-      ui.platformViewRegistry.registerViewFactory(_viewType, (int viewId) => _videoElement!);
+      ui_web.platformViewRegistry.registerViewFactory(_viewType, (int viewId) => _videoElement!);
 
       if (mounted) {
         setState(() => _isLoading = false);

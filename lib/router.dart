@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:newrelic_mobile/newrelic_navigation_observer.dart';
+import 'services/monitoring/monitoring.dart';
 import 'package:provider/provider.dart';
 
 import 'providers/profile_provider.dart';
@@ -40,7 +40,7 @@ GoRouter createRouter(
     initialLocation: '/discover',
     refreshListenable: Listenable.merge([settings, profiles]),
     debugLogDiagnostics: true,
-    observers: [NewRelicNavigationObserver()],
+    observers: [MonitoringService.navigationObserver],
     
     redirect: (context, state) {
       final isSetup = settings.isSetupCompleted;

@@ -11,9 +11,8 @@
 // - This sample uses shared_preferences for persistence and simple in-memory caches.
 // - Playback now uses flutter_mpv (MPV); for advanced engines replace MpvController via FFI later.
 
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:newrelic_mobile/newrelic_mobile.dart';
+import 'services/monitoring/monitoring.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart' show FileNotFoundError;
 import 'package:media_kit/media_kit.dart';
@@ -45,28 +44,14 @@ void main() async {
     debugPrint('Warning: dotenv.load failed: $e');
   }
 
-  // New Relic Config
-  final appToken = Platform.isAndroid 
-       ? 'AAe36c031e01ebd715ca9d0c974005c41972f9a812-NRMA' 
-       : 'YOUR_IOS_TOKEN_HERE';
+  // Monitoring
+  // Config moved to service
+  // New Relic Config - Logic moved to MonitoringService
        
-  Config config = Config(
-      accessToken: appToken,
-      analyticsEventEnabled: true,
-      networkErrorRequestEnabled: true,
-      networkRequestEnabled: true,
-      crashReportingEnabled: true,
-      interactionTracingEnabled: true,
-      httpResponseBodyCaptureEnabled: true,
-      loggingEnabled: true,
-      webViewInstrumentation: true,
-      printStatementAsEventsEnabled: true,
-      httpInstrumentationEnabled:true
-  );
+
 
   runZonedGuarded(() async {
-    FlutterError.onError = NewrelicMobile.onError;
-    await NewrelicMobile.instance.startAgent(config);
+    await MonitoringService.initialize();
     
     MediaKit.ensureInitialized();
   
@@ -132,7 +117,7 @@ void main() async {
       ),
     );
   }, (Object error, StackTrace stackTrace) {
-    NewrelicMobile.instance.recordError(error, stackTrace);
+    MonitoringService.recordError(error, stackTrace);
   });
 }
 
