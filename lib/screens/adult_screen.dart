@@ -15,8 +15,33 @@ class AdultScreen extends StatefulWidget {
 
 class _AdultScreenState extends State<AdultScreen> {
   int _currentPage = 0;
-  final int _pageSize = 24;
   String _sortBy = 'Date Added'; // Options: Date Added, Title, Year
+
+  int _calculateItemsPerPage(BoxConstraints constraints) {
+    
+    // AdultScreen uses maxCrossAxisExtent = 340, childAspectRatio = 16 / 9
+    final double gridWidth = constraints.maxWidth - 24; // approx padding
+    const double maxCrossAxisExtent = 340;
+    const double childAspectRatio = 16 / 9;
+    const double spacing = 12;
+
+    int crossAxisCount = (gridWidth / (maxCrossAxisExtent + spacing)).ceil();
+    if (crossAxisCount < 1) crossAxisCount = 1;
+
+    final double itemWidth = (gridWidth - (crossAxisCount - 1) * spacing) / crossAxisCount;
+    final double itemHeight = itemWidth / childAspectRatio;
+
+    // Estimate available height. 
+    // AdultScreen has header (approx 48) and pagination (approx 60).
+    // Let's reserve ~120 height.
+    final double availableHeight = constraints.maxHeight - 140; 
+    if (availableHeight <= 0) return 12; // Fallback
+
+    int rowCount = (availableHeight / (itemHeight + spacing)).floor();
+    if (rowCount < 2) rowCount = 2;
+
+    return crossAxisCount * rowCount;
+  }
 
   Widget _buildPagination(BuildContext context, int totalPages) {
      final theme = Theme.of(context);
@@ -114,72 +139,71 @@ class _AdultScreenState extends State<AdultScreen> {
         break;
       case 'Date Added':
       default:
-        // Assuming the provider list is already somewhat sorted or we use file creation time if available
-        // For now, let's assume the provider gives them consistent order, or we reverse if "Date Added" implies newest.
-        // If MediaItem has a dateAdded field, use that. If not, default order is usually scan order.
-        // Let's reverse standard list for "Newest first" if that's the implication, or just keep as is.
-        // Actually, let's try to sort by 'modified' if available, or just name as fallback?
-        // Let's stick to simple list reversal for "Date Added" (Newest) usually effectively means "Latest scanned" often at end?
-        // Let's check MediaItem definition later. For now, default order.
         break;
     }
 
-    // 2. Paginate
-    final totalItems = sortedItems.length;
-    final totalPages = (totalItems / _pageSize).ceil();
-    // Clamp current page if out of bounds (e.g. after filtering changes)
-    if (_currentPage >= totalPages && totalPages > 0) _currentPage = totalPages - 1;
-    if (_currentPage < 0) _currentPage = 0;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 2. Paginate dynamically
+        final int pageSize = _calculateItemsPerPage(constraints);
+        final totalItems = sortedItems.length;
+        final totalPages = (totalItems / pageSize).ceil();
+        
+        // Clamp current page
+        if (_currentPage >= totalPages && totalPages > 0) _currentPage = totalPages - 1;
+        if (_currentPage < 0) _currentPage = 0;
 
-    final start = _currentPage * _pageSize;
-    final end = (start + _pageSize).clamp(0, totalItems);
-    final pageItems = sortedItems.sublist(start, end);
+        final start = _currentPage * pageSize;
+        final end = (start + pageSize).clamp(0, totalItems);
+        final pageItems = sortedItems.sublist(start, end);
 
-    return Column(
-      children: [
-        // Controls Header
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '$totalItems items',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              DropdownButton<String>(
-                value: _sortBy,
-                underline: const SizedBox(),
-                style: Theme.of(context).textTheme.bodyMedium,
-                onChanged: (val) {
-                  if (val != null) setState(() => _sortBy = val);
-                },
-                items: const [
-                  DropdownMenuItem(value: 'Date Added', child: Text('Date Added')),
-                  DropdownMenuItem(value: 'Title', child: Text('Title')),
-                  DropdownMenuItem(value: 'Year', child: Text('Year')),
+        return Column(
+          children: [
+            // Controls Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '$totalItems items',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  DropdownButton<String>(
+                    value: _sortBy,
+                    underline: const SizedBox(),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    onChanged: (val) {
+                      if (val != null) setState(() => _sortBy = val);
+                    },
+                    items: const [
+                      DropdownMenuItem(value: 'Date Added', child: Text('Date Added')),
+                      DropdownMenuItem(value: 'Title', child: Text('Title')),
+                      DropdownMenuItem(value: 'Year', child: Text('Year')),
+                    ],
+                  ),
                 ],
               ),
-            ],
-          ),
-        ),
-        
-        // Grid
-        Expanded(
-          child: MediaGrid(
-            items: pageItems,
-            childAspectRatio: 16 / 9,
-            maxCrossAxisExtent: 340,
-          ),
-        ),
+            ),
+            
+            // Grid
+            Expanded(
+              child: MediaGrid(
+                items: pageItems,
+                childAspectRatio: 16 / 9,
+                maxCrossAxisExtent: 340,
+              ),
+            ),
 
-        // Pagination Footer
-        if (totalPages > 1)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24.0, horizontal: 16.0),
-            child: _buildPagination(context, totalPages),
-          ),
-      ],
+            // Pagination Footer
+            if (totalPages > 1)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24.0, horizontal: 16.0),
+                child: _buildPagination(context, totalPages),
+              ),
+          ],
+        );
+      },
     );
   }
 }
