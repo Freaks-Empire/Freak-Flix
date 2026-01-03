@@ -4,6 +4,7 @@
   
 [build.environment]
   NEWRELIC_ACCOUNT_ID = "7549480"
+  NEWRELIC_INGEST_LICENSE_KEY = "fb2f0c5e7bfdd1bd78272780e045fda0FFFFNRAL"
 
 [[redirects]]
   from = "/api/ms_auth/*"
