@@ -13,6 +13,7 @@ import '../../models/tmdb_item.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../services/tmdb_service.dart';
+import '../../services/metadata_service.dart';
 import '../../models/tmdb_extended_details.dart';
 import '../../widgets/discover_card.dart';
 import '../../widgets/safe_network_image.dart';
@@ -742,6 +743,8 @@ class _TrailerCard extends StatelessWidget {
   }
 }
 
+
+
 class _IdentifyDialog extends StatefulWidget {
   final MediaItem item;
   const _IdentifyDialog({required this.item});
@@ -792,12 +795,12 @@ class _IdentifyDialogState extends State<_IdentifyDialog> {
       
       var updated = widget.item.copyWith(
          tmdbId: match.id,
-         type: match.mediaType == TmdbMediaType.movie ? MediaType.movie : MediaType.tv,
+         type: match.type == TmdbMediaType.movie ? MediaType.movie : MediaType.tv,
          title: match.title,
          overview: match.overview,
          posterUrl: match.posterUrl,
          backdropUrl: match.backdropUrl,
-         year: match.year,
+         year: match.releaseYear,
          isAnime: false,
       );
       
@@ -866,7 +869,7 @@ class _IdentifyDialogState extends State<_IdentifyDialog> {
                                   ),
                                   title: Text(r.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                   subtitle: Text(
-                                    '${r.year ?? "Unknown"} • ${r.mediaType == TmdbMediaType.movie ? "Movie" : "TV"}',
+                                    '${r.releaseYear ?? "Unknown"} • ${r.type == TmdbMediaType.movie ? "Movie" : "TV"}',
                                     style: const TextStyle(color: Colors.white54, fontSize: 12),
                                   ),
                                   onTap: () => _select(r),

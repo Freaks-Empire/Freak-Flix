@@ -1253,13 +1253,7 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> updateItem(MediaItem updated) async {
-    final index = _allItems.indexWhere((i) => i.id == updated.id);
-    if (index == -1) return;
-    _allItems[index] = updated;
-    notifyListeners();
-    await saveLibrary();
-  }
+
 
 
 
