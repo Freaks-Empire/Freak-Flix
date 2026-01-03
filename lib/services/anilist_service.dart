@@ -5,6 +5,7 @@ import '../models/media_item.dart';
 import '../models/tmdb_extended_details.dart';
 import '../models/tmdb_episode.dart';
 import '../models/tmdb_item.dart'; // For recommendations if needed
+import '../models/cast_member.dart';
 
 // AniList uses the public GraphQL endpoint. Adjust the query if you need more fields.
 class AniListService {
@@ -116,7 +117,6 @@ class AniListService {
 
   Future<TmdbExtendedDetails?> getDetails(int id) async {
     const url = 'https://graphql.anilist.co';
-    const query = r'''
     const query = r'''
       query ($id: Int) {
         Media(id: $id) {
