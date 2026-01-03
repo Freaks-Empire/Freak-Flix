@@ -1,6 +1,9 @@
 [build]
   command = "bash ./netlify/build.sh"
   publish = "build/web"
+  
+[build.environment]
+  NEWRELIC_ACCOUNT_ID = "7549480"
 
 [[redirects]]
   from = "/api/ms_auth/*"
