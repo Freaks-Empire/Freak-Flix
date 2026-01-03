@@ -88,8 +88,11 @@ class TmdbService {
     );
 
     final detailsRes = await _client.get(detailsUri);
+    String? title;
     if (detailsRes.statusCode == 200) {
       final d = jsonDecode(detailsRes.body) as Map<String, dynamic>;
+      title = item.type == MediaType.movie ? d['title'] : d['name'];
+      
       if (item.type == MediaType.movie) {
         runtimeMinutes = d['runtime'] as int?;
       } else {
@@ -104,10 +107,20 @@ class TmdbService {
             .map((g) => (g as Map<String, dynamic>)['name'] as String)
             .toList();
       }
+      
+      posterPath = d['poster_path'];
+      backdropPath = d['backdrop_path'];
+      overview = d['overview'];
+      voteAverage = (d['vote_average'] as num?)?.toDouble();
+      final dateStr = item.type == MediaType.movie ? d['release_date'] : d['first_air_date'];
+      if (dateStr != null && dateStr.toString().length >= 4) {
+         year = int.tryParse(dateStr.toString().substring(0, 4));
+      }
     }
 
     return item.copyWith(
-      year: item.year ?? year,
+      title: title ?? item.title,
+      year: year ?? item.year,
       posterUrl: posterPath != null ? '$_imageBase$posterPath' : item.posterUrl,
       backdropUrl: backdropPath != null ? '$_imageBase$backdropPath' : item.backdropUrl,
       overview: overview?.isNotEmpty == true ? overview : item.overview,
