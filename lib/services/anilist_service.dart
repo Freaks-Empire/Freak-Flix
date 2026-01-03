@@ -347,6 +347,7 @@ class AniListService {
     } catch (_) {
       return [];
     }
+  }
   Future<Map<String, dynamic>?> getPersonDetails(int id) async {
     const url = 'https://graphql.anilist.co';
     const query = r'''

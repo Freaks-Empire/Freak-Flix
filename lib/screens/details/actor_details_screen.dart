@@ -182,7 +182,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                         title: node['title']?['english'] ?? node['title']?['romaji'] ?? '',
                         posterUrl: node['coverImage']?['large'],
                         type: TmdbMediaType.tv,
-                        releaseYear: node['startDate']?['year'].toString(),
+                        releaseYear: node['startDate']?['year'] as int?,
                     ));
                 }
 
