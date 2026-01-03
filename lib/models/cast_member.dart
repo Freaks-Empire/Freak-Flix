@@ -7,6 +7,10 @@ class CastMember {
   final String character;
   final String? profileUrl;
   final CastSource source;
+  
+  // Extended Metadata
+  final String? characterImageUrl;
+  final String? role; // e.g. "Main", "Supporting"
 
   const CastMember({
     required this.id,
@@ -14,6 +18,8 @@ class CastMember {
     required this.character,
     this.profileUrl,
     required this.source,
+    this.characterImageUrl,
+    this.role,
   });
 
   factory CastMember.fromJson(Map<String, dynamic> json) {
@@ -26,6 +32,8 @@ class CastMember {
         (e) => e.toString() == json['source'],
         orElse: () => CastSource.tmdb,
       ),
+      characterImageUrl: json['characterImageUrl'] as String?,
+      role: json['role'] as String?,
     );
   }
 
@@ -35,5 +43,7 @@ class CastMember {
         'character': character,
         'profileUrl': profileUrl,
         'source': source.toString(),
+        'characterImageUrl': characterImageUrl,
+        'role': role,
       };
 }

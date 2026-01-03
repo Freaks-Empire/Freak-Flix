@@ -117,6 +117,7 @@ class AniListService {
   Future<TmdbExtendedDetails?> getDetails(int id) async {
     const url = 'https://graphql.anilist.co';
     const query = r'''
+    const query = r'''
       query ($id: Int) {
         Media(id: $id) {
           id
@@ -142,6 +143,21 @@ class AniListService {
             thumbnail
             url
             site
+          }
+          characters(sort: ROLE, perPage: 12) {
+            edges {
+              role
+              node {
+                id
+                name { full }
+                image { large }
+              }
+              voiceActors(language: JAPANESE, sort: RELEVANCE) {
+                id
+                name { full }
+                image { large }
+              }
+            }
           }
         }
       }
@@ -180,8 +196,49 @@ class AniListService {
           .map((g) => TmdbGenre(id: 0, name: g.toString()))
           .toList();
 
+      // Parse Characters -> CastMember
+      // Rule: Name = Voice Actor (if exists) or Character (fallback)
+      // Character = Character Name
+      // Image = Voice Actor Image
+      // Extra: characterImageUrl = Character Image
+      
+      final List<CastMember> cast = [];
+      final charEdges = media['characters']?['edges'] as List<dynamic>?;
+      
+      if (charEdges != null) {
+        for (var edge in charEdges) {
+          final node = edge['node'];
+          if (node == null) continue;
+          
+          final charName = node['name']?['full'] as String? ?? 'Unknown';
+          final charImage = node['image']?['large'] as String?;
+          final role = edge['role'] as String?; // MAIN, SUPPORTING
+          
+          // Get Japanese Voice Actor (first one usually)
+          final vas = edge['voiceActors'] as List<dynamic>?;
+          Map<String, dynamic>? va;
+          if (vas != null && vas.isNotEmpty) {
+            va = vas.first;
+          }
+          
+          final actorName = va?['name']?['full'] as String? ?? charName; // Fallback to char name if no VA
+          final actorImage = va?['image']?['large'] as String?; // Fallback null
+          final actorId = va?['id']?.toString() ?? 'char_${node['id']}'; // Unique ID
+
+          cast.add(CastMember(
+            id: actorId,
+            name: actorName,
+            character: charName, // Specifically Character Name
+            profileUrl: actorImage, // Actor Image
+            source: CastSource.tmdb, // Using tmdb enum for generic api source
+            characterImageUrl: charImage, // Character Image
+            role: role != null ? (role[0] + role.substring(1).toLowerCase()) : null, // "Main", "Supporting"
+          ));
+        }
+      }
+
       return TmdbExtendedDetails(
-        cast: [], // TODO: fetch characters
+        cast: cast,
         videos: [], // TODO: fetch trailer
         recommendations: recs,
         genres: genres,

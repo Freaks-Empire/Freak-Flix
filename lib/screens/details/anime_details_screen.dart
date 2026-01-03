@@ -590,38 +590,65 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> with SingleTick
        shrinkWrap: true,
        physics: const NeverScrollableScrollPhysics(),
        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-         maxCrossAxisExtent: 350,
-         childAspectRatio: 3,
+         maxCrossAxisExtent: 400, // Wider for split view
+         childAspectRatio: 3, 
          crossAxisSpacing: 16,
          mainAxisSpacing: 16,
        ),
        itemCount: cast.length,
        itemBuilder: (ctx, i) {
          final actor = cast[i];
+         // Split Card Design
+         // Left: Character Image + Name/Role
+         // Right: Actor Name/Lang + Actor Image
+         
          return Container(
            decoration: BoxDecoration(
              color: const Color(0xFF151F2E),
              borderRadius: BorderRadius.circular(4),
            ),
+           clipBehavior: Clip.antiAlias,
            child: Row(
              children: [
-               ClipRRect(
-                 borderRadius: const BorderRadius.horizontal(left: Radius.circular(4)),
-                 child: actor.profileUrl != null 
-                    ? Image.network(actor.profileUrl!, width: 60, height: double.infinity, fit: BoxFit.cover)
-                    : Container(width: 60, color: Colors.white10),
-               ),
+               // --- LEFT: CHARACTER ---
+               if (actor.characterImageUrl != null)
+                 Image.network(actor.characterImageUrl!, width: 60, height: double.infinity, fit: BoxFit.cover)
+               else
+                 Container(width: 60, color: Colors.white10),
+                 
                const SizedBox(width: 12),
+               
                Expanded(
                  child: Column(
                    mainAxisAlignment: MainAxisAlignment.center,
                    crossAxisAlignment: CrossAxisAlignment.start,
                    children: [
-                     Text(actor.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1),
-                     Text(actor.character, style: const TextStyle(color: Colors.white54, fontSize: 12), maxLines: 1),
+                     Text(actor.character, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                     Text(actor.role ?? 'Main', style: const TextStyle(color: Colors.white54, fontSize: 12)),
                    ],
                  ),
-               )
+               ),
+               
+               const SizedBox(width: 8),
+               
+               // --- RIGHT: ACTOR ---
+               Expanded(
+                 child: Column(
+                   mainAxisAlignment: MainAxisAlignment.center,
+                   crossAxisAlignment: CrossAxisAlignment.end,
+                   children: [
+                     Text(actor.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right),
+                     const Text('Japanese', style: TextStyle(color: Colors.white54, fontSize: 12), textAlign: TextAlign.right),
+                   ],
+                 ),
+               ),
+               
+               const SizedBox(width: 12),
+               
+               if (actor.profileUrl != null)
+                 Image.network(actor.profileUrl!, width: 60, height: double.infinity, fit: BoxFit.cover)
+               else
+                 Container(width: 60, color: Colors.white10),
              ],
            ),
          );
