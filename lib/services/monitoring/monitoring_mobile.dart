@@ -7,6 +7,8 @@ class MonitoringService {
   static Future<void> initialize() async {
      try {
        // user-provided token for Android
+       // user-provided token for Android
+       /*
        final appToken = Platform.isAndroid 
           ? 'AAe36c031e01ebd715ca9d0c974005c41972f9a812-NRMA' 
           : 'YOUR_IOS_TOKEN_HERE';
@@ -28,6 +30,8 @@ class MonitoringService {
        FlutterError.onError = NewrelicMobile.onError;
        await NewrelicMobile.instance.startAgent(config);
        debugPrint('Monitoring (Mobile): New Relic started.');
+       */
+       debugPrint('Monitoring (Mobile): New Relic disabled for Windows verify.');
      } catch (e) {
        debugPrint('Monitoring (Mobile): Init failed: $e');
      }

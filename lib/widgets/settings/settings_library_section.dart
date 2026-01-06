@@ -159,7 +159,7 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
                icon: LucideIcons.search,
                title: 'Refresh Metadata',
                subtitle: 'Re-fetch details for all items',
-               trailing: const Icon(LucideIcons.cloudDownload, size: 16, color: AppColors.textSub),
+               trailing: const Icon(LucideIcons.downloadCloud, size: 16, color: AppColors.textSub),
                onTap: library.isLoading ? null : () async {
                    final choice = await showDialog<bool>(
                         context: context,
