@@ -114,7 +114,10 @@ class _SearchScreenState extends State<SearchScreen> {
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            // 1. STICKY SEARCH HEADER
+            // 1. SPACER (Fix for Nav Dock overlap)
+            const SliverToBoxAdapter(child: SizedBox(height: 80)),
+
+            // 2. STICKY SEARCH HEADER
             SliverPersistentHeader(
               pinned: true,
               floating: true,
