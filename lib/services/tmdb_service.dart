@@ -280,22 +280,26 @@ class TmdbService {
   Future<List<TmdbItem>> getTrending() async {
     // /trending/all/day
     // https://developer.themoviedb.org/reference/trending-all
-    if (_apiKey == null) return [];
+    final key = _key;
+    if (key == null) return [];
     
-    final uri = Uri.https(_baseUrl, '/3/trending/all/day', {
-      'api_key': _apiKey,
+    final uri = Uri.https(_baseHost, '/3/trending/all/day', {
+      'api_key': key,
       'language': 'en-US',
     });
 
     try {
-      final response = await http.get(uri);
+      final response = await _client.get(uri);
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final results = (data['results'] as List).map((e) => TmdbItem.fromJson(e)).toList();
-        // Filter out people if undesired, or keep 'all'. 
-        // Usually trending includes people, but for media discovery we might strictly want movie/tv.
-        // Let's filter to keep only movie/tv for now to avoid clicking a person and having no details screen.
-        return results.where((i) => i.mediaType == MediaType.movie || i.mediaType == MediaType.tv).toList();
+        final results = (data['results'] as List).map((e) => TmdbItem.fromMap(
+          e,
+          imageBase: _imageBase,
+          defaultType: TmdbMediaType.movie, // Fallback, usually media_type is present
+        )).toList();
+        
+        // Filter out people
+        return results.where((i) => i.type == TmdbMediaType.movie || i.type == TmdbMediaType.tv).toList();
       }
     } catch (e) {
       debugPrint('Error getting trending: $e');
