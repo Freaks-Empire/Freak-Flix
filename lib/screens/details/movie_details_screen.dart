@@ -220,9 +220,9 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      baseColor.withValues(alpha: 0.2),
-                      baseColor.withValues(alpha: 0.8),
-                      baseColor.withValues(alpha: 0.95),
+                      baseColor.withOpacity(0.2),
+                      baseColor.withOpacity(0.8),
+                      baseColor.withOpacity(0.95),
                       baseColor,
                     ],
                     stops: const [0.0, 0.4, 0.7, 1.0],
@@ -350,7 +350,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
               onPressed: () => Navigator.of(context).pop(),
               icon: Icon(Icons.arrow_back, color: textColor), // Adaptive back button color
               style: IconButton.styleFrom(
-                backgroundColor: baseColor.withValues(alpha: 0.5), // Semi-transparent based on theme
+                backgroundColor: baseColor.withOpacity(0.5), // Semi-transparent based on theme
                 foregroundColor: textColor,
               ),
             ),
