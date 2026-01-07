@@ -22,6 +22,12 @@ import 'providers/library_provider.dart';
 import 'providers/playback_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/profile_provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'firebase_options.dart';
+import 'services/analytics_service.dart';
+
+import 'package:flutter/foundation.dart'; // For PlatformDispatcher
 
 import 'package:flutter_web_plugins/url_strategy.dart';
 
@@ -49,6 +55,24 @@ void main() async {
   // New Relic Config - Logic moved to MonitoringService
        
 
+  // 1. Initialize Firebase (Before runZonedGuarded ideally, or inside)
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    
+    // 2. Set up Crashlytics
+    FlutterError.onError = (errorDetails) {
+      FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
+    };
+    
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+  } catch (e) {
+    debugPrint('Firebase Init Failed (Likely due to missing configuration): $e');
+  }
 
   runZonedGuarded(() async {
     await MonitoringService.initialize();
@@ -112,6 +136,7 @@ void main() async {
           Provider<TmdbService>.value(value: tmdbService),
           Provider<TmdbDiscoverService>.value(value: tmdbDiscoverService),
           Provider<MetadataService>.value(value: metadataService),
+          Provider<AnalyticsService>.value(value: AnalyticsService()),
         ],
         child: const FreakFlixApp(),
       ),
