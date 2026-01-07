@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "134067109224",
+    "project_id": "freak-flix-601a0",
+    "storage_bucket": "freak-flix-601a0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:134067109224:android:2f476ae5cf7876ff2d2add",
+        "android_client_info": {
+          "package_name": "com.freak.freakflix.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDl6kvpcKn0e3Uy6gqwujN4xSWSTRMWgXQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
