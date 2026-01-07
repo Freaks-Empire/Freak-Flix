@@ -1,5 +1,6 @@
 /// lib/screens/details/movie_details_screen.dart
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -61,6 +62,12 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
   }
 
   Future<void> _playTrailer() async {
+    if (kIsWeb) {
+       // YouTube scraping via youtube_explode doesn't work on Web due to CORS.
+       setState(() => _trailerLoading = false);
+       return;
+    }
+
     if (_details?.videos.isEmpty ?? true) {
       setState(() => _trailerLoading = false);
       return;
