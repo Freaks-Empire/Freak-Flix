@@ -286,70 +286,100 @@ class _VideoControlsState extends State<VideoControls> {
                 ),
               ),
 
-              // 3. Center Buffering Indicator
+              // 3. Center Play Button (Big, fades out)
+              AnimatedOpacity(
+                  opacity: showControls ? 1.0 : (_isPlaying ? 0.0 : 1.0),
+                  duration: const Duration(milliseconds: 300),
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: _togglePlay,
+                      child: Container(
+                         padding: const EdgeInsets.all(24),
+                         decoration: BoxDecoration(
+                           color: Colors.black.withOpacity(0.5),
+                           shape: BoxShape.circle,
+                           border: Border.all(color: Colors.white24),
+                         ),
+                         child: Icon(
+                            _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                            color: Colors.white,
+                            size: 64,
+                         ),
+                      ),
+                    ),
+                  ),
+              ),
+
+              // 4. Center Buffering Indicator
               if (_buffering)
                 const Center(child: CircularProgressIndicator(color: Colors.white)),
 
-              // 4. Bottom Controls Layer
+              // 5. Bottom Controls Layer
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 300),
                 bottom: showControls ? 0 : -150,
                 left: 0, right: 0,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 32, left: 32, right: 32),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Progress Bar (Interactive)
-                      _buildImmersiveProgressBar(context),
-                      
-                      const SizedBox(height: 16),
+                       // Full Width Progress Bar (No padding)
+                       SizedBox(
+                         height: 20,
+                         child: _buildImmersiveProgressBar(context),
+                       ),
+                       const SizedBox(height: 8),
 
-                      // Control Row
-                      Row(
-                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                       // Row with Time, Volume, Playlist controls (No capsule)
+                       Row(
                          children: [
-                            // Left Spacer / Time
-                            SizedBox(
-                              width: 120,
-                              child: Text(
-                                '${_formatDuration(_position)} / ${_formatDuration(_duration)}',
-                                style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w500),
-                              ),
+                            // Play/Pause Small (optional, but requested layout implies minimal bottom bar)
+                            IconButton(
+                              onPressed: _togglePlay,
+                              icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white),
                             ),
+                            const SizedBox(width: 8),
 
-                            // Center Capsule
-                            _buildGlassCapsule(),
+                            // Volume
+                            IconButton(
+                               icon: Icon(_volume == 0 ? Icons.volume_off : Icons.volume_up, color: Colors.white70),
+                               onPressed: () {
+                                 setState(() => _volume = _volume > 0 ? 0.0 : 100.0);
+                                 widget.player.setVolume(_volume);
+                               },
+                            ),
+                            
+                            // Time
+                            const SizedBox(width: 16),
+                            Text(
+                                '${_formatDuration(_position)} / ${_formatDuration(_duration)}',
+                                style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
+                            ),
+                            
+                            const Spacer(),
+                            
+                            // Previous/Next
+                            if (widget.onPrevious != null) 
+                               IconButton(icon: const Icon(Icons.skip_previous, color: Colors.white), onPressed: widget.onPrevious),
+                            if (widget.onNext != null)
+                               IconButton(icon: const Icon(Icons.skip_next, color: Colors.white), onPressed: widget.onNext),
 
-                            // Right Tools (Volume, Fit)
-                            SizedBox(
-                              width: 120,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  IconButton(
-                                     icon: Icon(_volume == 0 ? Icons.volume_off : Icons.volume_up, color: Colors.white70),
-                                     onPressed: () {
-                                       setState(() => _volume = _volume > 0 ? 0.0 : 100.0);
-                                       widget.player.setVolume(_volume);
-                                     },
-                                  ),
-                                  IconButton(
-                                     icon: const Icon(Icons.fullscreen, color: Colors.white70),
-                                     onPressed: () {
-                                        // Toggle fit as pseudo-fullscreen toggle for now
-                                        final next = switch(widget.fit) {
-                                            BoxFit.contain => BoxFit.cover,
-                                            _ => BoxFit.contain,
-                                        };
-                                        widget.onFitChanged(next);
-                                     },
-                                  ),
-                                ],
-                              ),
+                            const SizedBox(width: 16),
+
+                            // Fit
+                            IconButton(
+                               icon: const Icon(Icons.fullscreen, color: Colors.white70),
+                               onPressed: () {
+                                  final next = switch(widget.fit) {
+                                      BoxFit.contain => BoxFit.cover,
+                                      _ => BoxFit.contain,
+                                  };
+                                  widget.onFitChanged(next);
+                               },
                             ),
                          ],
-                      ),
+                       ),
                     ],
                   ),
                 ),
@@ -361,66 +391,7 @@ class _VideoControlsState extends State<VideoControls> {
     );
   }
 
-  Widget _buildGlassCapsule() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(40),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.4),
-            border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
-            borderRadius: BorderRadius.circular(40),
-            boxShadow: [
-               BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, spreadRadius: 5),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-               // Prev
-               IconButton(
-                 icon: const Icon(Icons.skip_previous_rounded, color: Colors.white70),
-                 onPressed: widget.onPrevious,
-                 tooltip: 'Previous',
-               ),
-               const SizedBox(width: 12),
-               
-               // Play/Pause Main
-               GestureDetector(
-                 onTap: _togglePlay,
-                 child: Container(
-                   width: 50, height: 50,
-                   decoration: BoxDecoration(
-                     color: Colors.white,
-                     shape: BoxShape.circle,
-                     boxShadow: [
-                       BoxShadow(color: Colors.white.withOpacity(0.3), blurRadius: 15, spreadRadius: 2)
-                     ],
-                   ),
-                   child: Icon(
-                     _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                     color: Colors.black,
-                     size: 32,
-                   ),
-                 ),
-               ),
 
-               const SizedBox(width: 12),
-               
-               // Next
-               IconButton(
-                 icon: const Icon(Icons.skip_next_rounded, color: Colors.white70),
-                 onPressed: widget.onNext,
-                 tooltip: 'Next',
-               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildImmersiveProgressBar(BuildContext context) {
      // Custom slider theme for thin line
