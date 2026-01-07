@@ -105,8 +105,18 @@ GoRouter createRouter(
              routes: [
                GoRoute(
                  path: '/movies',
-                 builder: (context, state) => const MoviesScreen(),
-               ),
+                  builder: (context, state) => const MoviesScreen(),
+                  routes: [
+                    GoRoute(
+                      path: 'details/:id',
+                      builder: (context, state) {
+                        final id = state.pathParameters['id']!;
+                        final movie = state.extra as MediaItem?;
+                        return DetailsScreen(item: movie, itemId: id);
+                      },
+                    ),
+                  ],
+                ),
              ],
            ),
            

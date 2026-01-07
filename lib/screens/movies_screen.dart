@@ -88,7 +88,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                         onPressed: () {
-                          context.push('/details', extra: featuredMovie);
+                          context.push('/movies/details/${featuredMovie.id}', extra: featuredMovie);
                         },
                       )
                     ],
@@ -140,7 +140,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
                     year: movie.year?.toString() ?? "",
                     posterUrl: movie.posterUrl,
                     onTap: () {
-                      context.push('/details', extra: movie);
+                      context.push('/movies/details/${movie.id}', extra: movie);
                     },
                   );
                 },
