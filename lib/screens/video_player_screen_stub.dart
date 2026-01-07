@@ -65,28 +65,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
           if (fresh != null) url = fresh;
       }
       
-      // 2. Fetch as Blob (The Anti-IDM Secret Sauce)
-      // Note: For long videos, this downloads the WHOLE file to RAM. 
-      // Ideally we'd use Range headers & MediaSourceExtensions (MSE), but that's complex.
-      // We'll stick to the requested Blob strategy.
-      debugPrint('Fetching video blob from: $url');
-      final response = await http.get(Uri.parse(url));
+      // 2. Direct Stream (Avoid Blob/CORS issues)
+      // OneDrive 'downloadUrl' is pre-signed and safe for direct playback.
+      // Fetching as Blob via XHR triggers CORS and OOM on large files.
+      debugPrint('Streaming directly from: $url');
       
-      if (response.statusCode != 200) {
-        throw Exception('Failed to load video: ${response.statusCode}');
-      }
-      
-      final blob = html.Blob([response.bodyBytes], 'video/mp4');
-      _blobUrl = html.Url.createObjectUrlFromBlob(blob);
-      debugPrint('Blob URL created: $_blobUrl');
+      _blobUrl = url; // Reuse variable for download URL
 
       // 3. Create & Register Video Element with Anti-IDM attributes
       _videoElement = html.VideoElement()
-        ..src = _blobUrl!
+        ..src = url
         ..style.width = '100%'
         ..style.height = '100%'
-        ..style.objectFit = 'contain' // Handle Fit later
-        ..controls = false // Custom controls only
+        ..style.objectFit = 'contain' 
+        ..controls = false 
         ..autoplay = true;
         
       // CRITICAL: Anti-IDM Attributes
@@ -134,7 +126,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   void _playIndex(int index) {
     if (index >= 0 && index < widget.playlist.length) {
       // Clean up previous
-      if (_blobUrl != null) html.Url.revokeObjectUrl(_blobUrl!);
+      if (_blobUrl != null && _blobUrl!.startsWith('blob:')) {
+        html.Url.revokeObjectUrl(_blobUrl!);
+      }
       
       setState(() {
         _currentIndex = index;
@@ -146,7 +140,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   @override
   void dispose() {
-    if (_blobUrl != null) html.Url.revokeObjectUrl(_blobUrl!);
+    if (_blobUrl != null && _blobUrl!.startsWith('blob:')) {
+      html.Url.revokeObjectUrl(_blobUrl!);
+    }
     _videoElement?.pause();
     _videoElement?.remove();
     super.dispose();
@@ -288,7 +284,7 @@ class _WebCinematicControlsState extends State<_WebCinematicControls> {
 
   void _triggerDownload() {
     if (widget.downloadUrl != null) {
-       final anchor = html.AnchorElement(href: widget.downloadUrl)
+       html.AnchorElement(href: widget.downloadUrl)
          ..setAttribute('download', '${widget.title}.mp4')
          ..click();
     }
