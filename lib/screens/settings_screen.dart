@@ -83,7 +83,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                   Expanded(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(32),
+                      padding: const EdgeInsets.only(
+                        left: 32, 
+                        right: 32, 
+                        bottom: 32,
+                        top: 100, // Safe Area for Navigation Dock
+                      ),
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 900),
                         child: Column(
