@@ -63,6 +63,7 @@ class ActivityCommandCenter extends StatelessWidget {
           taskName: taskName,
           progress: progress,
           logs: logs,
+          isVisible: isLoading || library.error != null, // Show if loading OR if there's an error to display
         );
       },
     );
