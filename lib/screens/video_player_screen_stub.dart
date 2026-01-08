@@ -221,9 +221,12 @@ class _WebNetflixControlsState extends State<_WebNetflixControls> {
   double _volume = 1.0;
   bool _hovering = false;
 
+  bool _showSettings = false; // Added missing field
   
   // Netflix Red Color
   final Color _netflixRed = const Color(0xFFE50914);
+
+
 
   @override
   void initState() {
@@ -422,5 +425,39 @@ class _WebNetflixControlsState extends State<_WebNetflixControls> {
         ),
       ),
     );
+  }
+}
+
+// Helper for standard white icons
+class _ControlIcon extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _ControlIcon({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(icon, color: Colors.white, size: 28),
+      onPressed: onTap,
+      splashRadius: 20,
+    );
+  }
+}
+
+// Removes the default padding at the ends of the slider
+class _CustomTrackShape extends RoundedRectSliderTrackShape {
+  @override
+  Rect getPreferredRect({
+    required RenderBox parentBox,
+    Offset offset = Offset.zero,
+    required SliderThemeData sliderTheme,
+    bool isEnabled = false,
+    bool isDiscrete = false,
+  }) {
+    final double trackHeight = sliderTheme.trackHeight!;
+    final double trackLeft = offset.dx;
+    final double trackTop = offset.dy + (parentBox.size.height - trackHeight) / 2;
+    final double trackWidth = parentBox.size.width;
+    return Rect.fromLTWH(trackLeft, trackTop, trackWidth, trackHeight);
   }
 }
