@@ -13,6 +13,9 @@ import '../models/stash_endpoint.dart';
 class StashDbService {
   static const String _defaultEndpoint = 'https://stashdb.org/graphql';
 
+  // Caches performer scene pages within a scan batch to avoid repeated calls.
+  final Map<String, Future<List<MediaItem>>> _performerScenesCache = {};
+
   // --- Queries ---
 
   static const String _queryMe = r'''
@@ -177,6 +180,24 @@ class StashDbService {
             }
           }
         }
+      }
+    }
+  ''';
+
+  static const String _querySearchPerformers = r'''
+    query SearchPerformers($name: String!) {
+      findPerformers(performer_filter: {
+        name: { value: $name, modifier: INCLUDES }
+      }, filter: { per_page: 5 }) {
+        performers { id name }
+      }
+    }
+  ''';
+
+  static const String _querySearchPerformersBox = r'''
+    query QueryPerformers($text: String!) {
+      queryPerformers(input: { text: $text, per_page: 5 }) {
+        performers { id name }
       }
     }
   ''';
@@ -519,11 +540,96 @@ class StashDbService {
     return null;
   }
 
+  /// Performer-first search: find performer ID by name, then filter that performer's scenes by title.
+  Future<MediaItem?> searchSceneByPerformer(
+    String title,
+    String performerName,
+    List<StashEndpoint> endpoints, {
+    bool requirePerformerMatch = false,
+  }) async {
+    final performerId = await _findPerformerIdByName(performerName, endpoints);
+    if (performerId == null) return null;
+
+    final scenes = await getPerformerScenes(performerId, endpoints, page: 1, perPage: 50);
+    if (scenes.isEmpty) return null;
+
+    final target = _cleanTitle(title).toLowerCase();
+    MediaItem? best;
+    double bestSimilarity = -1;
+
+    for (final scene in scenes) {
+      final cleaned = _cleanTitle(scene.title ?? scene.fileName).toLowerCase();
+      final similarity = _titleSimilarity(target, cleaned);
+
+      debugPrint('[stash-match] strategy=performer title="$target" candidate="$cleaned" similarity=${similarity.toStringAsFixed(3)}');
+
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+        best = scene;
+      }
+    }
+
+    final meetsThreshold = bestSimilarity >= 0.5 || !requirePerformerMatch;
+    debugPrint('[stash-match] strategy=performer result=${best?.id ?? 'none'} similarity=${bestSimilarity.toStringAsFixed(3)} thresholdMet=$meetsThreshold');
+
+    if (!meetsThreshold) return null;
+    return best;
+  }
+
+  Future<String?> _findPerformerIdByName(String name, List<StashEndpoint> endpoints) async {
+    final cleanName = _cleanTitle(name);
+    for (final ep in endpoints) {
+      if (!ep.enabled) continue;
+      final isStashBox = _isBox(ep.url);
+      try {
+        final data = await _executeQuery(
+          query: isStashBox ? _querySearchPerformersBox : _querySearchPerformers,
+          operationName: isStashBox ? 'QueryPerformers' : 'SearchPerformers',
+          variables: isStashBox ? {'text': cleanName} : {'name': cleanName},
+          apiKey: ep.apiKey,
+          baseUrl: ep.url,
+        );
+
+        List<dynamic>? performers;
+        if (isStashBox) {
+          performers = data?['queryPerformers']?['performers'] as List?;
+        } else {
+          performers = data?['findPerformers']?['performers'] as List?;
+        }
+
+        if (performers != null && performers.isNotEmpty) {
+          // Prefer exact/startsWith match
+          final lower = cleanName.toLowerCase();
+          performers.sort((a, b) {
+            final an = (a['name'] as String? ?? '').toLowerCase();
+            final bn = (b['name'] as String? ?? '').toLowerCase();
+            final aScore = an == lower || an.startsWith(lower) ? 0 : 1;
+            final bScore = bn == lower || bn.startsWith(lower) ? 0 : 1;
+            return aScore.compareTo(bScore);
+          });
+          return performers.first['id'] as String?;
+        }
+      } catch (e) {
+        debugPrint('StashDB [${ep.name}]: Performer search failed: $e');
+      }
+    }
+    return null;
+  }
+
   /// Gets scenes for a specific performer (paginated, single page).
   /// Aggregates results from all endpoints? Or just tries all until results found?
   /// For pagination consistency, aggregation is hard. We will return results from the first endpoint that has data.
   Future<List<MediaItem>> getPerformerScenes(String performerId, List<StashEndpoint> endpoints, {int page = 1, int perPage = 20}) async {
-    
+    final cacheKey = _sceneCacheKey(performerId, page, perPage);
+    final cached = _performerScenesCache[cacheKey];
+    if (cached != null) return cached;
+
+    final future = _fetchPerformerScenes(performerId, endpoints, page, perPage);
+    _performerScenesCache[cacheKey] = future;
+    return future;
+  }
+
+  Future<List<MediaItem>> _fetchPerformerScenes(String performerId, List<StashEndpoint> endpoints, int page, int perPage) async {
     for (final ep in endpoints) {
       if (!ep.enabled) continue;
 
@@ -551,6 +657,7 @@ class StashDbService {
         }
 
         if (scenes != null && scenes.isNotEmpty) {
+          debugPrint('[stash-fetch] performer=$performerId endpoint=${ep.name} page=$page perPage=$perPage count=${scenes.length}');
           return scenes
             .map((s) => _mapSceneToMediaItem(s, s['title'] ?? 'Unknown'))
             .toList();
@@ -561,6 +668,19 @@ class StashDbService {
     }
 
     return [];
+  }
+
+  String _sceneCacheKey(String performerId, int page, int perPage) => '$performerId:$page:$perPage';
+
+  double _titleSimilarity(String a, String b) {
+    if (a.isEmpty || b.isEmpty) return 0;
+    if (a == b) return 1;
+    final setA = a.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toSet();
+    final setB = b.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toSet();
+    if (setA.isEmpty || setB.isEmpty) return 0;
+    final intersection = setA.intersection(setB).length;
+    final union = setA.union(setB).length;
+    return union == 0 ? 0 : intersection / union;
   }
 
   Future<StashPerformer?> getPerformerDetails(String id, List<StashEndpoint> endpoints) async {
@@ -585,7 +705,7 @@ class StashDbService {
           p = data?['findPerformer'] as Map<String, dynamic>?;
         }
         if (p != null) {
-          return StashPerformer.fromJson(p as Map<String, dynamic>);
+          return StashPerformer.fromJson(p);
         }
       } catch (e) {
         debugPrint('StashDB [${ep.name}]: Get Performer Details failed: $e');
@@ -799,6 +919,7 @@ class StashDbService {
 
     return MediaItem(
       id: "stashdb:${scene['id']}",
+      stashId: scene['id'] as String?,
       title: scene['title'] ?? originalFileName,
       fileName: originalFileName,
       filePath: '', // Populated by LibraryProvider

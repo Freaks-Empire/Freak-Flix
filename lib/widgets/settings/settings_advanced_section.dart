@@ -75,6 +75,18 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
              if (settings.enableAdultContent) ...[
                 const Divider(height: 1, color: AppColors.border),
                 SettingsTile(
+                  icon: LucideIcons.shieldCheck,
+                  title: 'Require performer match',
+                  subtitle: 'Skip StashDB locks unless a performer match ≥50% is found',
+                  trailing: Switch.adaptive(
+                    value: settings.requirePerformerMatch,
+                    activeColor: AppColors.accent,
+                    onChanged: (v) => settings.toggleRequirePerformerMatch(v),
+                  ),
+                  isLast: false,
+                ),
+                const Divider(height: 1, color: AppColors.border),
+                SettingsTile(
                   icon: LucideIcons.database,
                   title: 'StashDB Integration',
                   subtitle: settings.stashEndpoints.isEmpty 

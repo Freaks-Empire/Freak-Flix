@@ -1,9 +1,9 @@
 /// lib/services/metadata_service.dart
 // ignore_for_file: avoid_print
 
+import 'package:flutter/foundation.dart';
 import '../models/media_item.dart';
 import '../providers/settings_provider.dart';
-import '../models/stash_endpoint.dart';
 import 'stash_db_service.dart';
 import 'anilist_service.dart';
 import 'trakt_service.dart';
@@ -61,9 +61,25 @@ class MetadataService {
     // Rule A: Adult Content -> StashDB ONLY
     if (item.isAdult) {
        if (settings.enableAdultContent && settings.stashEndpoints.any((e) => e.enabled)) {
-          // Attempt 1: Search by filename parsed title
-          var stashItem = await _stash.searchScene(
-            parsed.seriesTitle, settings.stashEndpoints);
+         MediaItem? stashItem;
+
+         // Attempt 1: Performer-first search to reduce false positives
+         if (parsed.performers.isNotEmpty) {
+            debugPrint('[metadata] strategy=performer-first title="${parsed.seriesTitle}" performer="${parsed.performers.first}" requireMatch=${settings.requirePerformerMatch}');
+            stashItem = await _stash.searchSceneByPerformer(
+              parsed.seriesTitle,
+              parsed.performers.first,
+              settings.stashEndpoints,
+              requirePerformerMatch: settings.requirePerformerMatch,
+            );
+         }
+
+         // Attempt 2: Title-only search
+          if (stashItem == null) {
+            debugPrint('[metadata] strategy=title-only title="${parsed.seriesTitle}"');
+            stashItem = await _stash.searchScene(
+              parsed.seriesTitle, settings.stashEndpoints);
+          }
           
           // Attempt 2: Search by parent folder name (Fallback)
           if (stashItem == null) {
@@ -82,7 +98,7 @@ class MetadataService {
 
               if (parentDir.isNotEmpty && parentDir != parentDir.toUpperCase() && parentDir != '.') { 
                  print('[metadata] StashDB: Filename search failed for "${parsed.seriesTitle}". Retrying with folder: "$parentDir"');
-                 stashItem = await _stash.searchScene(
+                 stashItem ??= await _stash.searchScene(
                    parentDir, settings.stashEndpoints);
 
                  // Attempt 3: Parse parent folder name and search
@@ -90,7 +106,7 @@ class MetadataService {
                     final parsedFolder = FilenameParser.parse(parentDir);
                     if (parsedFolder.seriesTitle.isNotEmpty && parsedFolder.seriesTitle != parsed.seriesTitle) {
                        print('[metadata] StashDB: Folder search failed. Retrying with parsed folder: "${parsedFolder.seriesTitle}"');
-                       stashItem = await _stash.searchScene(
+                       stashItem ??= await _stash.searchScene(
                          parsedFolder.seriesTitle, settings.stashEndpoints);
                     }
                  }
@@ -101,6 +117,7 @@ class MetadataService {
           }
 
           if (stashItem != null) {
+            final stashId = stashItem.stashId ?? (stashItem.id.startsWith('stashdb:') ? stashItem.id.replaceFirst('stashdb:', '') : null);
             return item.copyWith(
               title: stashItem.title,
               year: stashItem.year,
@@ -111,6 +128,7 @@ class MetadataService {
               type: MediaType.scene,
               genres: stashItem.genres,
               cast: stashItem.cast, 
+              stashId: stashId,
             );
           }
        }

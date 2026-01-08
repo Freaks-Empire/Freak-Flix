@@ -27,6 +27,7 @@ class SettingsProvider extends ChangeNotifier {
   TmdbKeyStatus tmdbStatus = TmdbKeyStatus.unknown;
   
   bool enableAdultContent = false;
+  bool requirePerformerMatch = false;
   String? primaryBackupAccountId; 
   Timer? _debounceSync;
   // Legacy single fields replaced by stashEndpoints
@@ -104,6 +105,7 @@ class SettingsProvider extends ChangeNotifier {
     primaryBackupAccountId = data['primaryBackupAccountId'] as String?;
 
     enableAdultContent = data['enableAdultContent'] as bool? ?? false;
+    requirePerformerMatch = data['requirePerformerMatch'] as bool? ?? false;
     
     // Load endpoints
     if (data['stashEndpoints'] != null) {
@@ -143,6 +145,7 @@ class SettingsProvider extends ChangeNotifier {
       'isSetupCompleted': _isSetupCompleted,
       'tmdbApiKey': tmdbApiKey,
       'enableAdultContent': enableAdultContent,
+      'requirePerformerMatch': requirePerformerMatch,
       'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
       'primaryBackupAccountId': primaryBackupAccountId,
     };
@@ -179,6 +182,7 @@ class SettingsProvider extends ChangeNotifier {
         'tmdbApiKey': tmdbApiKey,
         _tmdbStatusKey: tmdbStatus.index,
         'enableAdultContent': enableAdultContent,
+        'requirePerformerMatch': requirePerformerMatch,
         'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
         'migrated_profiles': _hasMigratedProfiles,
         'isSetupCompleted': _isSetupCompleted,
@@ -222,6 +226,12 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> toggleAdultContent(bool value) async {
     enableAdultContent = value;
+    await save();
+    notifyListeners();
+  }
+
+  Future<void> toggleRequirePerformerMatch(bool value) async {
+    requirePerformerMatch = value;
     await save();
     notifyListeners();
   }

@@ -143,6 +143,22 @@ class _SettingsMetadataSectionState extends State<SettingsMetadataSection> {
                 activeColor: AppColors.accent,
                 onChanged: (v) => settings.togglePreferAniList(v),
               ),
+              isLast: false,
+            ),
+            const Divider(height: 1, color: AppColors.border),
+            SettingsTile(
+              icon: LucideIcons.shieldCheck,
+              title: 'Require performer match',
+              subtitle: settings.enableAdultContent
+                  ? 'Skip StashDB locks unless a performer match ≥50% is found'
+                  : 'Enable Adult Content to enforce performer match safety',
+              trailing: Switch.adaptive(
+                value: settings.requirePerformerMatch,
+                activeColor: AppColors.accent,
+                onChanged: settings.enableAdultContent
+                    ? (v) => settings.toggleRequirePerformerMatch(v)
+                    : null,
+              ),
               isLast: true,
             ),
           ],
