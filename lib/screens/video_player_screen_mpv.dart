@@ -13,6 +13,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../models/media_item.dart';
 import '../../providers/playback_provider.dart';
 import '../../services/graph_auth_service.dart';
+import '../../widgets/video_player/netflix_video_controls.dart';
 
 class AdvancedVideoPlayerScreen extends StatefulWidget {
   final MediaItem item;
@@ -203,7 +204,15 @@ class _AdvancedVideoPlayerScreenState extends State<AdvancedVideoPlayerScreen> {
                 duration: const Duration(milliseconds: 300),
                 child: IgnorePointer(
                   ignoring: !_showControls || _isObscured,
-                  child: _buildControlsUI(context),
+                  child: NetflixControls(
+                    player: _player,
+                    title: widget.item.title ?? "Unknown Title",
+                    episodeTitle: widget.item.episode != null ? "Ep ${widget.item.episode}" : "",
+                    onNextEpisode: () {
+                       // Implement next episode logic here or emit event
+                    },
+                    onShowAudioSubs: _showAudioSubsModal,
+                  ),
                 ),
               ),
 
@@ -229,200 +238,7 @@ class _AdvancedVideoPlayerScreenState extends State<AdvancedVideoPlayerScreen> {
     );
   }
 
-  Widget _buildControlsUI(BuildContext context) {
-    return Stack(
-      children: [
-        // Top Gradient
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 120,
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Colors.black.withOpacity(0.8), Colors.transparent],
-              ),
-            ),
-          ),
-        ),
-        
-        // Bottom Gradient
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: 180,
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                colors: [Colors.black.withOpacity(0.9), Colors.transparent],
-              ),
-            ),
-          ),
-        ),
 
-        // Top Bar
-        Positioned(
-          top: 24,
-          left: 16,
-          right: 16,
-          child: Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  widget.item.title ?? "Unknown Title",
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              // Panic Button
-              IconButton(
-                icon: const Icon(LucideIcons.eyeOff, color: Colors.white70),
-                tooltip: "Obscure Screen (Panic)",
-                onPressed: _toggleObscure,
-              ),
-              // Audio/Sub Switcher
-              IconButton(
-                icon: const Icon(LucideIcons.languages, color: Colors.white),
-                onPressed: _showAudioSubsModal,
-              ),
-            ],
-          ),
-        ),
-
-        // Center Play Button
-        Center(
-          child: StreamBuilder<bool>(
-            stream: _player.stream.playing,
-            builder: (context, snapshot) {
-              final isPlaying = snapshot.data ?? false;
-              return GestureDetector(
-                onTap: _player.playOrPause,
-                child: Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.4),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white.withOpacity(0.2)),
-                  ),
-                  child: Icon(
-                    isPlaying ? Icons.pause : Icons.play_arrow,
-                    color: Colors.white,
-                    size: 48,
-                  ),
-                ).animate(target: isPlaying ? 0 : 1).fade(),
-              );
-            },
-          ),
-        ),
-
-        // Bottom Controls
-        Positioned(
-          bottom: 32,
-          left: 24,
-          right: 24,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Seek Bar & Time
-              StreamBuilder<Duration>(
-                stream: _player.stream.position,
-                builder: (context, snapshot) {
-                  final pos = snapshot.data ?? Duration.zero;
-                  final duration = _player.state.duration;
-                  
-                  // Use dragging value if user is scrubbing
-                  final displaySeconds = _isDragging ? _dragValue : pos.inSeconds.toDouble();
-                  final maxSeconds = duration.inSeconds.toDouble() > 0 ? duration.inSeconds.toDouble() : 1.0;
-
-                  return Row(
-                    children: [
-                      Text(
-                        _formatDuration(Duration(seconds: displaySeconds.toInt())),
-                        style: const TextStyle(color: Colors.white70, fontFamily: 'monospace'),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: SliderTheme(
-                          data: SliderThemeData(
-                            trackHeight: 2, // Ultra thin
-                            activeTrackColor: Colors.redAccent, // Netflix Red
-                            inactiveTrackColor: Colors.white24,
-                            thumbColor: Colors.redAccent,
-                            overlayColor: Colors.redAccent.withOpacity(0.2),
-                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                          ),
-                          child: Slider(
-                            value: displaySeconds.clamp(0, maxSeconds),
-                            min: 0,
-                            max: maxSeconds,
-                            onChangeStart: (_) {
-                              setState(() => _isDragging = true);
-                            },
-                            onChanged: (val) {
-                              setState(() => _dragValue = val);
-                            },
-                            onChangeEnd: (val) {
-                              _player.seek(Duration(seconds: val.toInt()));
-                              setState(() => _isDragging = false);
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                       Text(
-                        _formatDuration(duration),
-                        style: const TextStyle(color: Colors.white70, fontFamily: 'monospace'),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-              // Bottom Action Row (Play/Skip/Volume)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(LucideIcons.rewind, color: Colors.white),
-                    onPressed: () => _player.seek(_player.state.position - const Duration(seconds: 10)),
-                  ),
-                  const SizedBox(width: 24),
-                  StreamBuilder<bool>(
-                    stream: _player.stream.playing,
-                    builder: (context, snapshot) {
-                      final isPlaying = snapshot.data ?? false;
-                      return IconButton(
-                        iconSize: 42,
-                        icon: Icon(isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, color: Colors.white),
-                        onPressed: _player.playOrPause,
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 24),
-                  IconButton(
-                    icon: const Icon(LucideIcons.fastForward, color: Colors.white),
-                    onPressed: () => _player.seek(_player.state.position + const Duration(seconds: 10)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
 
   void _showAudioSubsModal() {
     // MediaKit exposes tracks in `_player.state.tracks`
@@ -506,10 +322,5 @@ class _AdvancedVideoPlayerScreenState extends State<AdvancedVideoPlayerScreen> {
      );
   }
 
-  String _formatDuration(Duration d) {
-    if (d.inHours > 0) {
-      return '${d.inHours}:${d.inMinutes.remainder(60).toString().padLeft(2, '0')}:${d.inSeconds.remainder(60).toString().padLeft(2, '0')}';
-    }
-    return '${d.inMinutes.remainder(60).toString().padLeft(2, '0')}:${d.inSeconds.remainder(60).toString().padLeft(2, '0')}';
-  }
+
 }
