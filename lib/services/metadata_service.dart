@@ -33,7 +33,7 @@ class MetadataService {
       showKey: item.showKey ?? _seriesKey(parsed.seriesTitle, item.year ?? parsed.year, null),
     );
 
-    // 0. Manual Override Check (StashDB ID)
+    // 0. Manual Override Check (StashDB ID) - Lock Respect
     if (item.stashId != null && item.stashId!.isNotEmpty) {
        if (settings.stashEndpoints.any((e) => e.enabled)) {
           // Strip 'stashdb:' prefix if we stored it that way, though usually we'll store raw UUID
