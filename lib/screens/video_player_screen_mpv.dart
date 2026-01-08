@@ -1,251 +1,515 @@
-/// lib/screens/video_player_screen_mpv.dart
+import 'dart:async';
+import 'dart:ui';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import '../models/media_item.dart';
-import '../widgets/video_player/video_controls.dart';
-import '../services/graph_auth_service.dart';
-import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
-class VideoPlayerScreen extends StatefulWidget {
+import '../../models/media_item.dart';
+import '../../providers/playback_provider.dart';
+import '../../services/graph_auth_service.dart';
+
+class AdvancedVideoPlayerScreen extends StatefulWidget {
   final MediaItem item;
-  final List<MediaItem> playlist;
+  final List<MediaItem> playlist; // Optional playlist
+  final int initialIndex;
 
-  VideoPlayerScreen({
-    required this.item,
-    List<MediaItem>? playlist,
+  const AdvancedVideoPlayerScreen({
     super.key,
-  }) : playlist = playlist ?? [item];
+    required this.item,
+    this.playlist = const [],
+    this.initialIndex = 0,
+  });
 
   @override
-  State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
+  State<AdvancedVideoPlayerScreen> createState() => _AdvancedVideoPlayerScreenState();
 }
 
-class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
-  late final Player player;
-  late final VideoController controller;
+class _AdvancedVideoPlayerScreenState extends State<AdvancedVideoPlayerScreen> {
+  late final Player _player;
+  late final VideoController _controller;
   
-  late MediaItem _currentItem;
-  late int _currentIndex;
-  BoxFit _fit = BoxFit.contain;
-  String? _errorMessage;
+  // State
+  bool _showControls = true;
+  bool _isObscured = false; // NSFW Curtain
+  bool _showSkipIntro = false;
+  Timer? _hideTimer;
+  bool _isDisposed = false;
+
+  // Dragging
+  bool _isDragging = false;
+  double _dragValue = 0.0;
 
   @override
   void initState() {
     super.initState();
-    _currentItem = widget.item;
-    _currentIndex = widget.playlist.indexWhere((e) => e.id == _currentItem.id);
-    if (_currentIndex == -1) _currentIndex = 0;
+    // Default NSFW curtain if adult
+    _isObscured = widget.item.isAdult;
 
-    player = Player();
-    controller = VideoController(player);
-    
-    // Subscribe to errors
-    player.stream.error.listen((event) {
-       debugPrint('VideoPlayerScreen MPV ERROR: $event');
-       setState(() {
-          _errorMessage = 'Player Error: $event';
-       });
-    });
+    _player = Player();
+    _controller = VideoController(_player);
 
-    // Subscribe to logs (warn/error)
-    player.stream.log.listen((event) {
-       if (event.level == 'error' || event.level == 'warn') {
-          debugPrint('VideoPlayerScreen MPV LOG [${event.level}]: ${event.text}');
-       }
-    });
-    
-    _playCurrent();
+    _initPlayer();
   }
 
-  bool _isLoadingLink = false;
+  Future<void> _initPlayer() async {
+    // Determine URL. If it's a web/http stream, use it. If local, file.
+    String url = widget.item.filePath;
+    
+    // Handle OneDrive refresh if needed
+    if (widget.item.streamUrl != null) {
+      if (widget.item.streamUrl!.contains('graph.microsoft.com')) {
+         // quick refresh logic or usage of existing valid url
+         url = widget.item.streamUrl!;
+      } else {
+         url = widget.item.streamUrl!;
+      }
+    }
 
-  Future<void> _playCurrent() async {
-    setState(() => _isLoadingLink = true);
-    String path = _currentItem.streamUrl ?? _currentItem.filePath;
+    await _player.open(Media(url));
     
-    debugPrint('VideoPlayerScreen: _playCurrent called for item ${_currentItem.id}');
-    debugPrint('VideoPlayerScreen: Initial path: $path');
-    
-    // Check if this is a OneDrive item (needs a network link)
-    // IDs start with 'onedrive_' (underscore).
-    final isOneDrive = _currentItem.id.startsWith('onedrive_');
-    
-    if (isOneDrive) {
-       debugPrint('VideoPlayerScreen: OneDrive item detected. Attempting refresh/fetch...');
-       try {
-          if (_currentItem.folderPath.startsWith('onedrive:')) {
-             final pathAfterPrefix = _currentItem.folderPath.substring('onedrive:'.length);
-             final accountId = pathAfterPrefix.split('/').first;
-             
-             final idPrefix = 'onedrive_${accountId}_';
-             if (_currentItem.id.startsWith(idPrefix)) {
-                final realItemId = _currentItem.id.substring(idPrefix.length);
-                
-                debugPrint('Refreshing OneDrive URL for item $realItemId account $accountId');
-                
-                // Try HLS first for quality selection
-                String? fresh = await GraphAuthService.instance.getHlsUrl(accountId, realItemId);
-                if (fresh == null) {
-                    debugPrint('VideoPlayerScreen: HLS unavailable (returned null), falling back to download URL');
-                    fresh = await GraphAuthService.instance.getDownloadUrl(accountId, realItemId);
-                } else {
-                    debugPrint('VideoPlayerScreen: HLS URL obtained successfully: $fresh');
-                }
-
-                if (fresh != null) {
-                   path = fresh;
-                   debugPrint('VideoPlayerScreen: Playing with fresh URL: $path');
-                } else {
-                   debugPrint('VideoPlayerScreen: Could not refresh download URL, using original streamUrl');
-                }
-             }
-          }
-       } catch (e) {
-          debugPrint('VideoPlayerScreen: Error refreshing URL: $e');
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Error refreshing link: $e'), backgroundColor: Colors.red),
-            );
-          }
-       }
+    // Restore position if any
+    if (widget.item.lastPositionSeconds > 0) {
+      await _player.seek(Duration(seconds: widget.item.lastPositionSeconds));
     } else {
-       debugPrint('VideoPlayerScreen: Local/Static item. Skipping OneDrive refresh.');
+       // If no saved position, check intro logic immediately
     }
 
-    setState(() => _isLoadingLink = false);
-    
-    // Final check: If path is still an internal ID, fail.
-    if (path.startsWith('onedrive') && !path.startsWith('http') && !path.contains('/') && !path.contains('\\')) {
-       // A bit loose check but 'onedrive_account_id' has no slashes usually, except inside the ID part?
-       // Better: check if it looks like a URL or absolute path.
-       // Windows path: C:\... or \\Server...
-       // URL: http...
-       // Our OneDrive internal IDs: onedrive_...
-       
-       if (path.startsWith('onedrive_')) {
-          setState(() {
-             _errorMessage = 'Could not resolve playback URL for cloud item.\nPlease try rescanning or check your internet connection.';
-          });
-          return;
-       }
-    }
+    // Listeners
+    _player.stream.position.listen((pos) {
+      if (_isDisposed) return;
+      _checkSkipIntro(pos);
+      _updateProgress(pos);
+    });
 
-    debugPrint('VideoPlayerScreen: Opening player with path: $path');
-    await player.open(Media(path));
-    
-    // Debug tracks after opening
-    await Future.delayed(const Duration(seconds: 2));
-    debugPrint('VideoPlayerScreen: Video Tracks: ${player.state.tracks.video.length}');
-    for (var t in player.state.tracks.video) {
-        debugPrint(' - Track: ${t.id} ${t.title} ${t.w}x${t.h}');
-    }
-    debugPrint('VideoPlayerScreen: Player opened.');
+    _startHideTimer();
   }
-  
-  void _playIndex(int index) {
-    if (index >= 0 && index < widget.playlist.length) {
-      if (mounted) {
-        setState(() {
-            _currentIndex = index;
-            _currentItem = widget.playlist[index];
-        });
-        _playCurrent();
+
+  void _checkSkipIntro(Duration pos) {
+    if (widget.item.introStart != null && widget.item.introEnd != null) {
+      final start = Duration(seconds: widget.item.introStart!);
+      final end = Duration(seconds: widget.item.introEnd!);
+      
+      final shouldShow = pos >= start && pos <= end;
+      if (shouldShow != _showSkipIntro && mounted) {
+        setState(() => _showSkipIntro = shouldShow);
       }
     }
   }
 
-  void _next() {
-      if (_currentIndex < widget.playlist.length - 1) {
-          _playIndex(_currentIndex + 1);
-      }
+  void _updateProgress(Duration pos) {
+    // Debounce or optimize this in a real app, but for now update provider
+    if (pos.inSeconds % 10 == 0) {
+       context.read<PlaybackProvider>().updateProgress(widget.item, pos.inSeconds);
+    }
   }
 
-  void _previous() {
-      if (_currentIndex > 0) {
-          _playIndex(_currentIndex - 1);
-      }
+  void _skipIntro() {
+    if (widget.item.introEnd != null) {
+      _player.seek(Duration(seconds: widget.item.introEnd! + 1));
+      setState(() => _showSkipIntro = false);
+    }
+  }
+
+  void _toggleControls() {
+    setState(() => _showControls = !_showControls);
+    if (_showControls) _startHideTimer();
+  }
+
+  void _startHideTimer() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted && !_isDragging) setState(() => _showControls = false);
+    });
+  }
+
+  void _onPanUpdate() {
+    // Reset timer on user interaction
+    if (!_showControls) setState(() => _showControls = true);
+    _startHideTimer();
+  }
+
+  void _toggleObscure() {
+    setState(() => _isObscured = !_isObscured);
   }
 
   @override
   void dispose() {
-    player.dispose();
+    _isDisposed = true;
+    _hideTimer?.cancel();
+    
+    // Save final progress
+    final pos = _player.state.position.inSeconds;
+    if (pos > 10) {
+      context.read<PlaybackProvider>().updateProgress(widget.item, pos);
+    }
+
+    _player.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          Center(
-            child: Video(
-              controller: controller,
-              controls: NoVideoControls, // Disable default controls
-              fit: _fit,
-            ),
-          ),
-          if (_errorMessage != null)
-             Container(
-                color: Colors.black87,
-                child: Center(
-                   child: Padding(
-                     padding: const EdgeInsets.all(24.0),
-                     child: Column(
+      backgroundColor: Colors.black, // Pure Black Theme
+      body: MouseRegion(
+        onHover: (_) => _onPanUpdate(),
+        child: GestureDetector(
+          onTap: _toggleControls,
+          onDoubleTap: () => _player.playOrPause(),
+          onLongPress: _toggleObscure, // Panic Gesture
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // 1. Video Layer
+              Video(controller: _controller, fit: BoxFit.contain),
+
+              // 2. NSFW Curtain (Blur)
+              if (_isObscured)
+                Positioned.fill(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      color: Colors.black.withOpacity(0.4),
+                      alignment: Alignment.center,
+                      child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                           const Icon(Icons.error, color: Colors.red, size: 48),
-                           const SizedBox(height: 16),
-                           Text(
-                              'Playback Error',
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
-                           ),
-                           const SizedBox(height: 8),
-                           Text(
-                              _errorMessage!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.white70),
-                           ),
-                           const SizedBox(height: 24),
-                           ElevatedButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Go Back'),
-                           )
+                          const Icon(LucideIcons.eyeOff, color: Colors.white, size: 48),
+                          const SizedBox(height: 16),
+                          const Text(
+                            "Content Hidden",
+                            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          FilledButton.tonal(
+                            onPressed: _toggleObscure,
+                            child: const Text("Reveal"),
+                          )
                         ],
-                     ),
-                   ),
+                      ),
+                    ),
+                  ),
                 ),
-             ),
-          VideoControls(
-            player: player,
-            controller: controller,
-            item: _currentItem,
-            playlist: widget.playlist,
-            onBack: () => Navigator.pop(context),
-            onNext: (_currentIndex < widget.playlist.length - 1) ? _next : null,
-            onPrevious: (_currentIndex > 0) ? _previous : null,
-            onJump: _playIndex,
-            fit: _fit,
-            onFitChanged: (v) => setState(() => _fit = v),
-          ),
-          if (_isLoadingLink)
-            Container(
-              color: Colors.black54,
-              child: const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('Refreshing link...', style: TextStyle(color: Colors.white)),
-                  ],
+
+              // 3. Controls Layer
+              AnimatedOpacity(
+                opacity: _showControls && !_isObscured ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: IgnorePointer(
+                  ignoring: !_showControls || _isObscured,
+                  child: _buildControlsUI(context),
                 ),
               ),
-            ),
-        ],
+
+              // 4. Skip Intro Button
+              if (_showSkipIntro && !_isObscured && _showControls)
+                Positioned(
+                  bottom: 120,
+                  right: 32,
+                  child: FilledButton.icon(
+                    onPressed: _skipIntro,
+                    icon: const Icon(LucideIcons.skipForward),
+                    label: const Text("Skip Intro"),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white.withOpacity(0.9),
+                      foregroundColor: Colors.black,
+                    ),
+                  ).animate().fadeIn().slideX(begin: 0.2, end: 0),
+                ),
+            ],
+          ),
+        ),
       ),
     );
+  }
+
+  Widget _buildControlsUI(BuildContext context) {
+    return Stack(
+      children: [
+        // Top Gradient
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 120,
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.black.withOpacity(0.8), Colors.transparent],
+              ),
+            ),
+          ),
+        ),
+        
+        // Bottom Gradient
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 180,
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [Colors.black.withOpacity(0.9), Colors.transparent],
+              ),
+            ),
+          ),
+        ),
+
+        // Top Bar
+        Positioned(
+          top: 24,
+          left: 16,
+          right: 16,
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  widget.item.title ?? "Unknown Title",
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // Panic Button
+              IconButton(
+                icon: const Icon(LucideIcons.eyeOff, color: Colors.white70),
+                tooltip: "Obscure Screen (Panic)",
+                onPressed: _toggleObscure,
+              ),
+              // Audio/Sub Switcher
+              IconButton(
+                icon: const Icon(LucideIcons.languages, color: Colors.white),
+                onPressed: _showAudioSubsModal,
+              ),
+            ],
+          ),
+        ),
+
+        // Center Play Button
+        Center(
+          child: StreamBuilder<bool>(
+            stream: _player.stream.playing,
+            builder: (context, snapshot) {
+              final isPlaying = snapshot.data ?? false;
+              return GestureDetector(
+                onTap: _player.playOrPause,
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.4),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white.withOpacity(0.2)),
+                  ),
+                  child: Icon(
+                    isPlaying ? Icons.pause : Icons.play_arrow,
+                    color: Colors.white,
+                    size: 48,
+                  ),
+                ).animate(target: isPlaying ? 0 : 1).fade(),
+              );
+            },
+          ),
+        ),
+
+        // Bottom Controls
+        Positioned(
+          bottom: 32,
+          left: 24,
+          right: 24,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Seek Bar & Time
+              StreamBuilder<Duration>(
+                stream: _player.stream.position,
+                builder: (context, snapshot) {
+                  final pos = snapshot.data ?? Duration.zero;
+                  final duration = _player.state.duration;
+                  
+                  // Use dragging value if user is scrubbing
+                  final displaySeconds = _isDragging ? _dragValue : pos.inSeconds.toDouble();
+                  final maxSeconds = duration.inSeconds.toDouble() > 0 ? duration.inSeconds.toDouble() : 1.0;
+
+                  return Row(
+                    children: [
+                      Text(
+                        _formatDuration(Duration(seconds: displaySeconds.toInt())),
+                        style: const TextStyle(color: Colors.white70, fontFamily: 'monospace'),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SliderTheme(
+                          data: SliderThemeData(
+                            trackHeight: 2, // Ultra thin
+                            activeTrackColor: Colors.redAccent, // Netflix Red
+                            inactiveTrackColor: Colors.white24,
+                            thumbColor: Colors.redAccent,
+                            overlayColor: Colors.redAccent.withOpacity(0.2),
+                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                          ),
+                          child: Slider(
+                            value: displaySeconds.clamp(0, maxSeconds),
+                            min: 0,
+                            max: maxSeconds,
+                            onChangeStart: (_) {
+                              setState(() => _isDragging = true);
+                            },
+                            onChanged: (val) {
+                              setState(() => _dragValue = val);
+                            },
+                            onChangeEnd: (val) {
+                              _player.seek(Duration(seconds: val.toInt()));
+                              setState(() => _isDragging = false);
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                       Text(
+                        _formatDuration(duration),
+                        style: const TextStyle(color: Colors.white70, fontFamily: 'monospace'),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              // Bottom Action Row (Play/Skip/Volume)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(LucideIcons.rewind, color: Colors.white),
+                    onPressed: () => _player.seek(_player.state.position - const Duration(seconds: 10)),
+                  ),
+                  const SizedBox(width: 24),
+                  StreamBuilder<bool>(
+                    stream: _player.stream.playing,
+                    builder: (context, snapshot) {
+                      final isPlaying = snapshot.data ?? false;
+                      return IconButton(
+                        iconSize: 42,
+                        icon: Icon(isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, color: Colors.white),
+                        onPressed: _player.playOrPause,
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 24),
+                  IconButton(
+                    icon: const Icon(LucideIcons.fastForward, color: Colors.white),
+                    onPressed: () => _player.seek(_player.state.position + const Duration(seconds: 10)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showAudioSubsModal() {
+    // MediaKit exposes tracks in `_player.state.tracks`
+    // We map them to generic Lists
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E1E).withOpacity(0.95), // Glassy dark
+      barrierColor: Colors.black54,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) {
+        return DefaultTabController(
+          length: 2,
+          child: SizedBox(
+            height: 400,
+            child: Column(
+              children: [
+                const TabBar(
+                  indicatorColor: Colors.redAccent,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.grey,
+                  tabs: [
+                    Tab(text: 'Audio'),
+                    Tab(text: 'Subtitles'),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      // AUDIO TRACKS
+                      _buildTrackList<AudioTrack>(
+                        _player.state.tracks.audio, 
+                        _player.state.track.audio,
+                        (track) {
+                           _player.setAudioTrack(track);
+                           Navigator.pop(ctx);
+                        }
+                      ),
+                      // SUBTITLE TRACKS
+                      _buildTrackList<SubtitleTrack>(
+                        _player.state.tracks.subtitle, 
+                        _player.state.track.subtitle,
+                        (track) {
+                           _player.setSubtitleTrack(track);
+                           Navigator.pop(ctx);
+                        }
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+   Widget _buildTrackList<T>(List<T> tracks, T current, Function(T) onSelect) {
+     return ListView.builder(
+       itemCount: tracks.length,
+       itemBuilder: (context, index) {
+         final track = tracks[index];
+         String label = 'Track ${index + 1}';
+         
+         if (track is AudioTrack) {
+           label = track.title ?? track.language ?? track.id;
+         } else if (track is SubtitleTrack) {
+           label = track.title ?? track.language ?? track.id;
+         } else {
+            label = track.toString();
+         }
+         
+         final isSelected = track == current;
+
+         return ListTile(
+           leading: isSelected ? const Icon(Icons.check, color: Colors.redAccent) : const SizedBox(width: 24),
+           title: Text(label, style: TextStyle(color: isSelected ? Colors.redAccent : Colors.white)),
+           onTap: () => onSelect(track),
+         );
+       },
+     );
+  }
+
+  String _formatDuration(Duration d) {
+    if (d.inHours > 0) {
+      return '${d.inHours}:${d.inMinutes.remainder(60).toString().padLeft(2, '0')}:${d.inSeconds.remainder(60).toString().padLeft(2, '0')}';
+    }
+    return '${d.inMinutes.remainder(60).toString().padLeft(2, '0')}:${d.inSeconds.remainder(60).toString().padLeft(2, '0')}';
   }
 }
