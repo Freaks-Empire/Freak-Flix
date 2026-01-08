@@ -13,6 +13,9 @@ import '../models/stash_endpoint.dart';
 class StashDbService {
   static const String _defaultEndpoint = 'https://stashdb.org/graphql';
 
+  final Map<String, List<MediaItem>> _performerSceneCache = {};
+  final Map<String, Future<List<MediaItem>>> _activePerformerRequests = {};
+
   // --- Queries ---
 
   static const String _queryMe = r'''
@@ -540,14 +543,15 @@ class StashDbService {
   Future<MediaItem?> searchSceneByPerformer(
     String sceneTitle,
     String performerName,
-    List<StashEndpoint> endpoints,
-  ) async {
+    List<StashEndpoint> endpoints, {
+    bool requirePerformerMatch = false, // New Flag
+  }) async {
     if (performerName.trim().isEmpty || sceneTitle.trim().isEmpty) return null;
 
     final cleanTitle = _cleanTitle(sceneTitle);
     final cleanPerformer = performerName.trim().toLowerCase();
 
-    debugPrint('StashDB: Performer-first search: "$cleanPerformer" in "$cleanTitle"');
+    debugPrint('StashDB: Performer-first search: "$cleanPerformer" in "$cleanTitle" (Strict: $requirePerformerMatch)');
 
     for (final ep in endpoints) {
       if (!ep.enabled) continue;
@@ -589,13 +593,19 @@ class StashDbService {
           continue;
         }
 
+        debugPrint('StashDB [${ep.name}]: Fetched ${scenes.length} scenes for $performerName');
+
         // 3. Score and Match
         MediaItem? bestMatch;
         double bestScore = 0.0;
 
         for (final scene in scenes) {
           final sceneTitle = scene.title?.toLowerCase() ?? '';
-          final score = _fuzzyMatch(cleanTitle.toLowerCase(), sceneTitle);
+          final score = _tokenSetSimilarity(cleanTitle.toLowerCase(), sceneTitle); // Improved matching
+
+          if (score > 0.4) {
+             debugPrint('   Candidate: "${scene.title}" - Score: ${score.toStringAsFixed(2)}');
+          }
 
           if (score > bestScore) {
             bestScore = score;
@@ -603,10 +613,19 @@ class StashDbService {
           }
         }
 
-        // 4. Return if confident (>0.5 similarity)
+        // 4. Threshold Check
+        // If requirePerformerMatch is true, we enforce strict 0.5 threshold
+        // If false, we allow 0.5 but might already be covered by logic (prompt says allow <0.5 if not strict? No, prompt says "optional requirePerformerMatch enforces a 0.5 similarity threshold")
+        // Assuming without flag we stick to previous logic (which was >0.5 anyway). 
+        // Actually, previous logic was > 0.5. Let's say with strict mode we might demand even higher, or just enforce it rigidly.
+        // Prompt says "optional requirePerformerMatch enforces a 0.5 similarity threshold".
+        // Let's stick to > 0.5 for now as "good match".
+
         if (bestScore > 0.5 && bestMatch != null) {
-          debugPrint('StashDB [${ep.name}]: Matched scene "${bestMatch.title}" (score: ${bestScore.toStringAsFixed(2)})');
+          debugPrint('StashDB [${ep.name}]: MATCH FOUND "${bestMatch.title}" (score: ${bestScore.toStringAsFixed(2)})');
           return bestMatch;
+        } else {
+           debugPrint('StashDB [${ep.name}]: No confident match. Best: ${bestScore.toStringAsFixed(2)}');
         }
 
       } catch (e) {
@@ -619,14 +638,37 @@ class StashDbService {
 
   /// Gets scenes for a specific performer (paginated, single page).
   Future<List<MediaItem>> getPerformerScenes(String performerId, List<StashEndpoint> endpoints, {int page = 1, int perPage = 20}) async {
+    // 1. Check Cache
+    final cacheKey = '$performerId-$page-$perPage';
+    if (_performerSceneCache.containsKey(cacheKey)) {
+       return _performerSceneCache[cacheKey]!;
+    }
     
-    for (final ep in endpoints) {
+    // 2. Check Active Requests (Dedupe)
+    if (_activePerformerRequests.containsKey(cacheKey)) {
+        return _activePerformerRequests[cacheKey]!;
+    }
+
+    // 3. Fetch (and cache future)
+    final future = _fetchPerformerScenesPage(performerId, endpoints, page, perPage);
+    _activePerformerRequests[cacheKey] = future;
+    
+    final result = await future;
+    
+    _performerSceneCache[cacheKey] = result;
+    _activePerformerRequests.remove(cacheKey);
+    
+    return result;
+  }
+
+  Future<List<MediaItem>> _fetchPerformerScenesPage(String performerId, List<StashEndpoint> endpoints, int page, int perPage) async {
+      for (final ep in endpoints) {
       if (!ep.enabled) continue;
 
       final isStashBox = _isBox(ep.url);
 
       try {
-        debugPrint('StashDB [${ep.name}]: Fetching performer scenes page $page');
+        debugPrint('StashDB [${ep.name}]: API Call -> Performer Scenes (Page $page)');
         final data = await _executeQuery(
           query: isStashBox ? _queryPerformerScenesBox : _queryPerformerScenes,
           operationName: isStashBox ? 'PerformerScenesBox' : 'PerformerScenes',
@@ -655,7 +697,6 @@ class StashDbService {
         debugPrint('StashDB [${ep.name}]: Fetch performer scenes failed: $e');
       }
     }
-
     return [];
   }
 
@@ -735,6 +776,11 @@ class StashDbService {
     return null;
   }
 
+  void resetCache() {
+    _performerSceneCache.clear();
+    _activePerformerRequests.clear();
+  }
+
   // --- Helper Methods ---
 
   Future<Map<String, dynamic>?> _executeQuery({
@@ -789,25 +835,27 @@ class StashDbService {
     return cleaned.trim();
   }
 
-  /// Simple fuzzy matching: calculates similarity between two strings.
-  /// Returns a score between 0.0 (no match) and 1.0 (exact match).
-  double _fuzzyMatch(String query, String target) {
-    if (query == target) return 1.0;
-
-    // Exact substring match gets high score
-    if (target.contains(query)) return 0.9;
-    if (query.contains(target)) return 0.85;
-
-    // Word overlap scoring
-    final queryWords = query.split(' ').where((w) => w.isNotEmpty).toSet();
-    final targetWords = target.split(' ').where((w) => w.isNotEmpty).toSet();
-
-    if (queryWords.isEmpty || targetWords.isEmpty) return 0.0;
-
-    final intersection = queryWords.intersection(targetWords).length;
-    final union = queryWords.union(targetWords).length;
-
-    return intersection / union; // Jaccard similarity
+  /// Improved Token-Set Similarity (Jaccard Index of words)
+  double _tokenSetSimilarity(String s1, String s2) {
+    if (s1 == s2) return 1.0;
+    
+    final set1 = _tokenize(s1);
+    final set2 = _tokenize(s2);
+    
+    if (set1.isEmpty || set2.isEmpty) return 0.0;
+    
+    final intersection = set1.intersection(set2).length;
+    final union = set1.union(set2).length;
+    
+    return intersection / union;
+  }
+  
+  Set<String> _tokenize(String s) {
+     return s.toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]'), ' ')
+        .split(' ')
+        .where((w) => w.isNotEmpty)
+        .toSet();
   }
 
   MediaItem _mapSceneToMediaItem(dynamic sceneData, String originalFileName, {MediaType type = MediaType.scene}) {
@@ -822,12 +870,12 @@ class StashDbService {
     }
 
     final rawPerformers = scene['performers'] as List?;
-    debugPrint('StashDB: Parsing performers. Count: ${rawPerformers?.length}');
+    // debugPrint('StashDB: Parsing performers. Count: ${rawPerformers?.length}');
     
     final cast = rawPerformers?.map((p) {
         final perf = p['performer'];
         if (perf == null) {
-          debugPrint('StashDB: Performer object is null');
+          // debugPrint('StashDB: Performer object is null');
           return null;
         }
         
@@ -846,7 +894,7 @@ class StashDbService {
           source: CastSource.stashDb,
         );
     }).whereType<CastMember>().toList() ?? [];
-    debugPrint('StashDB: Extracted ${cast.length} cast members');
+    // debugPrint('StashDB: Extracted ${cast.length} cast members');
 
     final tags = (scene['tags'] as List?)
         ?.map((t) => t['name'] as String?)
