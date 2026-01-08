@@ -25,10 +25,8 @@ class SettingsProvider extends ChangeNotifier {
   TmdbKeyStatus tmdbStatus = TmdbKeyStatus.unknown;
   
   bool enableAdultContent = false;
-  String? primaryBackupAccountId; // <--- Add this field
-  // Legacy single fields replaced by stashEndpoints
-  // String stashApiKey = '';
-  // String stashUrl = 'https://stashdb.org/graphql';
+  bool requirePerformerMatch = false; // New safety flag
+  String? primaryBackupAccountId; 
   List<StashEndpoint> stashEndpoints = [];
 
   bool _isTestingTmdbKey = false;
@@ -54,10 +52,6 @@ class SettingsProvider extends ChangeNotifier {
       if (jsonStr == null) {
         debugPrint('SettingsProvider: No settings file. Checking legacy prefs...');
         await _migrateFromPrefs();
-        // Even if migration happens, we fall through to defaults if needed or return
-        // Ideally _migrateFromPrefs sets values.
-        
-        // If still defaults (i.e. first run ever), check env
         if (tmdbApiKey.isEmpty) {
              tmdbApiKey = dotenv.env['TMDB_API_KEY'] ?? 
                    const String.fromEnvironment('TMDB_API_KEY');
@@ -70,7 +64,6 @@ class SettingsProvider extends ChangeNotifier {
        debugPrint('SettingsProvider: Settings loaded from file.');
     } catch (e) {
       debugPrint('SettingsProvider: Error loading settings: $e');
-      // basic fallback
       tmdbApiKey = dotenv.env['TMDB_API_KEY'] ?? 
                    const String.fromEnvironment('TMDB_API_KEY');
     }
@@ -101,15 +94,14 @@ class SettingsProvider extends ChangeNotifier {
     primaryBackupAccountId = data['primaryBackupAccountId'] as String?;
 
     enableAdultContent = data['enableAdultContent'] as bool? ?? false;
+    requirePerformerMatch = data['requirePerformerMatch'] as bool? ?? false;
     
-    // Load endpoints
     if (data['stashEndpoints'] != null) {
       stashEndpoints = (data['stashEndpoints'] as List)
           .map((e) => StashEndpoint.fromJson(e))
           .toList();
     }
     
-    // Migration: If no endpoints but legacy data exists
     if (stashEndpoints.isEmpty) {
       final legacyUrl = data['stashUrl'] as String?;
       final legacyKey = data['stashApiKey'] as String?;
@@ -120,7 +112,6 @@ class SettingsProvider extends ChangeNotifier {
           apiKey: legacyKey ?? '',
         ));
       } else {
-        // Add default StashDB.org if completely empty/fresh
         stashEndpoints.add(StashEndpoint(
            name: 'StashDB.org',
            url: 'https://stashdb.org/graphql',
@@ -140,6 +131,7 @@ class SettingsProvider extends ChangeNotifier {
       'isSetupCompleted': _isSetupCompleted,
       'tmdbApiKey': tmdbApiKey,
       'enableAdultContent': enableAdultContent,
+      'requirePerformerMatch': requirePerformerMatch,
       'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
       'primaryBackupAccountId': primaryBackupAccountId,
     };
@@ -176,6 +168,7 @@ class SettingsProvider extends ChangeNotifier {
         'tmdbApiKey': tmdbApiKey,
         _tmdbStatusKey: tmdbStatus.index,
         'enableAdultContent': enableAdultContent,
+        'requirePerformerMatch': requirePerformerMatch,
         'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
         'migrated_profiles': _hasMigratedProfiles,
         'migrated_profiles': _hasMigratedProfiles,
@@ -214,6 +207,12 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> toggleAdultContent(bool value) async {
     enableAdultContent = value;
+    await save();
+    notifyListeners();
+  }
+
+  Future<void> toggleRequirePerformerMatch(bool value) async {
+    requirePerformerMatch = value;
     await save();
     notifyListeners();
   }
@@ -303,6 +302,7 @@ class SettingsProvider extends ChangeNotifier {
       'tmdbApiKey': tmdbApiKey,
       'tmdbStatus': tmdbStatus.index,
       'enableAdultContent': enableAdultContent,
+      'requirePerformerMatch': requirePerformerMatch,
       'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
     };
   }
@@ -327,6 +327,9 @@ class SettingsProvider extends ChangeNotifier {
     }
     if (data.containsKey('enableAdultContent')) {
       enableAdultContent = data['enableAdultContent'] ?? false;
+    }
+    if (data.containsKey('requirePerformerMatch')) {
+      requirePerformerMatch = data['requirePerformerMatch'] ?? false;
     }
     if (data.containsKey('stashEndpoints')) {
        final list = data['stashEndpoints'] as List;
