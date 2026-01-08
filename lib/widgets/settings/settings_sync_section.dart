@@ -132,33 +132,52 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
   void _showAccountPicker(BuildContext context, SettingsProvider settings) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surface,
-      builder: (ctx) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text('Select Backup Account', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textMain)),
-          ),
-          if (_graphAuth.accounts.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text('No accounts found. Please add one in Library settings first.', style: TextStyle(color: AppColors.textSub)),
+      isScrollControlled: true, // Needed for DraggableScrollableSheet
+      backgroundColor: Colors.transparent, // Let sheet handle UI
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        builder: (context, scrollController) {
+          return Container(
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
             ),
-          ..._graphAuth.accounts.map((acc) => ListTile(
-            leading: const Icon(LucideIcons.cloud, color: AppColors.textSub),
-            title: Text(acc.displayName, style: const TextStyle(color: AppColors.textMain)),
-            subtitle: Text(acc.userPrincipalName, style: const TextStyle(color: AppColors.textSub)),
-            trailing: settings.primaryBackupAccountId == acc.id 
-                ? const Icon(LucideIcons.check, color: AppColors.accent) 
-                : null,
-            onTap: () {
-              settings.setPrimaryBackupAccountId(acc.id);
-              Navigator.pop(ctx);
-            },
-          )),
-          const SizedBox(height: 20),
-        ],
+            child: Column(
+              children: [
+                 const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text('Select Backup Account', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textMain)),
+                ),
+                Expanded(
+                  child: ListView(
+                    controller: scrollController,
+                    children: [
+                      if (_graphAuth.accounts.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Text('No accounts found. Please add one in Library settings first.', style: TextStyle(color: AppColors.textSub)),
+                        ),
+                      ..._graphAuth.accounts.map((acc) => ListTile(
+                        leading: const Icon(LucideIcons.cloud, color: AppColors.textSub),
+                        title: Text(acc.displayName, style: const TextStyle(color: AppColors.textMain)),
+                        subtitle: Text(acc.userPrincipalName, style: const TextStyle(color: AppColors.textSub)),
+                        trailing: settings.primaryBackupAccountId == acc.id 
+                            ? const Icon(LucideIcons.check, color: AppColors.accent) 
+                            : null,
+                        onTap: () {
+                          settings.setPrimaryBackupAccountId(acc.id);
+                          Navigator.pop(ctx);
+                        },
+                      )),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
       ),
     );
   }

@@ -1,5 +1,6 @@
 /// lib/providers/library_provider.dart
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -65,8 +66,8 @@ class LibraryProvider extends ChangeNotifier {
 
   List<MediaItem> get historyItems {
     return _filteredItems.where((item) {
-      // History includes anything with progress OR marked as watched
-      return item.lastPositionSeconds > 0 || item.isWatched;
+      // User request: History only shows if completely watched
+      return item.isWatched;
     }).toList()
       ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
   }
@@ -1143,14 +1144,42 @@ class LibraryProvider extends ChangeNotifier {
                // Check extension
                if (_isVideo(name)) {
                   _setScanStatus('Found: $name');
-                  final newItem = _createMediaItemFromGraph(item, accountId, baseFolderPath);
+                  var newItem = _createMediaItemFromGraph(item, accountId, baseFolderPath);
+
+                  // Try to read sibling NFO to lock metadata (stashid, etc.)
+                  final nfoName = '${p.basenameWithoutExtension(name)}.nfo';
+                  final nfoEntry = value.cast<Map<String, dynamic>?>().firstWhere(
+                    (e) => e != null && (e['name'] as String? ?? '') == nfoName,
+                    orElse: () => null,
+                  );
+                  final nfoDownloadUrl = nfoEntry != null ? nfoEntry['@microsoft.graph.downloadUrl'] as String? : null;
+                  if (nfoDownloadUrl != null) {
+                    try {
+                      final nfoRes = await http.get(Uri.parse(nfoDownloadUrl));
+                      if (nfoRes.statusCode == 200) {
+                        final nfoData = SidecarService.parseNfo(nfoRes.body);
+                        if (nfoData != null) {
+                          newItem = newItem.copyWith(
+                            stashId: nfoData['stashId'] as String?,
+                            tmdbId: nfoData['tmdbId'] as int? ?? newItem.tmdbId,
+                            anilistId: nfoData['anilistId'] as int? ?? newItem.anilistId,
+                            title: nfoData['title'] as String? ?? newItem.title,
+                            year: nfoData['year'] as int? ?? newItem.year,
+                          );
+                          if (nfoData['stashId'] != null) {
+                            debugPrint('LibraryProvider: Found stashid ${nfoData['stashId']} in NFO for $name');
+                          }
+                        }
+                      }
+                    } catch (_) {
+                      // Ignore NFO fetch errors; continue without lock
+                    }
+                  }
+
                   // Determine if adult/anime based on folder type immediately so it shows up in filtered view
                   final parentFolder = libraryFolders.firstWhereOrNull((f) {
                       if (f.accountId != accountId) return false;
                       final fPath = f.path.startsWith('/') ? f.path : '/${f.path}';
-                      // Normalize check: baseFolderPath vs prefix
-                      // baseFolderPath = onedrive:ACCID/Path...
-                      // prefix = onedrive:ACCID/Path
                       final prefix = 'onedrive:${f.accountId}${fPath == '/' ? '/' : fPath}';
                       return newItem.folderPath.startsWith(prefix);
                   });
@@ -1259,7 +1288,7 @@ class LibraryProvider extends ChangeNotifier {
     
     final type = parsed.studio != null ? MediaType.scene : MediaType.movie; 
     
-    return MediaItem(
+    var item = MediaItem(
       id: id,
       filePath: filePath,
       fileName: fileName,
@@ -1277,6 +1306,28 @@ class LibraryProvider extends ChangeNotifier {
       cast: cast,
       isAdult: parsed.studio != null,
     );
+
+    // Read sibling NFO sidecar if present to lock identifiers/metadata
+    final nfoPath = p.setExtension(filePath, '.nfo');
+    final nfoFile = File(nfoPath);
+    if (nfoFile.existsSync()) {
+      try {
+        final nfoData = SidecarService.parseNfo(nfoFile.readAsStringSync());
+        if (nfoData != null) {
+          item = item.copyWith(
+            stashId: nfoData['stashId'] as String?,
+            tmdbId: nfoData['tmdbId'] as int? ?? item.tmdbId,
+            anilistId: nfoData['anilistId'] as int? ?? item.anilistId,
+            title: nfoData['title'] as String? ?? item.title,
+            year: nfoData['year'] as int? ?? item.year,
+          );
+        }
+      } catch (_) {
+        // Ignore malformed NFOs and continue
+      }
+    }
+
+    return item;
   }
 
 
@@ -1437,8 +1488,9 @@ class LibraryProvider extends ChangeNotifier {
           reportScanProgress(sourceLabel: sourceLabel, currentItem: message);
         } else if (message is List<MediaItem>) {
           scannedItems.addAll(message);
+        } else if (message == true) {
           port.close();
-          break;
+          break; // Done signal
         }
       }
 
@@ -1706,62 +1758,110 @@ class _ScanRequest {
   _ScanRequest(this.sendPort, this.path, {this.keywords});
 }
 
-void _scanDirectoryInIsolate(_ScanRequest request) {
+// Helper for manual recursion to catch errors per-directory and avoid native crash
+Future<void> _scanRecursive(
+  PlatformDirectory dir,
+  List<String>? keywords,
+  List<MediaItem> buffer,
+  SendPort sendPort,
+  int bufferSize,
+) async {
+  try {
+    // Explicitly skip system folders that often cause crashes/hangs
+    final name = p.basename(dir.path);
+    if (const {'\$Recycle.Bin', 'System Volume Information', 'Windows', 'Program Files', 'Program Files (x86)'}.contains(name)) {
+       return;
+    }
+
+    // List non-recursively first
+    await for (final fsEntity in dir.list(recursive: false, followLinks: false).handleError((e) { 
+        debugPrint('Skip dir error: $e'); 
+    })) {
+      try {
+        if (fsEntity is PlatformFile) {
+           final pathStr = fsEntity.path;
+           final ext = p.extension(pathStr).toLowerCase();
+           final isVideo = const ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v'].contains(ext);
+           
+           if (isVideo) {
+               if (keywords != null && keywords.isNotEmpty) {
+                   final fName = p.basename(pathStr).toLowerCase();
+                   if (!keywords.any((k) => fName.contains(k))) continue;
+               }
+
+               final fileName = p.basename(pathStr);
+               // Stat might fail too
+               final stat = fsEntity.statSync();
+
+               final parsed = FilenameParser.parse(fileName);
+
+               final item = MediaItem(
+                  id: pathStr.hashCode.toString(),
+                  filePath: pathStr,
+                  fileName: fileName,
+                  folderPath: p.dirname(pathStr),
+                  sizeBytes: stat.size,
+                  lastModified: stat.modified,
+                  title: parsed.seriesTitle,
+                  year: parsed.year,
+                  type: parsed.studio != null ? MediaType.scene : MediaType.movie,
+                  season: parsed.season,
+                  episode: parsed.episode,
+                  isAnime: pathStr.toLowerCase().contains('anime'),
+                  showKey: p.dirname(pathStr).toLowerCase(),
+                  isAdult: parsed.studio != null,
+               );
+
+               buffer.add(item);
+               
+               // Debug Log for crash tracing
+               // debugPrint('Scanned: $pathStr');
+
+               if (buffer.length >= bufferSize) {
+                  sendPort.send(List<MediaItem>.from(buffer));
+                  buffer.clear();
+               }
+           }
+        } else if (fsEntity is PlatformDirectory) {
+           // Recurse manually
+           await _scanRecursive(fsEntity, keywords, buffer, sendPort, bufferSize);
+        }
+      } catch (innerE) {
+         // debugPrint('Skip entity error: $innerE');
+      }
+    }
+  } catch (dirE) {
+    // debugPrint('Directory access error: $dirE');
+  }
+}
+
+Future<void> _scanDirectoryInIsolate(_ScanRequest request) async {
   final root = request.path;
   final keywords = request.keywords;
   final sendPort = request.sendPort;
 
+  debugPrint('Isolate calling manual scan on: $root');
+
   try {
-    final dir = PlatformDirectory(root); 
+    final dir = PlatformDirectory(root);
     if (!dir.existsSync()) {
-      sendPort.send(<MediaItem>[]);
+      sendPort.send(true);
       return;
     }
 
-    final entities = dir.listSync(recursive: true);
-    final items = <MediaItem>[];
-    
-    bool isVideo(String path) {
-       final ext = p.extension(path).toLowerCase();
-       return const ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v'].contains(ext);
+    final buffer = <MediaItem>[];
+    const bufferSize = 50;
+
+    await _scanRecursive(dir, keywords, buffer, sendPort, bufferSize);
+
+    if (buffer.isNotEmpty) {
+      sendPort.send(List<MediaItem>.from(buffer));
     }
     
-    for (final e in entities) {
-        final pathStr = e.path;
-        if (isVideo(pathStr)) {
-            if (keywords != null && keywords.isNotEmpty) {
-                 final name = p.basename(pathStr).toLowerCase();
-                 if (!keywords.any((k) => name.contains(k))) continue;
-            }
-         
-             final filePath = pathStr;
-             final fileName = p.basename(filePath);
-             final stat = e.statSync();
-             
-             final parsed = FilenameParser.parse(fileName);
-             
-             items.add(MediaItem(
-                id: filePath.hashCode.toString(),
-                filePath: filePath,
-                fileName: fileName,
-                folderPath: p.dirname(filePath),
-                sizeBytes: stat.size,
-                lastModified: stat.modified,
-                title: parsed.seriesTitle,
-                year: parsed.year,
-                type: parsed.studio != null ? MediaType.scene : MediaType.movie, 
-                season: parsed.season,
-                episode: parsed.episode,
-                isAnime: filePath.toLowerCase().contains('anime'),
-                showKey: p.dirname(filePath).toLowerCase(),
-                isAdult: parsed.studio != null,
-             ));
-        }
-    }
-    sendPort.send(items);
+    sendPort.send(true); // DONE signal
   } catch (e) {
-    debugPrint('Isolate Scan Error: $e');
-    sendPort.send(<MediaItem>[]); 
+    debugPrint('Isolate Fatal Error: $e');
+    sendPort.send(true);
   }
 }
 

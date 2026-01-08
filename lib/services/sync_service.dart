@@ -20,6 +20,13 @@ class SyncService {
   void init(String userId, Function(Map<String, dynamic>) onUpdate) {
     if (_userId == userId) return; // Already init for this user
     
+    // Firestore desktop plugins are unstable on Windows; skip to avoid platform thread violations
+    if (!kIsWeb && Platform.isWindows) {
+      debugPrint('SyncService: Firestore disabled on Windows (desktop not supported).');
+      _db = null;
+      return;
+    }
+
     _userId = userId;
     onRemoteUpdate = onUpdate;
     

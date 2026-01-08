@@ -36,14 +36,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   bool _showControls = true;
   bool _isObscured = false; // NSFW Curtain
   bool _showSkipIntro = false;
+  bool _hasMarkedWatched = false; // Prevent spamming provider
   Timer? _hideTimer;
   bool _isDisposed = false;
+  int _lastSavedPosition = 0; // Throttle progress persistence
 
   @override
   void initState() {
     super.initState();
     // Default NSFW curtain if adult
-    _isObscured = widget.item.isAdult;
+    _isObscured = false; // widget.item.isAdult;
 
     _player = Player();
     _controller = VideoController(_player);
@@ -54,34 +56,62 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   Future<void> _initPlayer() async {
     // Determine URL. If it's a web/http stream, use it. If local, file.
     String url = widget.item.filePath;
-    
-    // Handle OneDrive refresh if needed
     if (widget.item.streamUrl != null) {
-      if (widget.item.streamUrl!.contains('graph.microsoft.com')) {
-         // quick refresh logic or usage of existing valid url
-         url = widget.item.streamUrl!;
-      } else {
-         url = widget.item.streamUrl!;
+      url = widget.item.streamUrl!;
+    }
+
+    // Open paused to ensure seek happens before playback starts
+    await _player.open(Media(url), play: false);
+
+    // Wait for duration to be valid before seeking
+    await _waitForDuration();
+
+    // Restore position: Check ProfileProvider for authoritative state
+    int startPos = widget.item.lastPositionSeconds;
+    if (mounted) {
+      final profileData = context.read<PlaybackProvider>().profileProvider.getDataFor(widget.item.id);
+      if (profileData != null && profileData.positionSeconds > 0) {
+        startPos = profileData.positionSeconds;
       }
     }
 
-    await _player.open(Media(url));
-    
-    // Restore position if any
-    if (widget.item.lastPositionSeconds > 0) {
-      await _player.seek(Duration(seconds: widget.item.lastPositionSeconds));
+    if (startPos > 0) {
+      debugPrint('VideoPlayer: Resuming at $startPos seconds for ${widget.item.id} (Duration: ${_player.state.duration.inSeconds}s)');
+      await _player.seek(Duration(seconds: startPos));
     } else {
-       // If no saved position, check intro logic immediately
+      debugPrint('VideoPlayer: Starting from beginning (pos: $startPos)');
     }
+
+    await _player.play();
 
     // Listeners
     _player.stream.position.listen((pos) {
       if (_isDisposed) return;
       _checkSkipIntro(pos);
       _updateProgress(pos);
+      _checkCompletion(pos);
     });
 
     _startHideTimer();
+  }
+
+  Future<void> _waitForDuration() async {
+    if (_player.state.duration.inSeconds > 0) return;
+
+    final completer = Completer<void>();
+    final listener = _player.stream.duration.listen((duration) {
+      if (duration.inSeconds > 0 && !completer.isCompleted) {
+        completer.complete();
+      }
+    });
+
+    try {
+      await completer.future.timeout(const Duration(seconds: 5));
+    } catch (_) {
+      debugPrint('VideoPlayer: Timeout waiting for duration');
+    } finally {
+      listener.cancel();
+    }
   }
 
   void _checkSkipIntro(Duration pos) {
@@ -97,16 +127,33 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   void _updateProgress(Duration pos) {
-    // Debounce or optimize this in a real app, but for now update provider
-    if (pos.inSeconds % 10 == 0) {
-       context.read<PlaybackProvider>().updateProgress(widget.item, pos.inSeconds);
-    }
+     final seconds = pos.inSeconds;
+     // Save early so "continue watching" appears after only a few seconds
+     if (seconds >= 3 && (seconds - _lastSavedPosition >= 5)) {
+       _lastSavedPosition = seconds;
+       context.read<PlaybackProvider>().updateProgress(widget.item, seconds);
+     }
   }
 
   void _skipIntro() {
     if (widget.item.introEnd != null) {
       _player.seek(Duration(seconds: widget.item.introEnd! + 1));
       setState(() => _showSkipIntro = false);
+    }
+  }
+
+  void _checkCompletion(Duration pos) {
+    if (_hasMarkedWatched) return;
+
+    final duration = _player.state.duration;
+    if (duration.inSeconds > 0) {
+      final progress = pos.inSeconds / duration.inSeconds;
+      // Mark as watched if > 95% complete
+      if (progress >= 0.95 && !widget.item.isWatched) {
+         context.read<PlaybackProvider>().markWatched();
+         _hasMarkedWatched = true;
+         // _isDisposed check not needed as we are in listener
+      }
     }
   }
 
@@ -137,10 +184,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _isDisposed = true;
     _hideTimer?.cancel();
     
-    // Save final progress
-    final pos = _player.state.position.inSeconds;
-    if (pos > 10) {
-      context.read<PlaybackProvider>().updateProgress(widget.item, pos);
+    // Stop playback immediately to be safe
+    _player.stop(); 
+
+    try {
+      // Save final progress
+      final pos = _player.state.position.inSeconds;
+      if (pos >= 3) {
+        context.read<PlaybackProvider>().updateProgress(widget.item, pos);
+      }
+    } catch (e) {
+      debugPrint('Error saving progress on dispose: $e');
     }
 
     _player.dispose();
@@ -161,7 +215,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             fit: StackFit.expand,
             children: [
               // 1. Video Layer
-              Video(controller: _controller, fit: BoxFit.contain),
+              Video(
+                controller: _controller, 
+                fit: BoxFit.contain,
+                controls: NoVideoControls, // Remove native controls (duplicate progress bar)
+              ),
 
               // 2. NSFW Curtain (Blur)
               if (_isObscured)
@@ -197,22 +255,45 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 duration: const Duration(milliseconds: 300),
                 child: IgnorePointer(
                   ignoring: !_showControls || _isObscured,
-                  child: NetflixControls(
-                    player: _player,
-                    title: widget.item.title ?? "Unknown Title",
-                    episodeTitle: widget.item.episode != null ? "Ep ${widget.item.episode}" : "",
-                    onNextEpisode: () {
-                       // Implement next episode logic here or emit event
-                    },
-                    onShowAudioSubs: _showAudioSubsModal,
+                  child: Stack( // Wrap in Stack to allow top-left positioning
+                    fit: StackFit.expand,
+                    children: [
+                      // Back Button (Top Left)
+                      Positioned(
+                        top: 40,
+                        left: 20,
+                        child: IconButton(
+                          icon: const Icon(LucideIcons.arrowLeft, color: Colors.white, size: 32),
+                          onPressed: () => Navigator.of(context).pop(),
+                          splashRadius: 24,
+                          tooltip: 'Back',
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.black45,
+                            hoverColor: Colors.white24,
+                          ),
+                        ),
+                      ),
+                      
+                      // Bottom Controls
+                      NetflixControls(
+                        player: _player,
+                        title: widget.item.title ?? "Unknown Title",
+                        episodeTitle: widget.item.episode != null ? "Ep ${widget.item.episode}" : "",
+                        onNextEpisode: () {
+                           // Implement next episode logic here or emit event
+                        },
+                        onShowAudioSubs: _showAudioSubsModal,
+                      ),
+                    ],
                   ),
                 ),
               ),
 
-              // 4. Skip Intro Button
+              // 4. Skip Intro Button (keep outside opacity stack if it has independent logic, or move inside? 
+              // Usually independent so it can persist or fade differently. Keeping as is.)
               if (_showSkipIntro && !_isObscured && _showControls)
                 Positioned(
-                  bottom: 120,
+                  bottom: 120, // Move up to clear the larger control area
                   right: 32,
                   child: FilledButton.icon(
                     onPressed: _skipIntro,

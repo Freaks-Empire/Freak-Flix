@@ -340,8 +340,6 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
     } finally {
       if (mounted) setState(() => _oneDriveLoading = false);
     }
-      if (mounted) setState(() => _oneDriveLoading = false);
-    }
   }
 
   // --- LOCAL FOLDER LOGIC ---

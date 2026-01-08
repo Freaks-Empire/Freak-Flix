@@ -4,7 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../models/media_item.dart';
 import '../providers/library_provider.dart';
-import 'segmented_pill_bar.dart';
+import '../providers/playback_provider.dart';
+import '../screens/video_player_screen.dart';
 
 /// Clone-style home dashboard backed by the real library.
 class FreakflixDashboard extends StatelessWidget {
@@ -14,6 +15,13 @@ class FreakflixDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final library = context.watch<LibraryProvider>();
+    void startPlayback(MediaItem item) {
+      // Resume playback from the last saved position and open the player screen
+      context.read<PlaybackProvider>().start(item);
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => VideoPlayerScreen(item: item)),
+      );
+    }
     final continueWatching = library.continueWatching;
     final rawStartWatching = [...library.items
         .where((i) => i.type == MediaType.tv && !i.isWatched && i.lastPositionSeconds == 0)]
@@ -55,7 +63,10 @@ class FreakflixDashboard extends StatelessWidget {
                     HomeSectionRow(
                       title: 'Continue Watching',
                       items: continueWatching,
-                      cardBuilder: (item) => ContinueWatchingCard(item: item),
+                      cardBuilder: (item) => ContinueWatchingCard(
+                        item: item,
+                        onPlay: () => startPlayback(item),
+                      ),
                     ),
                     const SizedBox(height: 16),
                     HomeSectionRow(
@@ -139,7 +150,8 @@ class HomeSectionRow extends StatelessWidget {
 
 class ContinueWatchingCard extends StatelessWidget {
   final MediaItem item;
-  const ContinueWatchingCard({super.key, required this.item});
+  final VoidCallback? onPlay;
+  const ContinueWatchingCard({super.key, required this.item, this.onPlay});
 
   @override
   Widget build(BuildContext context) {
@@ -162,103 +174,106 @@ class ContinueWatchingCard extends StatelessWidget {
     final sinceAdded = DateTime.now().difference(item.lastModified).inDays;
     final sinceLabel = sinceAdded <= 0 ? 'Today' : '${sinceAdded}d';
 
-    return SizedBox(
-      width: 240,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (item.backdropUrl != null)
-                    Image.network(item.backdropUrl!, fit: BoxFit.cover)
-                  else if (item.posterUrl != null)
-                    Image.network(item.posterUrl!, fit: BoxFit.cover)
-                  else
-                    Container(color: theme.colorScheme.surfaceVariant),
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Padding(
-                        padding: EdgeInsets.all(6),
-                        child: Icon(Icons.more_horiz, size: 16, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.fromLTRB(10, 16, 10, 10),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Colors.transparent, Colors.black87],
+    return GestureDetector(
+      onTap: onPlay,
+      child: SizedBox(
+        width: 240,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (item.backdropUrl != null)
+                      Image.network(item.backdropUrl!, fit: BoxFit.cover)
+                    else if (item.posterUrl != null)
+                      Image.network(item.posterUrl!, fit: BoxFit.cover)
+                    else
+                      Container(color: theme.colorScheme.surfaceVariant),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.all(6),
+                          child: Icon(Icons.more_horiz, size: 16, color: Colors.white),
                         ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          LinearProgressIndicator(
-                            value: progress,
-                            minHeight: 4,
-                            backgroundColor: Colors.white12,
-                            valueColor: AlwaysStoppedAnimation(theme.colorScheme.primary),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(10, 16, 10, 10),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Colors.transparent, Colors.black87],
                           ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(_formatMins(elapsed),
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                  )),
-                              Text(remaining != null ? _formatMins(remaining) : '--',
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                  )),
-                              Text(sinceLabel,
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                  )),
-                            ],
-                          ),
-                        ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 4,
+                              backgroundColor: Colors.white12,
+                              valueColor: AlwaysStoppedAnimation(theme.colorScheme.primary),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(_formatMins(elapsed),
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    )),
+                                Text(remaining != null ? _formatMins(remaining) : '--',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    )),
+                                Text(sinceLabel,
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    )),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            item.title ?? item.fileName,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          if (item.season != null || item.episode != null)
+            const SizedBox(height: 8),
             Text(
-              'S${item.season ?? 1} · E${item.episode ?? 1}',
-              style: theme.textTheme.labelSmall,
+              item.title ?? item.fileName,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
-        ],
+            if (item.season != null || item.episode != null)
+              Text(
+                'S${item.season ?? 1} · E${item.episode ?? 1}',
+                style: theme.textTheme.labelSmall,
+              ),
+          ],
+        ),
       ),
     );
   }

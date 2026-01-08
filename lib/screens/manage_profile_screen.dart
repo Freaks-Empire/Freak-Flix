@@ -40,7 +40,7 @@ class _ManageProfileScreenState extends State<ManageProfileScreen> {
     _nameController = TextEditingController(text: widget.profile?.name ?? '');
     _pinController = TextEditingController(text: widget.profile?.pin ?? '');
     _selectedColor = widget.profile?.colorValue ?? _colors[0];
-    _avatarId = widget.profile?.avatarId ?? 'assets/avatars/default.png';
+    _avatarId = widget.profile?.avatarId ?? 'assets/logo.png';
     // Copy list to avoid mutation issues
     _allowedFolderIds = widget.profile?.allowedFolderIds != null
         ? List.from(widget.profile!.allowedFolderIds!)

@@ -314,27 +314,27 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
     final theme = Theme.of(context);
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 900;
+    final headerHeight = isDesktop ? 420.0 : 360.0;
     
     final name = _tmdbPerson?.name ?? _stashPerformer?.name ?? _actor.name;
-    final bio = _tmdbPerson?.biography ?? _stashPerformer?.measurements ?? ''; // Use measurements as subtitle if no bio? Or just empty.
+    final bio = _tmdbPerson?.biography ?? _stashPerformer?.measurements ?? '';
     final profileUrl = _tmdbPerson?.profilePath ?? _stashPerformer?.imageUrl ?? _actor.profileUrl;
     
-    // Background Image: Use one of the known works if possible, else profile (blurred)
     String? backdropUrl;
     if (_tmdbMovies.isNotEmpty) backdropUrl = _tmdbMovies.first.backdropUrl;
     else if (_tmdbShows.isNotEmpty) backdropUrl = _tmdbShows.first.backdropUrl;
     else if (_localScenes.isNotEmpty) backdropUrl = _localScenes.first.backdropUrl;
     
-    // If no work backdrop, fallback to profile
     final heroImage = backdropUrl ?? profileUrl;
+    final hasCounts = _localScenes.isNotEmpty || _remoteScenes.isNotEmpty || _tmdbMovies.isNotEmpty || _tmdbShows.isNotEmpty;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF101010), // Trakt-ish dark bg
+      backgroundColor: const Color(0xFF101010),
       body: CustomScrollView(
         controller: _scrollController,
         slivers: [
           SliverAppBar(
-            expandedHeight: 500,
+            expandedHeight: headerHeight,
             pinned: true,
             backgroundColor: const Color(0xFF101010),
             leading: IconButton(
@@ -345,7 +345,6 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // 1. Blurred Background
                   if (heroImage != null)
                     Image.network(
                       heroImage,
@@ -355,23 +354,21 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                   else
                     Container(color: const Color(0xFF151515)),
                     
-                  // 2. Heavy Overlay Gradient
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          Colors.black.withOpacity(0.2), // Top hint
-                          Colors.black.withOpacity(0.6), // Middle
-                          const Color(0xFF101010),       // Solid blend at bottom
+                          Colors.black.withOpacity(0.25),
+                          Colors.black.withOpacity(0.6),
+                          const Color(0xFF101010),
                         ],
-                        stops: const [0.0, 0.4, 1.0],
+                        stops: const [0.0, 0.5, 1.0],
                       ),
                     ),
                   ),
 
-                  // 3. Content Overlay (Profile + Info)
                   Positioned(
                     bottom: 0,
                     left: 0,
@@ -379,22 +376,21 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                     child: Padding(
                       padding: EdgeInsets.symmetric(
                         horizontal: isDesktop ? 64.0 : 24.0, 
-                        vertical: 32.0,
+                        vertical: 28.0,
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          // Portrait Paster
                           if (profileUrl != null)
                              Container(
-                               width: 180,
-                               height: 270,
+                               width: 170,
+                               height: 240,
                                decoration: BoxDecoration(
                                  borderRadius: BorderRadius.circular(12),
                                  boxShadow: [
                                    BoxShadow(
-                                     color: Colors.black.withOpacity(0.5),
-                                     blurRadius: 20,
+                                     color: Colors.black.withOpacity(0.45),
+                                     blurRadius: 18,
                                      offset: const Offset(0, 10),
                                    )
                                  ],
@@ -409,9 +405,8 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                                ),
                              ),
 
-                          const SizedBox(width: 32),
+                          const SizedBox(width: 28),
 
-                          // Metadata
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,27 +415,26 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                                 Text(
                                   name,
                                   style: theme.textTheme.displaySmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
+                                    fontWeight: FontWeight.w800,
                                     color: Colors.white,
+                                    letterSpacing: -0.2,
                                   ),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 8),
                                 
-                                // Subtitle / Job
                                 Text(
-                                  'Acting', // Or dynamic if known
+                                  'Acting',
                                   style: theme.textTheme.titleMedium?.copyWith(
                                     color: Colors.white70,
                                   ),
                                 ),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 14),
 
-                                // Bio Teaser (Desktop only or condensed?)
                                 if (bio.isNotEmpty)
                                   SizedBox(
-                                    height: isDesktop ? null : 80, // Limit height on mobile header
+                                    height: isDesktop ? null : 72,
                                     child: Text(
                                       bio,
                                       style: theme.textTheme.bodyMedium?.copyWith(
@@ -452,30 +446,25 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                                     ),
                                   ),
 
-                                const SizedBox(height: 24),
+                                const SizedBox(height: 18),
                                 
-                                // Stats & Socials Row
                                 Row(
                                   children: [
-                                    // Socials
                                     if (_tmdbPerson != null) _buildSocialRow(_tmdbPerson!.externalIds),
-                                    
                                     const Spacer(),
-                                    
-                                    // Stats
                                     if (_tmdbPerson?.birthday != null) ...[
                                        _buildStatItem('Born', _tmdbPerson!.birthday!),
-                                       const SizedBox(width: 24),
+                                       const SizedBox(width: 20),
                                     ],
                                     if (_tmdbPerson?.deathDay != null) ...[
                                        _buildStatItem('Died', _tmdbPerson!.deathDay!),
-                                       const SizedBox(width: 24),
+                                       const SizedBox(width: 20),
                                     ],
                                   ],
                                 ),
                                 if (_stashPerformer != null)
                                    Padding(
-                                     padding: const EdgeInsets.only(top: 16),
+                                     padding: const EdgeInsets.only(top: 14),
                                      child: _buildStashSocials(_stashPerformer!.urls),
                                    ),
                               ],
@@ -490,48 +479,60 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
             ),
           ),
           
-          // Content Sections
           SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: isDesktop ? 64.0 : 24.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                   if (_stashPerformer != null) ...[
+                   if (hasCounts) ...[
                       const SizedBox(height: 24),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          if (_localScenes.isNotEmpty) _buildMetricChip(Icons.cloud_done, 'In Library', _localScenes.length),
+                          if (_remoteScenes.isNotEmpty) _buildMetricChip(Icons.history_toggle_off, 'History', _remoteScenes.length),
+                          if (_tmdbMovies.isNotEmpty) _buildMetricChip(Icons.movie, 'Movies', _tmdbMovies.length),
+                          if (_tmdbShows.isNotEmpty) _buildMetricChip(Icons.tv, 'Shows', _tmdbShows.length),
+                        ],
+                      ),
+                   ],
+
+                   if (_stashPerformer != null) ...[
+                      const SizedBox(height: 20),
                       _buildStashStatsCard(context, _stashPerformer!),
                    ],
 
-                  if (_tmdbMovies.isNotEmpty) ...[
-                    const SizedBox(height: 32),
-                    _buildSectionHeader('Movies', 'Acting'),
-                    const SizedBox(height: 16),
-                    _buildHorizontalList(_tmdbMovies),
-                  ],
-
-                  if (_tmdbShows.isNotEmpty) ...[
-                    const SizedBox(height: 48),
-                    _buildSectionHeader('Shows', 'Acting'),
-                    const SizedBox(height: 16),
-                    _buildHorizontalList(_tmdbShows),
-                  ],
-                  
-                  // StashDB Content
                   if (_localScenes.isNotEmpty) ...[
-                     const SizedBox(height: 48),
+                     const SizedBox(height: 44),
                      _buildSectionHeader('In Library', '${_localScenes.length} scenes'),
                      const SizedBox(height: 16),
                      _buildSceneGrid(_localScenes, true),
                   ],
                   
                   if (_remoteScenes.isNotEmpty) ...[
-                     const SizedBox(height: 48),
+                     const SizedBox(height: 44),
                      _buildSectionHeader('History', 'From StashDB'),
                      const SizedBox(height: 16),
                      _buildSceneGrid(_remoteScenes, false),
                   ],
 
-                  const SizedBox(height: 80),
+                  if (_tmdbMovies.isNotEmpty) ...[
+                    const SizedBox(height: 44),
+                    _buildSectionHeader('Movies', 'Acting'),
+                    const SizedBox(height: 14),
+                    _buildHorizontalList(_tmdbMovies),
+                  ],
+
+                  if (_tmdbShows.isNotEmpty) ...[
+                    const SizedBox(height: 44),
+                    _buildSectionHeader('Shows', 'Acting'),
+                    const SizedBox(height: 14),
+                    _buildHorizontalList(_tmdbShows),
+                  ],
+
+                  const SizedBox(height: 72),
                 ],
               ),
             ),
@@ -580,29 +581,77 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
     );
   }
 
-  Widget _buildHorizontalList(List<TmdbItem> items) {
-    return SizedBox(
-      height: 260,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (ctx, i) => DiscoverCard(item: items[i]), // Reuse DiscoverCard
+  Widget _buildMetricChip(IconData icon, String label, int count) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: Colors.white70),
+          const SizedBox(width: 8),
+          Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(count.toString(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
 
+  Widget _buildHorizontalList(List<TmdbItem> items) {
+    // Show all in a responsive grid that expands vertically with the page scroll.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = constraints.maxWidth >= 1100
+            ? 200.0
+            : constraints.maxWidth >= 800
+                ? 180.0
+                : 160.0;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 16,
+          children: items
+              .map((item) => SizedBox(
+                    width: cardWidth,
+                    child: DiscoverCard(item: item),
+                  ))
+              .toList(),
+        );
+      },
+    );
+  }
+
   Widget _buildSceneGrid(List<MediaItem> scenes, bool isLocal) {
-    // For scenes, maybe horizontal scroll too? Design shows grids for movies/shows.
-    // Let's use horizontal scroll for consistency with other sections.
-    return SizedBox(
-       height: 200, // 16:9 ratio blocks
-       child: ListView.separated(
-         scrollDirection: Axis.horizontal,
-         itemCount: scenes.length,
-         separatorBuilder: (_, __) => const SizedBox(width: 12),
-         itemBuilder: (ctx, i) => _SceneCard(item: scenes[i], isLocal: isLocal),
-       ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = constraints.maxWidth >= 1100
+            ? 260.0
+            : constraints.maxWidth >= 800
+                ? 220.0
+                : 180.0;
+        final spacing = 14.0;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: 14,
+          children: scenes
+              .map((scene) => SizedBox(
+                    width: cardWidth,
+                    child: _SceneCard(item: scene, isLocal: isLocal),
+                  ))
+              .toList(),
+        );
+      },
     );
   }
 
@@ -634,8 +683,6 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
   }
 
   Widget _buildStashStatsCard(BuildContext context, StashPerformer p) {
-      final theme = Theme.of(context);
-      
       Widget row(String label, String value) {
          if (value.isEmpty) return const SizedBox.shrink();
          return Padding(
@@ -781,13 +828,21 @@ class _SceneCard extends StatelessWidget {
                       errorBuilder: (_,__,___) => Container(color: Colors.grey[900]))
                     else
                       Container(color: Colors.grey[900]),
-                    
-                    if (isLocal)
-                      Positioned(top: 6, left: 6, child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
-                          child: const Icon(Icons.check, size: 10, color: Colors.white),
-                      )),
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isLocal ? Colors.green.withOpacity(0.85) : Colors.blueAccent.withOpacity(0.85),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          isLocal ? 'In Library' : 'StashDB',
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

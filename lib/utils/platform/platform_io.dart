@@ -58,4 +58,12 @@ class PlatformDirectory implements PlatformFileSystemEntity {
       return null;
     }).whereType<PlatformFileSystemEntity>().toList();
   }
+
+  Stream<PlatformFileSystemEntity> list({bool recursive = false, bool followLinks = true}) {
+    return _dir.list(recursive: recursive, followLinks: followLinks).map((e) {
+      if (e is io.File) return PlatformFile(e.path);
+      if (e is io.Directory) return PlatformDirectory(e.path);
+      return null;
+    }).where((e) => e != null).cast<PlatformFileSystemEntity>();
+  }
 }

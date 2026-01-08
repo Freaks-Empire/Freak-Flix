@@ -26,6 +26,13 @@ class ProfileProvider extends ChangeNotifier {
       if (jsonStr != null) {
         final List<dynamic> list = jsonDecode(jsonStr);
         profiles = list.map((e) => UserProfile.fromJson(e)).toList();
+        // Migrate missing avatar asset to existing logo placeholder
+        profiles = profiles.map((p) {
+          if (p.avatarId == 'assets/avatars/default.png') {
+            return p.copyWith(avatarId: 'assets/logo.png');
+          }
+          return p;
+        }).toList();
       } else {
         // First run or empty: Do nothing. Setup wizard will handle creation.
         profiles = []; 

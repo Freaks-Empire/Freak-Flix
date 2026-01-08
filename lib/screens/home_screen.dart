@@ -6,6 +6,8 @@ import '../providers/library_provider.dart';
 import '../widgets/home_media_card.dart';
 import '../widgets/loading_indicator.dart';
 import '../widgets/empty_state.dart';
+import '../providers/playback_provider.dart';
+import '../screens/video_player_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -23,11 +25,20 @@ class HomeScreen extends StatelessWidget {
           message: 'No media yet. Go to Settings to scan a folder.');
     }
 
+    void startPlayback(MediaItem item) {
+      // Kick off playback at the last saved position then open the player UI
+      context.read<PlaybackProvider>().start(item);
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => VideoPlayerScreen(item: item)),
+      );
+    }
+
     final sections = <_HomeSectionData>[
       _HomeSectionData(
         title: 'Continue Watching',
         showArrow: true,
         items: library.continueWatching,
+        onTap: startPlayback,
       ),
       _HomeSectionData(
         title: 'Start Watching',
@@ -77,6 +88,7 @@ class HomeScreen extends StatelessWidget {
                       title: section.title,
                       showArrow: section.showArrow,
                       items: section.items,
+                      onTap: section.onTap,
                     ),
                 ],
               ),
@@ -92,10 +104,12 @@ class _HomeSectionData {
   final String title;
   final bool showArrow;
   final List<MediaItem> items;
+  final void Function(MediaItem item)? onTap;
   const _HomeSectionData({
     required this.title,
     required this.showArrow,
     required this.items,
+    this.onTap,
   });
 }
 
@@ -103,10 +117,12 @@ class _HomeSection extends StatelessWidget {
   final String title;
   final bool showArrow;
   final List<MediaItem> items;
+  final void Function(MediaItem item)? onTap;
   const _HomeSection({
     required this.title,
     required this.showArrow,
     required this.items,
+    this.onTap,
   });
 
   @override
@@ -139,7 +155,10 @@ class _HomeSection extends StatelessWidget {
               padding: const EdgeInsets.only(right: 16),
               separatorBuilder: (_, __) => const SizedBox(width: 10),
               itemBuilder: (context, index) {
-                return HomeMediaCard(item: items[index]);
+                return HomeMediaCard(
+                  item: items[index],
+                  onTap: onTap != null ? () => onTap!(items[index]) : null,
+                );
               },
             ),
           ),
