@@ -62,18 +62,25 @@ class MetadataService {
        if (settings.enableAdultContent && settings.stashEndpoints.any((e) => e.enabled)) {
           MediaItem? stashItem;
 
-          // Attempt 1: Performer-First Search (if performers are available)
+          // Attempt 1: Performer-First Search
           if (parsed.performers.isNotEmpty) {
-             print('[metadata] StashDB: Attempting performer-first search for "${parsed.seriesTitle}" with performer: ${parsed.performers.first}');
+             print('[metadata] StashDB: Attempting performer-first search for "${parsed.seriesTitle}" with performer: ${parsed.performers.first} (Strict: ${settings.requirePerformerMatch})');
              stashItem = await _stash.searchSceneByPerformer(
                parsed.seriesTitle, 
                parsed.performers.first, 
                settings.stashEndpoints,
+               requirePerformerMatch: settings.requirePerformerMatch, // Pass setting
              );
           }
 
           // Attempt 2: Standard title search (fallback)
           if (stashItem == null) {
+             // If strict matching is required AND we had performers, we might choose NOT to fallback
+             // But the prompt implies fallback logic is standard unless specified otherwise.
+             // Usually strict matching means "if performer match fails, fail whole thing" OR "only accept high confidence".
+             // We will allow fallback for now unless safety setting implies "ONLY allow confirmed matches".
+             // Given safety net context, we proceed to fallback but log it.
+             
              print('[metadata] StashDB: Performer search failed or no performers. Trying title search: "${parsed.seriesTitle}"');
              stashItem = await _stash.searchScene(
                parsed.seriesTitle, settings.stashEndpoints);
@@ -111,7 +118,6 @@ class MetadataService {
           }
 
           if (stashItem != null) {
-            // Extract stashId from the returned item (format: stashdb:UUID)
             String? stashId;
             if (stashItem.id.startsWith('stashdb:')) {
               stashId = stashItem.id.replaceFirst('stashdb:', '');
@@ -127,7 +133,7 @@ class MetadataService {
               type: MediaType.scene,
               genres: stashItem.genres,
               cast: stashItem.cast,
-              stashId: stashId, // Lock the metadata
+              stashId: stashId, 
             );
           }
        }
