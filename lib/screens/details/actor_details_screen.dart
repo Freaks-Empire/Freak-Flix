@@ -1,28 +1,29 @@
 /// lib/screens/details/actor_details_screen.dart
-import 'dart:math';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart';
+
 import '../../models/cast_member.dart';
-import 'package:go_router/go_router.dart';
-import '../../models/tmdb_person.dart';
-import '../../models/tmdb_item.dart';
 import '../../models/media_item.dart';
+import '../../models/stash_performer.dart';
+import '../../providers/settings_provider.dart';
+import '../../providers/library_provider.dart';
 import '../../services/tmdb_service.dart';
 import '../../services/stash_db_service.dart';
-import '../../providers/library_provider.dart';
-import '../../providers/settings_provider.dart';
-import '../../models/stash_endpoint.dart';
-import '../../models/stash_performer.dart';
-import '../../widgets/discover_card.dart';
-import '../../widgets/safe_network_image.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../player/player_screen.dart';
+import '../details/details_screen.dart';
 
 class ActorDetailsScreen extends StatefulWidget {
-  final String actorId;
-  final CastMember? actor;
+  final CastMember actor;
+  final String heroTag;
 
-  const ActorDetailsScreen({super.key, required this.actorId, this.actor});
+  const ActorDetailsScreen({
+    super.key,
+    required this.actor,
+    required this.heroTag,
+  });
 
   @override
   State<ActorDetailsScreen> createState() => _ActorDetailsScreenState();
@@ -30,711 +31,465 @@ class ActorDetailsScreen extends StatefulWidget {
 
 class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
   bool _isLoading = true;
-  bool _isLoadingMore = false;
-  int _currentPage = 1;
-  static const int _perPage = 40;
-  bool _hasMore = true;
-  final ScrollController _scrollController = ScrollController();
-
-  late CastMember _actor;
-  TmdbPerson? _tmdbPerson;
-  StashPerformer? _stashPerformer;
-  List<TmdbItem> _tmdbMovies = [];
-  List<TmdbItem> _tmdbShows = [];
-  List<MediaItem> _localScenes = [];
-  List<MediaItem> _remoteScenes = [];
+  StashPerformer? _stashDetails;
+  Map<String, dynamic>? _tmdbDetails;
+  
+  // Lists
+  List<MediaItem> _libraryItems = []; // Scenes found in local library
+  List<MediaItem> _historyItems = []; // Watched items from history
+  List<Map<String, dynamic>> _tmdbMovies = [];
+  List<Map<String, dynamic>> _tmdbShows = [];
 
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
-    _loadData();
+    _fetchData();
   }
 
-  @override
-  void dispose() {
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
-    super.dispose();
-  }
+  Future<void> _fetchData() async {
+    final settings = context.read<SettingsProvider>();
+    final library = context.read<LibraryProvider>();
+    final stash = StashDbService();
+    final tmdb = TmdbService(settings);
 
-  void _onScroll() {
-    if (_scrollController.hasClients && 
-        _scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 500) {
-      if (!_isLoadingMore && _hasMore && !_isLoading) {
-        _loadNextPage();
-      }
-    }
-  }
-
-  Future<void> _loadData() async {
-      // 1. Resolve Actor
-      if (widget.actor != null) {
-          _actor = widget.actor!;
-      } else {
-          // Fetch actor by ID
-          final id = widget.actorId;
-          if (id.startsWith('stashdb:')) {
-              // StashDB
-               final settings = context.read<SettingsProvider>();
-               final service = StashDbService();
-               final realId = id.replaceFirst('stashdb:', '');
-               final fetched = await service.getPerformer(realId, settings.stashEndpoints);
-               
-               if (fetched != null) {
-                   _actor = fetched;
-               } else {
-                   _actor = CastMember(id: id, name: 'Unknown', character: '', source: CastSource.stashDb);
-               }
-          } else {
-              // TMDB 
-              final service = context.read<TmdbService>();
-              final details = await service.getPersonDetails(id);
-              
-              if (details != null) {
-                  _actor = CastMember(
-                      id: id,
-                      name: details.name,
-                      character: 'Actor',
-                      profileUrl: details.profilePath,
-                      source: CastSource.tmdb,
-                  );
-                  _tmdbPerson = details;
-              } else {
-                  _actor = CastMember(id: id, name: 'Unknown', character: '', source: CastSource.tmdb);
-              }
-          }
-      }
-
-      if (mounted) setState(() {}); 
-      if (mounted) setState(() {}); 
-      await _loadDetails();
-  }
-
-  Future<void> _loadDetails() async {
-    if (_actor.source == CastSource.tmdb) {
-       // ... (TMDB logic unchanged) ...
-       if (_tmdbPerson == null) {
-          final service = context.read<TmdbService>();
-          final details = await service.getPersonDetails(_actor.id);
-          if (mounted) {
-            setState(() {
-              _tmdbPerson = details;
-            });
-          }
-       }
-       // ...
-       if (mounted && _tmdbPerson != null) {
-          final allCredits = List<TmdbItem>.from(_tmdbPerson!.knownFor);
-          final movies = allCredits.where((i) => i.type == TmdbMediaType.movie).toList();
-          final shows = allCredits.where((i) => i.type == TmdbMediaType.tv).toList();
-          
-          setState(() {
-              _tmdbMovies = movies;
-              _tmdbShows = shows;
-              _isLoading = false;
-          });
-       } else if (mounted) {
-          setState(() => _isLoading = false);
-       }
-
-    } else {
-      // StashDB
-      if (_stashPerformer == null) {
-         final settings = context.read<SettingsProvider>();
-         final service = StashDbService();
-         final rawId = _actor.id;
-         final details = await service.getPerformerDetails(rawId, settings.stashEndpoints);
-         
-         if (mounted && details != null) {
-             setState(() {
-                _stashPerformer = details;
-                // Update basic actor info if missing
-                if (_actor.profileUrl == null && details.imageUrl != null) {
-                   _actor = CastMember(
-                      id: _actor.id, 
-                      name: details.name, 
-                      character: _actor.character, 
-                      profileUrl: details.imageUrl,
-                      source: _actor.source
-                   );
-                }
-             });
+    try {
+      // 1. Fetch Details (StashDB or TMDB)
+      if (settings.enableAdultContent && settings.stashEndpoints.any((e) => e.enabled)) {
+         // Attempt Stash Search by Name first if ID missing or strictly adult context
+         // If widget.actor.id is empty or from TMDB, we might need to search Stash by name?
+         // StashDbService needs a searchPerformerByName really.
+         // For now, assume if source is StashDb, ID is valid.
+         if (widget.actor.source == CastSource.stashDb && widget.actor.id.isNotEmpty) {
+            _stashDetails = await stash.getPerformerDetails(widget.actor.id, settings.stashEndpoints);
          }
       }
 
-      if (mounted) {
-         final library = context.read<LibraryProvider>();
-         final actorId = _actor.id;
-         final actorName = _actor.name;
-
-         final local = library.items.where((item) {
-             return item.cast.any((c) => c.id == actorId || (c.id.isEmpty && c.name == actorName));
-         }).toList();
-
-         local.sort((a,b) => (b.year ?? 0).compareTo(a.year ?? 0));
-
-         setState(() {
-           _localScenes = local;
-           _isLoading = local.isEmpty; 
-         });
+      if (_stashDetails == null && settings.hasTmdbKey) {
+         // Fallback to TMDB
+         // If we have an ID and it's TMDB source:
+         if (widget.actor.source == CastSource.tmdb && widget.actor.id.isNotEmpty) {
+             final id = int.tryParse(widget.actor.id);
+             if (id != null) {
+                _tmdbDetails = await tmdb.getPersonDetails(id);
+                if (_tmdbDetails != null) {
+                   final combined = await tmdb.getPersonCredits(id);
+                   _tmdbMovies = List<Map<String, dynamic>>.from(combined['cast'] ?? [])
+                       .where((x) => x['media_type'] == 'movie')
+                       .toList();
+                   _tmdbShows = List<Map<String, dynamic>>.from(combined['cast'] ?? [])
+                       .where((x) => x['media_type'] == 'tv')
+                       .toList();
+                }
+             }
+         } else {
+             // Search TMDB by name?
+             final search = await tmdb.searchPerson(widget.actor.name);
+             if (search != null) {
+                final id = search['id'] as int;
+                _tmdbDetails = await tmdb.getPersonDetails(id);
+                 final combined = await tmdb.getPersonCredits(id);
+                   _tmdbMovies = List<Map<String, dynamic>>.from(combined['cast'] ?? [])
+                       .where((x) => x['media_type'] == 'movie')
+                       .toList();
+                   _tmdbShows = List<Map<String, dynamic>>.from(combined['cast'] ?? [])
+                       .where((x) => x['media_type'] == 'tv')
+                       .toList();
+             }
+         }
       }
+      
+      // 2. Local Library Matches
+      // Match by Name (simple normalization)
+      final normName = widget.actor.name.toLowerCase().trim();
+      _libraryItems = library.items.where((item) {
+          return item.cast.any((c) => c.name.toLowerCase().trim() == normName);
+      }).toList();
 
-      await _loadNextPage();
+      // 3. History Matches (from library items that are watched)
+      _historyItems = _libraryItems.where((i) => i.isWatched || i.lastPositionSeconds > 0).toList();
+
+      if (mounted) setState(() => _isLoading = false);
+
+    } catch (e) {
+      debugPrint('Error fetching actor details: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _loadNextPage() async {
-    if (_isLoadingMore) return;
-    if (_actor.source != CastSource.stashDb) return;
-    
-    setState(() => _isLoadingMore = true);
-
-    try {
-      final settings = context.read<SettingsProvider>();
-      final service = StashDbService();
-      
-      final scenes = await service.getPerformerScenes(
-          _actor.id, 
-          settings.stashEndpoints,
-          page: _currentPage,
-          perPage: _perPage,
-      );
-      
-      if (!mounted) return;
-
-      if (scenes.isEmpty) {
-        setState(() {
-          _hasMore = false;
-          _isLoadingMore = false;
-        });
-        return;
-      }
-      
-      final library = context.read<LibraryProvider>();
-      final filtered = <MediaItem>[];
-      
-      for (final s in scenes) {
-         final rawId = s.id.replaceFirst('stashdb:', '');
-         final isLocal = library.items.any((l) => l.stashId == rawId);
-         if (!isLocal) filtered.add(s);
-      }
-
-      setState(() {
-        _remoteScenes.addAll(filtered);
-        _currentPage++;
-        if (scenes.length < _perPage) _hasMore = false;
-        _isLoadingMore = false;
-      });
-
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoadingMore = false;
-          _hasMore = false; 
-        });
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-       return const Scaffold(
-         backgroundColor: Colors.black,
-         body: Center(child: CircularProgressIndicator(color: Colors.redAccent)),
-       );
-    }
-
-    final theme = Theme.of(context);
-    final size = MediaQuery.of(context).size;
-    final isDesktop = size.width > 900;
+    // Use stash details if available, else TMDB, else basic info
+    final name = _stashDetails?.name ?? _tmdbDetails?['name'] ?? widget.actor.name;
+    final bio = _stashDetails?.details ?? _tmdbDetails?['biography'] ?? '';
+    final image = _stashDetails?.imagePath ?? 
+                  (_tmdbDetails?['profile_path'] != null 
+                      ? 'https://image.tmdb.org/t/p/w500${_tmdbDetails!['profile_path']}' 
+                      : widget.actor.profileUrl);
     
-    final name = _tmdbPerson?.name ?? _stashPerformer?.name ?? _actor.name;
-    final bio = _tmdbPerson?.biography ?? _stashPerformer?.measurements ?? ''; // Use measurements as subtitle if no bio? Or just empty.
-    final profileUrl = _tmdbPerson?.profilePath ?? _stashPerformer?.imageUrl ?? _actor.profileUrl;
+    // Stats
+    final birth = _stashDetails?.birthdate ?? _tmdbDetails?['birthday'];
+    final death = _tmdbDetails?['deathday'];
+    final place = _stashDetails?.country ?? _tmdbDetails?['place_of_birth'];
     
-    // Background Image: Use one of the known works if possible, else profile (blurred)
-    String? backdropUrl;
-    if (_tmdbMovies.isNotEmpty) backdropUrl = _tmdbMovies.first.backdropUrl;
-    else if (_tmdbShows.isNotEmpty) backdropUrl = _tmdbShows.first.backdropUrl;
-    else if (_localScenes.isNotEmpty) backdropUrl = _localScenes.first.backdropUrl;
-    
-    // If no work backdrop, fallback to profile
-    final heroImage = backdropUrl ?? profileUrl;
+    // Stash Specific
+    final measurements = _stashDetails?.measurements;
+    final cups = _stashDetails?.fakeTits ?? '';
+    final career = _stashDetails != null 
+        ? '${_stashDetails!.careerStartYear ?? '?'} - ${_stashDetails!.careerEndYear ?? 'Present'}'
+        : null;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF101010), // Trakt-ish dark bg
-      body: CustomScrollView(
-        controller: _scrollController,
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 500,
-            pinned: true,
-            backgroundColor: const Color(0xFF101010),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // 1. Blurred Background
-                  if (heroImage != null)
-                    Image.network(
-                      heroImage,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_,__,___) => Container(color: const Color(0xFF151515)),
-                    )
-                  else
-                    Container(color: const Color(0xFF151515)),
-                    
-                  // 2. Heavy Overlay Gradient
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withOpacity(0.2), // Top hint
-                          Colors.black.withOpacity(0.6), // Middle
-                          const Color(0xFF101010),       // Solid blend at bottom
+      backgroundColor: Colors.black,
+      body: _isLoading 
+          ? const Center(child: CircularProgressIndicator())
+          : CustomScrollView(
+              slivers: [
+                _buildAppBar(name, image),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildQuickMetrics(),
+                        const SizedBox(height: 16),
+                        _buildBio(bio),
+                        const SizedBox(height: 16),
+                        _buildInfoGrid(birth, death, place, measurements, cups, career),
+                        const SizedBox(height: 24),
+                        
+                        // Sections
+                        if (_libraryItems.isNotEmpty) ...[
+                          _sectionHeader('In Library', _libraryItems.length),
+                          _buildLibraryGrid(_libraryItems),
+                          const SizedBox(height: 24),
                         ],
-                        stops: const [0.0, 0.4, 1.0],
-                      ),
+
+                        if (_historyItems.isNotEmpty) ...[
+                          _sectionHeader('History', _historyItems.length),
+                          _buildLibraryGrid(_historyItems), // Reuse grid? Or horizontal list? Library Grid is better for scenes.
+                          const SizedBox(height: 24),
+                        ],
+
+                        if (_tmdbMovies.isNotEmpty) ...[
+                          _sectionHeader('Movies', _tmdbMovies.length),
+                          _buildHorizontalList(_tmdbMovies, true),
+                          const SizedBox(height: 24),
+                        ],
+
+                        if (_tmdbShows.isNotEmpty) ...[
+                          _sectionHeader('TV Shows', _tmdbShows.length),
+                          _buildHorizontalList(_tmdbShows, false),
+                          const SizedBox(height: 24),
+                        ],
+                      ],
                     ),
                   ),
-
-                  // 3. Content Overlay (Profile + Info)
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isDesktop ? 64.0 : 24.0, 
-                        vertical: 32.0,
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          // Portrait Paster
-                          if (profileUrl != null)
-                             Container(
-                               width: 180,
-                               height: 270,
-                               decoration: BoxDecoration(
-                                 borderRadius: BorderRadius.circular(12),
-                                 boxShadow: [
-                                   BoxShadow(
-                                     color: Colors.black.withOpacity(0.5),
-                                     blurRadius: 20,
-                                     offset: const Offset(0, 10),
-                                   )
-                                 ],
-                               ),
-                               child: ClipRRect(
-                                 borderRadius: BorderRadius.circular(12),
-                                 child: Image.network(
-                                   profileUrl,
-                                   fit: BoxFit.cover,
-                                   errorBuilder: (_,__,___) => Container(color: Colors.grey[800]),
-                                 ),
-                               ),
-                             ),
-
-                          const SizedBox(width: 32),
-
-                          // Metadata
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  name,
-                                  style: theme.textTheme.displaySmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 8),
-                                
-                                // Subtitle / Job
-                                Text(
-                                  'Acting', // Or dynamic if known
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-
-                                // Bio Teaser (Desktop only or condensed?)
-                                if (bio.isNotEmpty)
-                                  SizedBox(
-                                    height: isDesktop ? null : 80, // Limit height on mobile header
-                                    child: Text(
-                                      bio,
-                                      style: theme.textTheme.bodyMedium?.copyWith(
-                                        color: Colors.white70,
-                                        height: 1.5,
-                                      ),
-                                      maxLines: isDesktop ? 4 : 3,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-
-                                const SizedBox(height: 24),
-                                
-                                // Stats & Socials Row
-                                Row(
-                                  children: [
-                                    // Socials
-                                    if (_tmdbPerson != null) _buildSocialRow(_tmdbPerson!.externalIds),
-                                    
-                                    const Spacer(),
-                                    
-                                    // Stats
-                                    if (_tmdbPerson?.birthday != null) ...[
-                                       _buildStatItem('Born', _tmdbPerson!.birthday!),
-                                       const SizedBox(width: 24),
-                                    ],
-                                    if (_tmdbPerson?.deathDay != null) ...[
-                                       _buildStatItem('Died', _tmdbPerson!.deathDay!),
-                                       const SizedBox(width: 24),
-                                    ],
-                                  ],
-                                ),
-                                if (_stashPerformer != null)
-                                   Padding(
-                                     padding: const EdgeInsets.only(top: 16),
-                                     child: _buildStashSocials(_stashPerformer!.urls),
-                                   ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
-          
-          // Content Sections
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: isDesktop ? 64.0 : 24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                   if (_stashPerformer != null) ...[
-                      const SizedBox(height: 24),
-                      _buildStashStatsCard(context, _stashPerformer!),
-                   ],
-
-                  if (_tmdbMovies.isNotEmpty) ...[
-                    const SizedBox(height: 32),
-                    _buildSectionHeader('Movies', 'Acting'),
-                    const SizedBox(height: 16),
-                    _buildHorizontalList(_tmdbMovies),
-                  ],
-
-                  if (_tmdbShows.isNotEmpty) ...[
-                    const SizedBox(height: 48),
-                    _buildSectionHeader('Shows', 'Acting'),
-                    const SizedBox(height: 16),
-                    _buildHorizontalList(_tmdbShows),
-                  ],
-                  
-                  // StashDB Content
-                  if (_localScenes.isNotEmpty) ...[
-                     const SizedBox(height: 48),
-                     _buildSectionHeader('In Library', '${_localScenes.length} scenes'),
-                     const SizedBox(height: 16),
-                     _buildSceneGrid(_localScenes, true),
-                  ],
-                  
-                  if (_remoteScenes.isNotEmpty) ...[
-                     const SizedBox(height: 48),
-                     _buildSectionHeader('History', 'From StashDB'),
-                     const SizedBox(height: 16),
-                     _buildSceneGrid(_remoteScenes, false),
-                  ],
-
-                  const SizedBox(height: 80),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
-  Widget _buildSectionHeader(String title, String? badge) {
-    return Row(
-      children: [
-        // Minimize Icon
-        if (badge != null && badge == 'Acting')
-          const Padding(
-            padding: EdgeInsets.only(right: 8),
-            child: Icon(Icons.remove, size: 16, color: Colors.white54),
-          ),
-        Text(
-          title, 
+  Widget _buildAppBar(String name, String? imageUrl) {
+    return SliverAppBar(
+      expandedHeight: 320, // Reduced from typical 400
+      pinned: true,
+      backgroundColor: Colors.black,
+      flexibleSpace: FlexibleSpaceBar(
+        title: Text(
+          name,
           style: const TextStyle(
-             color: Colors.white, 
-             fontSize: 20, 
-             fontWeight: FontWeight.bold
-          )
-        ),
-        if (badge != null) ...[
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-               color: Colors.blueAccent.withOpacity(0.2),
-               borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              badge, 
-              style: const TextStyle(
-                color: Colors.blueAccent, 
-                fontSize: 12, 
-                fontWeight: FontWeight.bold
-              )
-            ),
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            shadows: [Shadow(color: Colors.black, blurRadius: 10)],
           ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildHorizontalList(List<TmdbItem> items) {
-    return SizedBox(
-      height: 260,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (ctx, i) => DiscoverCard(item: items[i]), // Reuse DiscoverCard
+        ),
+        background: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (imageUrl != null)
+              CachedNetworkImage(
+                imageUrl: imageUrl,
+                fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
+                errorWidget: (_,__,___) => Container(color: Colors.grey[900]),
+              )
+            else
+              Container(color: Colors.grey[900]),
+            
+            // Gradient Overlay
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.transparent,
+                    Colors.black54,
+                    Colors.black,
+                  ],
+                  stops: [0.0, 0.4, 0.8, 1.0],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildSceneGrid(List<MediaItem> scenes, bool isLocal) {
-    // For scenes, maybe horizontal scroll too? Design shows grids for movies/shows.
-    // Let's use horizontal scroll for consistency with other sections.
-    return SizedBox(
-       height: 200, // 16:9 ratio blocks
-       child: ListView.separated(
-         scrollDirection: Axis.horizontal,
-         itemCount: scenes.length,
-         separatorBuilder: (_, __) => const SizedBox(width: 12),
-         itemBuilder: (ctx, i) => _SceneCard(item: scenes[i], isLocal: isLocal),
-       ),
+  Widget _buildQuickMetrics() {
+    final stats = [
+      if (_libraryItems.isNotEmpty) '${_libraryItems.length} Saved',
+      if (_historyItems.isNotEmpty) '${_historyItems.length} Watched',
+      if (_tmdbMovies.isNotEmpty) '${_tmdbMovies.length} Movies',
+      if (_tmdbShows.isNotEmpty) '${_tmdbShows.length} Shows',
+    ];
+
+    if (stats.isEmpty) return const SizedBox.shrink();
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: stats.map((s) => Chip(
+        label: Text(s, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.grey[900],
+        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      )).toList(),
     );
   }
 
-  Widget _buildStatItem(String label, String value) {
-    // Basic date parsing to prettify if needed, or just show raw
+  Widget _buildBio(String bio) {
+    if (bio.isEmpty) return const SizedBox.shrink();
+    return Text(
+      bio,
+      maxLines: 6,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(color: Colors.white70, height: 1.4),
+    );
+  }
+
+  Widget _buildInfoGrid(String? birth, String? death, String? place, String? measurements, String? cups, String? career) {
+    final items = <Widget>[];
+    
+    if (birth != null) items.add(_infoTile('Born', birth));
+    if (death != null) items.add(_infoTile('Died', death));
+    if (place != null) items.add(_infoTile('Place', place));
+    if (career != null) items.add(_infoTile('Career', career));
+    if (measurements != null) items.add(_infoTile('Measurements', measurements));
+    
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    return Wrap(
+      spacing: 16,
+      runSpacing: 12,
+      children: items,
+    );
+  }
+
+  Widget _infoTile(String label, String value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        Text(label.toUpperCase(), style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
         const SizedBox(height: 2),
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 14)),
+        Text(value, style: const TextStyle(color: Colors.white, fontSize: 13)),
       ],
     );
   }
 
-  Widget _buildSocialRow(Map<String, String> ids) {
-    return Row(
-      children: [
-        if (ids['facebook'] != null)
-           _SocialIcon(icon: Icons.facebook, url: 'https://facebook.com/${ids['facebook']}'),
-        if (ids['instagram'] != null)
-           _SocialIcon(icon: Icons.camera_alt, url: 'https://instagram.com/${ids['instagram']}'),
-        if (ids['twitter'] != null)
-           _SocialIcon(icon: Icons.alternate_email, url: 'https://twitter.com/${ids['twitter']}'),
-        if (ids['imdb'] != null)
-           _ImdbIcon(id: ids['imdb']!),
-      ],
-    );
-  }
-
-  Widget _buildStashStatsCard(BuildContext context, StashPerformer p) {
-      final theme = Theme.of(context);
-      
-      Widget row(String label, String value) {
-         if (value.isEmpty) return const SizedBox.shrink();
-         return Padding(
-           padding: const EdgeInsets.symmetric(vertical: 4),
-           child: Row(
-             crossAxisAlignment: CrossAxisAlignment.start,
-             children: [
-               SizedBox(
-                 width: 140, 
-                 child: Text(label, style: const TextStyle(color: Colors.white70, fontSize: 14))
-               ),
-               Expanded(
-                 child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500))
-               ),
-             ],
-           ),
-         );
-      }
-      
-      String? career;
-      if (p.careerStartYear != null) {
-          career = 'Active ${p.careerStartYear}';
-          if (p.careerEndYear != null) career += '–${p.careerEndYear}';
-          else career += '–';
-      }
-
-      final ageStr = p.birthdate != null ? '${p.birthdate}' : '';
-      
-      return Container(
-         width: double.infinity,
-         padding: const EdgeInsets.all(16),
-         decoration: BoxDecoration(
-           color: const Color(0xFF1A1A1A),
-           borderRadius: BorderRadius.circular(8),
-           border: Border.all(color: Colors.white10),
-         ),
-         child: Column(
-           crossAxisAlignment: CrossAxisAlignment.start,
-           children: [
-              if (career != null) row('Career', career),
-              row('Birthdate', ageStr),
-              if (p.heightCm != null) row('Height', '${p.heightCm}cm'),
-              if (p.measurements != null) row('Measurements', p.measurements!),
-              if (p.breastType != null) row('Breast type', p.breastType!),
-              if (p.country != null) row('Nationality', p.country!),
-              if (p.ethnicity != null) row('Ethnicity', p.ethnicity!),
-              if (p.eyeColor != null) row('Eye color', p.eyeColor!),
-              if (p.hairColor != null) row('Hair color', p.hairColor!),
-              if (p.tattoos.isNotEmpty) row('Tattoos', p.tattoos.join(', ')),
-              if (p.piercings.isNotEmpty) row('Piercings', p.piercings.join(', ')),
-              if (p.aliases.isNotEmpty) row('Aliases', p.aliases.join(', ')),
-           ],
-         ),
-      );
-  }
-
-  Widget _buildStashSocials(Map<String, String> urls) {
-     return Row(
-       children: urls.entries.map((e) {
-         IconData icon = Icons.link;
-         if (e.key == 'twitter') icon = Icons.alternate_email;
-         if (e.key == 'instagram') icon = Icons.camera_alt;
-         // StashDB can have flexible keys
-         return _SocialIcon(icon: icon, url: e.value);
-       }).toList(),
-     );
-  }
-}
-
-class _SocialIcon extends StatelessWidget {
-  final IconData icon;
-  final String url;
-  const _SocialIcon({required this.icon, required this.url});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _sectionHeader(String title, int count) {
     return Padding(
-      padding: const EdgeInsets.only(right: 12),
-      child: IconButton(
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(),
-        icon: Icon(icon, color: Colors.white70, size: 20),
-        onPressed: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
-        tooltip: url,
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Row(
+        children: [
+          Container(width: 3, height: 16, color: Colors.amber),
+          const SizedBox(width: 8),
+          Text('$title ($count)', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        ],
       ),
     );
   }
-}
 
-class _ImdbIcon extends StatelessWidget {
-  final String id;
-  const _ImdbIcon({required this.id});
+  Widget _buildLibraryGrid(List<MediaItem> items) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        // Tighter responsive sizing
+        int crossAxisCount = 2;
+        if (width > 600) crossAxisCount = 3;
+        if (width > 900) crossAxisCount = 4;
+        if (width > 1200) crossAxisCount = 5;
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 12),
-      child: InkWell(
-        onTap: () => launchUrl(Uri.parse('https://www.imdb.com/name/$id'), mode: LaunchMode.externalApplication),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF5C518),
-            borderRadius: BorderRadius.circular(4),
+        // Calculate item width based on count and tighter spacing
+        final spacing = 10.0;
+        final totalSpacing = (crossAxisCount - 1) * spacing;
+        final itemWidth = (width - totalSpacing) / crossAxisCount;
+        
+        // Aspect ratio for scenes is usually wider (16:9) but posters are 2:3
+        // If these are scenes, 16:9 is better. If movies, 2:3.
+        // Let's assume Scene format (16:9) for library items if they are scenes
+        final isScene = items.firstOrNull?.type == MediaType.scene;
+        final childAspectRatio = isScene ? (16 / 9) : (2 / 3);
+
+        return GridView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: true,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            childAspectRatio: childAspectRatio, // Dynamic ratio
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: 12,
           ),
-          child: const Text('IMDb', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
-        ),
-      ),
-    );
-  }
-}
-
-class _SceneCard extends StatelessWidget {
-  final MediaItem item;
-  final bool isLocal;
-  const _SceneCard({required this.item, required this.isLocal});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-         if (item.id.startsWith('stashdb:')) {
-            final rawId = item.id.replaceFirst('stashdb:', '');
-            context.push('/scene/$rawId', extra: item);
-         } else {
-            context.push('/media/${item.id}', extra: item);
-         }
-      },
-      child: SizedBox(
-        width: 300,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AspectRatio(
-              aspectRatio: 16/9,
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            final item = items[index];
+            return GestureDetector(
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(item: item))),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    if (item.posterUrl != null || item.backdropUrl != null)
-                      Image.network(item.posterUrl ?? item.backdropUrl!, fit: BoxFit.cover,
-                      errorBuilder: (_,__,___) => Container(color: Colors.grey[900]))
-                    else
-                      Container(color: Colors.grey[900]),
-                    
-                    if (isLocal)
-                      Positioned(top: 6, left: 6, child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
-                          child: const Icon(Icons.check, size: 10, color: Colors.white),
-                      )),
+                     CachedNetworkImage(
+                       imageUrl: (isScene ? item.backdropUrl : item.posterUrl) ?? item.posterUrl ?? '',
+                       fit: BoxFit.cover,
+                       errorWidget: (_,__,___) => Container(color: Colors.grey[800], child: const Icon(Icons.movie, color: Colors.white54)),
+                     ),
+                     // Gradient bottom
+                     Positioned.fill(
+                       child: DecoratedBox(
+                         decoration: BoxDecoration(
+                           gradient: LinearGradient(
+                             begin: Alignment.topCenter,
+                             end: Alignment.bottomCenter,
+                             colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
+                             stops: const [0.6, 1.0],
+                           )
+                         )
+                       ),
+                     ),
+                     // Text
+                     Positioned(
+                       bottom: 8, left: 8, right: 8,
+                       child: Text(
+                         item.title ?? item.fileName,
+                         maxLines: 2,
+                         overflow: TextOverflow.ellipsis,
+                         style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                       ),
+                     ),
+                     // Source Pill
+                     Positioned(
+                       top: 6, right: 6,
+                       child: Container(
+                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                         decoration: BoxDecoration(
+                           color: Colors.amber.withOpacity(0.9),
+                           borderRadius: BorderRadius.circular(4),
+                         ),
+                         child: const Text('LIBRARY', style: TextStyle(color: Colors.black, fontSize: 8, fontWeight: FontWeight.bold)),
+                       ),
+                     ),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(item.title ?? item.fileName, maxLines: 1, overflow: TextOverflow.ellipsis,
-             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-             Text(item.year?.toString() ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11)),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildHorizontalList(List<Map<String, dynamic>> items, bool isMovie) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        // Tighter Grid Logic for TMDB items (Posters 2:3)
+        // Option A: 190/170/150 widths logic from prompt
+        // Let's use flexible column count for responsive grid instead of horizontal list to match "Tighten Cast Page Grids" request implies Grid?
+        // Prompt says "_buildHorizontalList" but plan says "Tighten TMDB grid card sizing". 
+        // If it's a section "Movies", usually a horizontal scrolling list is good to save vertical space.
+        // But if we want to show ALL, a grid is better. 
+        // Let's stick to GridView inside the vertical scroll for dense packing as requested "Tighten Cast Page Grids".
+        
+        int crossAxisCount = 3; // Mobile default
+        if (width > 500) crossAxisCount = 4;
+        if (width > 800) crossAxisCount = 5;
+        if (width > 1100) crossAxisCount = 6;
+        if (width > 1400) crossAxisCount = 7;
+
+        final spacing = 10.0; // Tighter spacing (Option A/B)
+        
+        // 2:3 Ratio for posters
+        const childAspectRatio = 2 / 3.2; // Slightly taller to fit text? Or standard 2/3
+
+        return GridView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: true,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            childAspectRatio: childAspectRatio,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: 12, // Tighter run spacing
+          ),
+          itemCount: items.length > 20 ? 20 : items.length, // Limit to 20 to avoid massive pages?
+          itemBuilder: (context, index) {
+            final item = items[index];
+            final posterPath = item['poster_path'];
+            final title = item['title'] ?? item['name'] ?? 'Unknown';
+            final date = item['release_date'] ?? item['first_air_date'] ?? '';
+            final year = date.length >= 4 ? date.substring(0, 4) : '';
+
+            return InkWell(
+              onTap: () {
+                 // Nav to details?
+                 Navigator.push(context, MaterialPageRoute(
+                   builder: (_) => DetailsScreen(
+                     id: item['id'].toString(), 
+                     type: isMovie ? MediaType.movie : MediaType.tv,
+                     heroTag: 'cast_${item['id']}_$index', // Unique hero
+                   ),
+                 ));
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6), // Slightly tighter radius
+                      child: posterPath != null 
+                        ? CachedNetworkImage(
+                            imageUrl: 'https://image.tmdb.org/t/p/w342$posterPath', // w342 is efficient
+                            fit: BoxFit.cover,
+                            errorWidget: (_,__,___) => Container(color: Colors.grey[800]),
+                          )
+                        : Container(color: Colors.grey[800], child: const Icon(Icons.movie, color: Colors.white24)),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                  if (year.isNotEmpty)
+                    Text(
+                      year,
+                      style: const TextStyle(color: Colors.white54, fontSize: 11),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
