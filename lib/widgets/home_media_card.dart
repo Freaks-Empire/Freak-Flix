@@ -44,7 +44,7 @@ class HomeMediaCard extends StatelessWidget {
          }
       },
       child: SizedBox(
-        width: 200, // Increased from 150
+        width: 200, 
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -60,6 +60,23 @@ class HomeMediaCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
+                  
+                  // Top-Left Badges (Adult / Stash)
+                  if (item.isAdult || item.id.startsWith('stashdb:'))
+                    Positioned(
+                      top: 4,
+                      left: 4,
+                      child: Wrap(
+                        spacing: 4,
+                        children: [
+                          if (item.isAdult)
+                            _buildBadge('Adult', theme.colorScheme.error, context),
+                          if (item.id.startsWith('stashdb:'))
+                            _buildBadge('Stash', theme.colorScheme.primary, context),
+                        ],
+                      ),
+                    ),
+
                   Positioned(
                     top: 4,
                     right: 4,
@@ -128,6 +145,24 @@ class HomeMediaCard extends StatelessWidget {
     );
   }
 
+  Widget _buildBadge(String label, Color color, BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.8),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
   static double _progressValue(int watchedSeconds, int totalSeconds) {
     if (totalSeconds <= 0) return 0;
     final ratio = watchedSeconds / totalSeconds;
@@ -140,12 +175,6 @@ class HomeMediaCard extends StatelessWidget {
     final minutes = d.inMinutes;
     if (minutes <= 0) return '<1m';
     return '${minutes}m';
-  }
-
-  static String _formatDaysAgo(DateTime date) {
-    final days = DateTime.now().difference(date).inDays;
-    if (days <= 0) return 'Today';
-    return '${days}d';
   }
 
   static String _buildSubtitle(MediaItem item, bool hideEpisodeInfo) {
