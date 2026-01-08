@@ -8,8 +8,10 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/settings_provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/data_backup_service.dart';
 import '../../services/graph_auth_service.dart';
+import '../../services/sync_service.dart';
 import '../../utils/downloader/downloader.dart'; // For downloadJson on web
 import '../settings_widgets.dart';
 
@@ -46,7 +48,7 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
       children: [
         // CLOUD SYNC
         SettingsGroup(
-          title: 'Cloud Sync',
+          title: 'Cloud Snapshots & Live Sync',
           children: [
             SettingsTile(
               icon: LucideIcons.cloud,
@@ -56,15 +58,25 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
               onTap: () => _showAccountPicker(context, settings),
             ),
              const Divider(height: 1, color: AppColors.border),
+             if(primaryAccount != null)
+              Container(
+                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                 color: AppColors.surface.withOpacity(0.5),
+                 child: const Row(children: [
+                    Icon(Icons.circle, size: 8, color: Colors.greenAccent),
+                    SizedBox(width: 8),
+                    Text('Live Sync Active', style: TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                 ]),
+              ),
              Padding(
                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                child: Row(
                  mainAxisAlignment: MainAxisAlignment.end,
                  children: [
                    OutlinedButton.icon(
-                      icon: const Icon(LucideIcons.downloadCloud, size: 16),
-                      label: const Text('Restore'),
-                      onPressed: (_isProcessing || primaryAccount == null) ? null : () => _restoreFromCloud(context, settings, primaryAccount!),
+                      icon: const Icon(LucideIcons.history, size: 16),
+                      label: const Text('View Version History'),
+                      onPressed: (_isProcessing || primaryAccount == null) ? null : () => _showVersionHistory(context, settings, primaryAccount),
                    ),
                    const SizedBox(width: 12),
                    FilledButton.icon(
@@ -73,9 +85,9 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
                       ),
                       icon: _isProcessing 
                         ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(LucideIcons.uploadCloud, size: 16),
-                      label: const Text('Backup'),
-                      onPressed: (_isProcessing || primaryAccount == null) ? null : () => _backupToCloud(context, settings, primaryAccount!),
+                        : const Icon(LucideIcons.save, size: 16),
+                      label: const Text('Create Restore Point'),
+                      onPressed: (_isProcessing || primaryAccount == null) ? null : () => _createRestorePoint(context, settings, primaryAccount),
                    ),
                  ],
                ),
@@ -151,20 +163,24 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
     );
   }
 
-  Future<void> _backupToCloud(BuildContext context, SettingsProvider settings, GraphAccount account) async {
+  Future<void> _createRestorePoint(BuildContext context, SettingsProvider settings, GraphAccount account) async {
     setState(() => _isProcessing = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      messenger.showSnackBar(const SnackBar(content: Text('Syncing to cloud...')));
+      messenger.showSnackBar(const SnackBar(content: Text('Creating Restore Point...')));
       final backupService = DataBackupService(
         settings: settings,
         library: Provider.of<LibraryProvider>(context, listen: false),
         profiles: Provider.of<ProfileProvider>(context, listen: false),
       );
+      // Get JSON and decode to Map
       final jsonStr = await backupService.createBackupJson();
-      await _graphAuth.uploadFile(account.id, 'freakflix_backup.json', jsonStr);
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      
+      await SyncService().createSnapshot(data, kIsWeb ? 'Web' : defaultTargetPlatform.name);
+      
       messenger.clearSnackBars();
-      messenger.showSnackBar(const SnackBar(content: Text('✅ Backup successful')));
+      messenger.showSnackBar(const SnackBar(content: Text('✅ Restore Point Created')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
@@ -172,13 +188,57 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
     }
   }
 
-  Future<void> _restoreFromCloud(BuildContext context, SettingsProvider settings, GraphAccount account) async {
+  void _showVersionHistory(BuildContext context, SettingsProvider settings, GraphAccount account) {
+      showModalBottomSheet(
+        context: context, 
+        backgroundColor: AppColors.surface,
+        builder: (ctx) => StreamBuilder<List<Map<String, dynamic>>>(
+           stream: SyncService().getSnapshots(),
+           builder: (context, snapshot) {
+              if (snapshot.hasError) return Padding(padding: const EdgeInsets.all(16), child: Text('Error: ${snapshot.error}'));
+              if (!snapshot.hasData) return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()));
+              
+              final list = snapshot.data!;
+              if (list.isEmpty) return const Padding(padding: EdgeInsets.all(16), child: Text('No restore points found.'));
+              
+              return Column(
+                 mainAxisSize: MainAxisSize.min,
+                 children: [
+                    const Padding(padding: EdgeInsets.all(16), child: Text('Version History', style: TextStyle(fontWeight: FontWeight.bold))),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: list.length,
+                        itemBuilder: (context, index) {
+                           final item = list[index];
+                           final date = (item['savedAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+                           final device = item['deviceName'] ?? 'Unknown';
+                           return ListTile(
+                              leading: const Icon(LucideIcons.clock),
+                              title: Text(date.toString().split('.')[0]),
+                              subtitle: Text(device),
+                              trailing: const Icon(LucideIcons.rotateCcw),
+                              onTap: () async {
+                                 Navigator.pop(ctx);
+                                 _confirmRestore(context, item);
+                              },
+                           );
+                        },
+                      ),
+                    ),
+                 ],
+              );
+           }
+        )
+      );
+  }
+
+  Future<void> _confirmRestore(BuildContext context, Map<String, dynamic> snapshotItem) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: const Text('Restore from Cloud?'),
-        content: const Text('This will overwrite all local settings and libraries.'),
+        title: const Text('Restore this version?'),
+        content: const Text('This will overwrite current settings.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Restore')),
@@ -190,22 +250,24 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
     setState(() => _isProcessing = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      messenger.showSnackBar(const SnackBar(content: Text('Downloading...')));
-      final jsonStr = await _graphAuth.downloadFileContent(account.id, 'freakflix_backup.json');
-      final backupService = DataBackupService(
-        settings: settings,
-        library: Provider.of<LibraryProvider>(context, listen: false),
-        profiles: Provider.of<ProfileProvider>(context, listen: false),
-      );
-      await backupService.restoreBackup(jsonStr);
-      messenger.showSnackBar(const SnackBar(content: Text('✅ Restore complete')));
-     
-      // Trick to refresh full app state if needed, or at least rebuild this widget
-      if (mounted) setState(() {});
+        final dataMap = snapshotItem['data'] as Map<String, dynamic>;
+        // Restore via BackupService
+        final backupService = DataBackupService(
+            settings: context.read<SettingsProvider>(),
+            library: context.read<LibraryProvider>(),
+            profiles: context.read<ProfileProvider>(),
+        );
+        // We need to re-encode to JSON because restoreBackup expects String? 
+        // Or refactor restoreBackup to take Map.
+        // For minimal refactor, encode back.
+        await backupService.restoreBackup(jsonEncode(dataMap));
+        
+        messenger.showSnackBar(const SnackBar(content: Text('✅ Restored successfully')));
+        if (mounted) setState(() {});
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+        messenger.showSnackBar(SnackBar(content: Text('Restore Error: $e')));
     } finally {
-      setState(() => _isProcessing = false);
+        setState(() => _isProcessing = false);
     }
   }
 

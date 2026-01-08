@@ -38,8 +38,21 @@ class MonitoringService {
   }
 
   static void recordError(dynamic error, StackTrace? stack) {
-    NewrelicMobile.instance.recordError(error, stack);
+    if (Platform.isAndroid || Platform.isIOS) {
+       try {
+         NewrelicMobile.instance.recordError(error, stack);
+       } catch (e) {
+         debugPrint('Monitoring: Failed to record error: $e');
+       }
+    } else {
+      debugPrint('Monitoring (Desktop): Error: $error');
+    }
   }
 
-  static NavigatorObserver get navigationObserver => NewRelicNavigationObserver();
+  static NavigatorObserver get navigationObserver {
+    if (Platform.isAndroid || Platform.isIOS) {
+       return NewRelicNavigationObserver();
+    }
+    return NavigatorObserver();
+  }
 }

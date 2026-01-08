@@ -116,7 +116,7 @@ class EpisodeDetailsScreen extends StatelessWidget {
                            MaterialPageRoute(
                              builder: (_) => VideoPlayerScreen(
                                item: matchedFile!,
-                               playlist: playlist,
+                               playlist: playlist ?? [],
                              ),
                            ),
                          );

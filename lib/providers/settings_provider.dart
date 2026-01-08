@@ -6,6 +6,8 @@ import '../services/persistence_service.dart';
 import '../models/stash_endpoint.dart';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../services/sync_service.dart';
+import 'dart:async';
 
 enum TmdbKeyStatus {
   unknown,
@@ -25,7 +27,8 @@ class SettingsProvider extends ChangeNotifier {
   TmdbKeyStatus tmdbStatus = TmdbKeyStatus.unknown;
   
   bool enableAdultContent = false;
-  String? primaryBackupAccountId; // <--- Add this field
+  String? primaryBackupAccountId; 
+  Timer? _debounceSync;
   // Legacy single fields replaced by stashEndpoints
   // String stashApiKey = '';
   // String stashUrl = 'https://stashdb.org/graphql';
@@ -178,11 +181,16 @@ class SettingsProvider extends ChangeNotifier {
         'enableAdultContent': enableAdultContent,
         'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
         'migrated_profiles': _hasMigratedProfiles,
-        'migrated_profiles': _hasMigratedProfiles,
         'isSetupCompleted': _isSetupCompleted,
         'primaryBackupAccountId': primaryBackupAccountId,
     };
     await PersistenceService.instance.saveString(_storageFile, jsonEncode(data));
+    
+    // Cloud Sync (Debounced)
+    _debounceSync?.cancel();
+    _debounceSync = Timer(const Duration(seconds: 3), () {
+       SyncService().pushUpdate(data);
+    });
   }
 
   Future<void> toggleDarkMode(bool value) async {

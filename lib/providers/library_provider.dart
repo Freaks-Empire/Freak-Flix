@@ -321,6 +321,7 @@ class LibraryProvider extends ChangeNotifier {
       iOS: iosSettings,
       linux: LinuxInitializationSettings(defaultActionName: 'Open'),
       macOS: iosSettings, // Reusing darwin settings
+      windows: WindowsInitializationSettings(appName: 'Freak-Flix', appUserModelId: 'com.freakflix.app', guid: '81a3d53b-9e4b-48fb-9c9b-1e247470f7d5'),
     );
     
     await _notifications.initialize(initSettings);
@@ -575,6 +576,24 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> rescanFolder(LibraryFolder folder, {required graph_auth.GraphAuthService auth, MetadataService? metadata}) async {
+    isLoading = true;
+    notifyListeners();
+    try {
+      if (folder.accountId.isNotEmpty) {
+        await rescanOneDriveFolder(auth: auth, folder: folder, metadata: metadata);
+      } else {
+        await _scanLocalFolder(folder.path, metadata: metadata);
+      }
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      finishScan(); // Resets flags
+      await saveLibrary();
+      notifyListeners();
+    }
+  }
+
   Future<void> rescanAll({
     required graph_auth.GraphAuthService auth,
     MetadataService? metadata,
@@ -694,7 +713,7 @@ class LibraryProvider extends ChangeNotifier {
 
 
 
-  Future<void> pickAndScan({MetadataService? metadata}) async {
+  Future<void> pickAndScan({MetadataService? metadata, LibraryType? forcedType}) async {
     error = null;
     beginScan(sourceLabel: 'Local files');
     try {
@@ -718,7 +737,7 @@ class LibraryProvider extends ChangeNotifier {
                 id: DateTime.now().millisecondsSinceEpoch.toString(),
                 path: path,
                 accountId: '',
-                type: LibraryType.other // Default
+                type: forcedType ?? LibraryType.other // Use forcedType if provided
             ));
         }
 
@@ -730,6 +749,21 @@ class LibraryProvider extends ChangeNotifier {
       finishScan();
       await saveLibrary(); // Redundant but safe
       _configChangedController.add(null);
+    }
+  }
+
+  Future<void> updateLibraryFolderType(String folderId, LibraryType newType) async {
+    final index = libraryFolders.indexWhere((f) => f.id == folderId);
+    if (index != -1) {
+      final old = libraryFolders[index];
+      libraryFolders[index] = LibraryFolder(
+        id: old.id,
+        path: old.path,
+        accountId: old.accountId,
+        type: newType,
+      );
+      await saveLibrary();
+      notifyListeners();
     }
   }
 

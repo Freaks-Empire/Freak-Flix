@@ -50,7 +50,7 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
                 title: 'Add Local Folder',
                 subtitle: 'Scan directory for media',
                 trailing: const Icon(LucideIcons.plus, color: AppColors.accent),
-                onTap: () => library.pickAndScan(metadata: metadata),
+                onTap: () => _pickAndAddLocalFolder(context, library, metadata),
               ),
               if (library.isLoading && library.scanningStatus.isNotEmpty)
                 Padding(
@@ -63,6 +63,8 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
                     ],
                   ),
                 ),
+              // List existing local folders
+              ...library.libraryFolders.where((f) => f.accountId.isEmpty).map((f) => _buildFolderTile(f, library, metadata)),
             ],
           ),
 
@@ -338,6 +340,49 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
     } finally {
       if (mounted) setState(() => _oneDriveLoading = false);
     }
+      if (mounted) setState(() => _oneDriveLoading = false);
+    }
+  }
+
+  // --- LOCAL FOLDER LOGIC ---
+  Future<void> _pickAndAddLocalFolder(BuildContext context, LibraryProvider library, MetadataService metadata) async {
+     // 1. Select Type
+    final type = await showDialog<LibraryType>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: const Text('Select Content Type'),
+            content: DropdownButton<LibraryType>(
+              value: _pendingType,
+              dropdownColor: AppColors.border,
+              isExpanded: true,
+              items: [
+                const DropdownMenuItem(value: LibraryType.movies, child: Text('Movies')),
+                const DropdownMenuItem(value: LibraryType.tv, child: Text('TV Shows')),
+                const DropdownMenuItem(value: LibraryType.anime, child: Text('Anime')),
+                if (Provider.of<SettingsProvider>(context, listen: false).enableAdultContent)
+                  const DropdownMenuItem(value: LibraryType.adult, child: Text('Adult Content')),
+                const DropdownMenuItem(value: LibraryType.other, child: Text('Other')),
+              ],
+              onChanged: (val) {
+                if (val != null) setDialogState(() => _pendingType = val);
+              },
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              FilledButton(onPressed: () => Navigator.pop(context, _pendingType), child: const Text('Continue')),
+            ],
+          );
+        }
+      ),
+    );
+
+    if (type == null) return;
+    
+    // 2. Add Folder & Scan (Now using custom type)
+    await library.pickAndScan(metadata: metadata, forcedType: type);
   }
 
   // --- HELPER WIDGETS ---
@@ -349,8 +394,21 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
         children: [
           Row(
             children: [
-              Icon(_typeIcon(folder.type), size: 16, color: AppColors.textSub),
-              const SizedBox(width: 12),
+              // Type Icon (Clickable to change)
+              PopupMenuButton<LibraryType>(
+                tooltip: 'Change Content Type',
+                icon: Icon(_typeIcon(folder.type), size: 16, color: AppColors.textSub),
+                onSelected: (newType) => library.updateLibraryFolderType(folder.id, newType),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: LibraryType.movies, child: Row(children: [Icon(LucideIcons.film, size: 16), SizedBox(width: 8), Text('Movies')])),
+                  const PopupMenuItem(value: LibraryType.tv, child: Row(children: [Icon(LucideIcons.tv, size: 16), SizedBox(width: 8), Text('TV Shows')])),
+                  const PopupMenuItem(value: LibraryType.anime, child: Row(children: [Icon(LucideIcons.ghost, size: 16), SizedBox(width: 8), Text('Anime')])),
+                  if (Provider.of<SettingsProvider>(context, listen: false).enableAdultContent)
+                     const PopupMenuItem(value: LibraryType.adult, child: Row(children: [Icon(LucideIcons.lock, size: 16), SizedBox(width: 8), Text('Adult Content')])),
+                  const PopupMenuItem(value: LibraryType.other, child: Row(children: [Icon(LucideIcons.folder, size: 16), SizedBox(width: 8), Text('Other')])),
+                ],
+              ),
+              const SizedBox(width: 4),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -366,9 +424,9 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
               IconButton(
                 icon: const Icon(Icons.refresh, size: 16, color: AppColors.textSub),
                 tooltip: 'Rescan',
-                onPressed: library.isLoading 
+                onPressed: library.isLoading
                   ? null 
-                  : () => library.rescanOneDriveFolder(auth: _graphAuth, folder: folder, metadata: metadata),
+                  : () => library.rescanFolder(folder, auth: _graphAuth, metadata: metadata),
               ), 
                IconButton(
                 icon: const Icon(Icons.close, size: 16, color: Colors.redAccent),

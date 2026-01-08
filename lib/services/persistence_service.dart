@@ -100,14 +100,14 @@ class PersistenceService {
       
       if (bytes == null) return null;
 
-      final decompressed = GZipDecoder().decodeBytes(bytes);
-      return utf8.decode(decompressed);
+      final bytesList = bytes is List<int> ? bytes : (bytes as List).cast<int>();
+      return await compute(_decompressHelper, bytesList);
     } catch (e) {
       debugPrint('PersistenceService: Error loading compressed $filename: $e');
       return null;
     }
   }
-  
+
   /// Deletes a file.
   Future<void> delete(String filename) async {
      try {
@@ -126,4 +126,9 @@ class PersistenceService {
       debugPrint('PersistenceService: Error deleting $filename: $e');
     }
   }
+}
+
+String _decompressHelper(List<int> bytes) {
+  final decompressed = GZipDecoder().decodeBytes(bytes);
+  return utf8.decode(decompressed);
 }

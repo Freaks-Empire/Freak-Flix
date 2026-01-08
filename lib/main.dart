@@ -26,6 +26,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'firebase_options.dart';
 import 'services/analytics_service.dart';
+import 'services/sync_service.dart';
 
 import 'package:flutter/foundation.dart'; // For PlatformDispatcher
 
@@ -39,42 +40,58 @@ import 'services/tmdb_discover_service.dart';
 import 'models/discover_filter.dart';
 
 import 'dart:async'; // Add async import
+import 'dart:io';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  usePathUrlStrategy();
-
-  try {
-    await dotenv.load(fileName: '.env'); 
-  } catch (e) {
-    debugPrint('Warning: dotenv.load failed: $e');
-  }
-
-  // Monitoring
-  // Config moved to service
-  // New Relic Config - Logic moved to MonitoringService
-       
-
-  // 1. Initialize Firebase (Before runZonedGuarded ideally, or inside)
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    
-    // 2. Set up Crashlytics
-    FlutterError.onError = (errorDetails) {
-      FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
-    };
-    
-    PlatformDispatcher.instance.onError = (error, stack) {
-      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-      return true;
-    };
-  } catch (e) {
-    debugPrint('Firebase Init Failed (Likely due to missing configuration): $e');
-  }
-
   runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    usePathUrlStrategy();
+
+    try {
+      await dotenv.load(fileName: '.env'); 
+    } catch (e) {
+      debugPrint('Warning: dotenv.load failed: $e');
+    }
+
+    // Monitoring
+    // Config moved to service
+    // New Relic Config - Logic moved to MonitoringService
+         
+
+    // 1. Initialize Firebase
+    // Only init Firebase on supported platforms if needed, or just guard Crashlytics
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      
+      // 2. Set up Crashlytics (Mobile only usually)
+      if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+         FlutterError.onError = (errorDetails) {
+           debugPrint('Caught Flutter Error: ${errorDetails.exception}');
+           try {
+             FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
+           } catch (e) {
+             debugPrint('Failed to report to Crashlytics: $e');
+           }
+         };
+         
+         PlatformDispatcher.instance.onError = (error, stack) {
+           debugPrint('Caught Platform Error: $error');
+           try {
+             FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+           } catch (e) {
+              debugPrint('Failed to report to Crashlytics: $e');
+           }
+           return true;
+         };
+      } else {
+         debugPrint('Firebase Crashlytics disabled on this platform.');
+      }
+    } catch (e) {
+      debugPrint('Firebase Init Failed (Likely due to missing configuration): $e');
+    }
+
     await MonitoringService.initialize();
     
     MediaKit.ensureInitialized();
@@ -84,6 +101,24 @@ void main() async {
 
     final settingsProvider = SettingsProvider();
     await settingsProvider.load();
+
+    // Wire Sync logic after Settings & Auth are ready
+    void updateSyncState() {
+       final userId = GraphAuthService.instance.activeAccountId;
+       if (userId != null) {
+          debugPrint('Main: Activating Sync for user $userId');
+          SyncService().init(userId, (data) {
+             settingsProvider.importSettings(data);
+          });
+       } else {
+          SyncService().dispose();
+       }
+    }
+    
+    // Set listener
+    GraphAuthService.instance.onStateChanged = updateSyncState;
+    // Initial check
+    updateSyncState();
 
     final profileProvider = ProfileProvider();
     await profileProvider.load();

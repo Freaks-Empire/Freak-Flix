@@ -328,7 +328,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                     Text('Related Movies', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
                     SizedBox(
-                      height: 220,
+                      height: 280,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: _details!.recommendations.length,
