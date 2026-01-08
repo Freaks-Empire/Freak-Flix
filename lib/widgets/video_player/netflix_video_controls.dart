@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
-import 'dart:async';
+
 
 class NetflixControls extends StatefulWidget {
   final Player player;
@@ -160,7 +160,15 @@ class _NetflixControlsState extends State<NetflixControls> {
                             onPressed: () => widget.player.seek(widget.player.state.position + const Duration(seconds: 10)),
                           ),
                           const SizedBox(width: 16),
-                          const Icon(Icons.volume_up, color: Colors.white, size: 28),
+                          IconButton(
+                            icon: Icon(_volume > 0 ? Icons.volume_up : Icons.volume_off, color: Colors.white, size: 28),
+                            onPressed: () {
+                              setState(() {
+                                _volume = _volume > 0 ? 0.0 : 100.0;
+                                widget.player.setVolume(_volume);
+                              });
+                            },
+                          ),
                           
                           const Spacer(),
 
