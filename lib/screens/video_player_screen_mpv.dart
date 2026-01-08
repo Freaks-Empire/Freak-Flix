@@ -15,12 +15,12 @@ import '../../providers/playback_provider.dart';
 import '../../services/graph_auth_service.dart';
 import '../../widgets/video_player/netflix_video_controls.dart';
 
-class AdvancedVideoPlayerScreen extends StatefulWidget {
+class VideoPlayerScreen extends StatefulWidget {
   final MediaItem item;
   final List<MediaItem> playlist; // Optional playlist
   final int initialIndex;
 
-  const AdvancedVideoPlayerScreen({
+  const VideoPlayerScreen({
     super.key,
     required this.item,
     this.playlist = const [],
@@ -28,10 +28,10 @@ class AdvancedVideoPlayerScreen extends StatefulWidget {
   });
 
   @override
-  State<AdvancedVideoPlayerScreen> createState() => _AdvancedVideoPlayerScreenState();
+  State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
 }
 
-class _AdvancedVideoPlayerScreenState extends State<AdvancedVideoPlayerScreen> {
+class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   late final Player _player;
   late final VideoController _controller;
   
