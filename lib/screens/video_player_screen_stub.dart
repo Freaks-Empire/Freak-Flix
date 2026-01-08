@@ -6,7 +6,7 @@ import 'dart:html' as html;
 import 'dart:ui' as ui;
 import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+
 import '../models/media_item.dart';
 import '../services/graph_auth_service.dart';
 
@@ -179,7 +179,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
           // 4. Controls
           if (!_isLoading && _videoElement != null)
-            _WebCinematicControls(
+            _WebNetflixControls(
               video: _videoElement!,
               title: _currentItem.title ?? _currentItem.fileName,
               onNext: _currentIndex < widget.playlist.length - 1 ? () => _playIndex(_currentIndex + 1) : null,
@@ -193,7 +193,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 }
 
-class _WebCinematicControls extends StatefulWidget {
+class _WebNetflixControls extends StatefulWidget {
   final html.VideoElement video;
   final String title;
   final VoidCallback? onNext;
@@ -201,7 +201,7 @@ class _WebCinematicControls extends StatefulWidget {
   final VoidCallback onBack;
   final String? downloadUrl;
 
-  const _WebCinematicControls({
+  const _WebNetflixControls({
     required this.video, 
     required this.title,
     this.onNext,
@@ -211,23 +211,24 @@ class _WebCinematicControls extends StatefulWidget {
   });
 
   @override
-  State<_WebCinematicControls> createState() => _WebCinematicControlsState();
+  State<_WebNetflixControls> createState() => _WebNetflixControlsState();
 }
 
-class _WebCinematicControlsState extends State<_WebCinematicControls> {
+class _WebNetflixControlsState extends State<_WebNetflixControls> {
   bool _isPlaying = false;
   double _progress = 0.0;
   double _duration = 1.0;
   double _volume = 1.0;
-  bool _showSettings = false;
-  bool _showControls = true;
-  Timer? _hideTimer;
+  bool _hovering = false;
+
+  
+  // Netflix Red Color
+  final Color _netflixRed = const Color(0xFFE50914);
 
   @override
   void initState() {
     super.initState();
     _setupListeners();
-    _startHideTimer();
   }
   
   void _setupListeners() {
@@ -245,291 +246,169 @@ class _WebCinematicControlsState extends State<_WebCinematicControls> {
     _isPlaying = !widget.video.paused;
   }
 
-  void _startHideTimer() {
-    _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && _isPlaying && !_showSettings) {
-         setState(() => _showControls = false);
-      }
-    });
-  }
-
-  void _onInteraction() {
-    setState(() => _showControls = true);
-    _startHideTimer();
-  }
-
   void _togglePlay() {
-    if (_isPlaying) widget.video.pause();
-    else widget.video.play();
-    _onInteraction();
+    if (_isPlaying) {
+      widget.video.pause();
+    } else {
+      widget.video.play();
+    }
   }
   
   void _seek(double val) {
     widget.video.currentTime = val;
-    _onInteraction();
   }
   
-  void _setVolume(double val) {
-     widget.video.volume = val;
-     setState(() => _volume = val);
-     _onInteraction();
-  }
-  
-  void _setSpeed(double speed) {
-    widget.video.playbackRate = speed;
-    setState(() => _showSettings = false);
-    _onInteraction();
+  void _setVolume() {
+     final newVol = _volume > 0 ? 0.0 : 1.0;
+     widget.video.volume = newVol;
+     setState(() => _volume = newVol);
   }
 
-  void _triggerDownload() {
-    if (widget.downloadUrl != null) {
-       html.AnchorElement(href: widget.downloadUrl)
-         ..setAttribute('download', '${widget.title}.mp4')
-         ..click();
-    }
-  }
+  void _onEnter() => setState(() => _hovering = true);
+  void _onExit() => setState(() => _hovering = false);
 
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      onHover: (_) => _onInteraction(),
-      child: GestureDetector(
-        onTap: _togglePlay, // Tap anywhere to play/pause
-        behavior: HitTestBehavior.translucent,
+      onEnter: (_) => _onEnter(),
+      onExit: (_) => _onExit(),
+      child: AnimatedOpacity(
+        opacity: _hovering ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 200),
         child: Stack(
           children: [
-             // Hover Gradients
-             AnimatedOpacity(
-               opacity: _showControls ? 1.0 : 0.0,
-               duration: const Duration(milliseconds: 300),
-               child: Container(
-                 decoration: const BoxDecoration(
-                   gradient: LinearGradient(
-                     begin: Alignment.topCenter,
-                     end: Alignment.bottomCenter,
-                     colors: [Colors.black54, Colors.transparent, Colors.transparent, Colors.black87],
-                     stops: [0.0, 0.2, 0.7, 1.0],
-                   ),
-                 ),
-               ),
-             ),
-             
-             // Top Bar
-             AnimatedPositioned(
-               top: _showControls ? 0 : -100,
-               left: 0, right: 0,
-               duration: const Duration(milliseconds: 300),
-               child: Padding(
-                 padding: const EdgeInsets.all(24),
-                 child: Row(
-                   children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: widget.onBack,
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          widget.title,
-                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, shadows: [Shadow(blurRadius: 4, color: Colors.black)]),
-                        ),
-                      ),
-                   ],
-                 ),
-               ),
-             ),
-
-             // Bottom Controls
-             AnimatedPositioned(
-               bottom: _showControls ? 40 : -150,
-               left: 0, right: 0,
-               duration: const Duration(milliseconds: 300),
-               child: Center(
-                 child: _buildGlassCapsule(context),
-               ),
-             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGlassCapsule(BuildContext context) {
-    return Container( // Wrapper for centering constraint
-      constraints: const BoxConstraints(maxWidth: 800), // Max width for capsule
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(50),
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(50),
-              border: Border.all(color: Colors.white.withOpacity(0.1)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 1. Progress Bar
-                SizedBox(
-                  height: 20,
-                  child: SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 2,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
-                      activeTrackColor: Colors.redAccent,
-                      inactiveTrackColor: Colors.white24,
-                      thumbColor: Colors.white,
-                    ),
-                    child: Slider(
-                      value: _progress.clamp(0, _duration),
-                      min: 0,
-                      max: _duration,
-                      onChanged: _seek,
-                    ),
+            // 1. Top Gradient Shadow
+            Align(
+              alignment: Alignment.topCenter,
+              child: Container(
+                height: 100,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.black87, Colors.transparent],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
                   ),
                 ),
-                
-                const SizedBox(height: 8),
-
-                // 2. Buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                     // Skip Back
-                     IconButton(
-                       icon: const Icon(Icons.replay_10, color: Colors.white70),
-                       onPressed: () => _seek(_progress - 10),
-                     ),
-                     const SizedBox(width: 16),
-                     
-                     // Prev
-                     if (widget.onPrev != null)
-                        IconButton(icon: const Icon(Icons.skip_previous, color: Colors.white), onPressed: widget.onPrev),
-
-                     const SizedBox(width: 16),
-
-                     // Play/Pause
-                     GestureDetector(
-                       onTap: _togglePlay,
-                       child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                          child: Icon(
-                            _isPlaying ? Icons.pause : Icons.play_arrow,
-                            color: Colors.black, size: 28,
-                          ),
-                       ),
-                     ),
-
-                     const SizedBox(width: 16),
-
-                     // Next
-                     if (widget.onNext != null)
-                        IconButton(icon: const Icon(Icons.skip_next, color: Colors.white), onPressed: widget.onNext),
-
-                     const SizedBox(width: 16),
-
-                     // Skip Fwd
-                     IconButton(
-                       icon: const Icon(Icons.forward_10, color: Colors.white70),
-                       onPressed: () => _seek(_progress + 10),
-                     ),
-                     
-                     // Spacer to Settings
-                     const Spacer(),
-                     
-                     // Volume
-                     Icon(Icons.volume_up, color: Colors.white70, size: 20),
-                     SizedBox(
-                       width: 80,
-                       child: SliderTheme(
-                          data: SliderTheme.of(context).copyWith(trackHeight: 2, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4)),
-                          child: Slider(value: _volume, onChanged: _setVolume),
-                       ),
-                     ),
-
-                     const SizedBox(width: 16),
-
-                     // Settings
-                     Stack(
-                       clipBehavior: Clip.none,
-                       children: [
-                         IconButton(
-                           icon: const Icon(Icons.settings, color: Colors.white),
-                           onPressed: () => setState(() => _showSettings = !_showSettings),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+                        onPressed: widget.onBack,
+                      ),
+                      const SizedBox(width: 20),
+                      Text(
+                         widget.title,
+                         style: const TextStyle(
+                           color: Colors.white, 
+                           fontSize: 18, 
+                           fontWeight: FontWeight.bold
                          ),
-                         if (_showSettings)
-                            Positioned(
-                              bottom: 50,
-                              right: 0,
-                              child: _buildSettingsMenu(),
-                            ),
-                       ],
-                     ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // 2. Bottom Gradient Shadow & Controls
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Container(
+                height: 140, 
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.transparent, Colors.black87],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    // A. The Scrubber
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: SizedBox(
+                        height: 20,
+                        child: SliderTheme(
+                          data: SliderThemeData(
+                            trackHeight: 3, 
+                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                            activeTrackColor: _netflixRed,
+                            inactiveTrackColor: Colors.grey.withOpacity(0.5),
+                            thumbColor: _netflixRed,
+                          ),
+                          child: Slider(
+                            value: _progress.clamp(0, _duration),
+                            max: _duration,
+                            onChanged: _seek,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // B. The Buttons Row
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, size: 32, color: Colors.white),
+                            onPressed: _togglePlay,
+                          ),
+                          const SizedBox(width: 16),
+                          IconButton(
+                            icon: const Icon(Icons.replay_10, size: 28, color: Colors.white),
+                            onPressed: () => _seek(_progress - 10),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.forward_10, size: 28, color: Colors.white),
+                            onPressed: () => _seek(_progress + 10),
+                          ),
+                          const SizedBox(width: 16),
+                          IconButton(
+                            icon: Icon(_volume > 0 ? Icons.volume_up : Icons.volume_off, color: Colors.white, size: 28),
+                            onPressed: _setVolume,
+                          ),
+                          
+                          const Spacer(),
+
+                          Text(
+                            "Next Episode",
+                            style: TextStyle(color: Colors.white.withOpacity(0.7), fontWeight: FontWeight.bold),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.skip_next, size: 28, color: Colors.white),
+                            onPressed: widget.onNext,
+                          ),
+                          const SizedBox(width: 20),
+                          // Web doesn't typically support multiple tracks easily without MSE logic
+                          const Icon(Icons.subtitles, color: Colors.white38, size: 28), 
+                          const SizedBox(width: 20),
+                          const Icon(Icons.speed, color: Colors.white, size: 28),
+                          const SizedBox(width: 20),
+                          IconButton(
+                             icon: const Icon(Icons.fullscreen, color: Colors.white, size: 32),
+                             onPressed: () {
+                               if (html.document.fullscreenElement != null) {
+                                 html.document.exitFullscreen();
+                               } else {
+                                 html.document.documentElement?.requestFullscreen();
+                               }
+                             },
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildSettingsMenu() {
-    return Container(
-      width: 200,
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.black87,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-           const Padding(
-             padding: EdgeInsets.all(8.0),
-             child: Text('Playback Speed', style: TextStyle(color: Colors.white54, fontSize: 12)),
-           ),
-           Row(
-             children: [0.5, 1.0, 1.5, 2.0].map((s) => Expanded(
-               child: InkWell(
-                 onTap: () => _setSpeed(s),
-                 child: Container(
-                   alignment: Alignment.center,
-                   padding: const EdgeInsets.symmetric(vertical: 6),
-                   decoration: BoxDecoration(
-                      color: widget.video.playbackRate == s ? Colors.white24 : Colors.transparent,
-                      borderRadius: BorderRadius.circular(4),
-                   ),
-                   child: Text('${s}x', style: const TextStyle(color: Colors.white)),
-                 ),
-               ),
-             )).toList(),
-           ),
-           const Divider(color: Colors.white24),
-           InkWell(
-             onTap: () {
-                _triggerDownload();
-                setState(() => _showSettings = false);
-             },
-             child: Padding(
-               padding: const EdgeInsets.all(8.0),
-               child: Row(
-                 children: const [
-                   Icon(Icons.download, color: Colors.white, size: 16),
-                   SizedBox(width: 8),
-                   Text('Download Video', style: TextStyle(color: Colors.white)),
-                 ],
-               ),
-             ),
-           ),
-        ],
       ),
     );
   }
