@@ -36,7 +36,6 @@ class MetadataService {
     // 0. Manual Override Check (StashDB ID) - Lock Respect
     if (item.stashId != null && item.stashId!.isNotEmpty) {
        if (settings.stashEndpoints.any((e) => e.enabled)) {
-          // Strip 'stashdb:' prefix if we stored it that way, though usually we'll store raw UUID
           final rawId = item.stashId!.replaceFirst('stashdb:', '');
           final stashItem = await _stash.getScene(rawId, settings.stashEndpoints);
           if (stashItem != null) {
@@ -46,11 +45,11 @@ class MetadataService {
               overview: stashItem.overview,
               posterUrl: stashItem.posterUrl,
               backdropUrl: stashItem.backdropUrl,
-              isAdult: true, // Force adult if from StashDB
+              isAdult: true,
               type: MediaType.scene,
               genres: stashItem.genres,
               cast: stashItem.cast, 
-              stashId: rawId, // Persist clean ID
+              stashId: rawId,
             );
           }
        }
@@ -61,31 +60,42 @@ class MetadataService {
     // Rule A: Adult Content -> StashDB ONLY
     if (item.isAdult) {
        if (settings.enableAdultContent && settings.stashEndpoints.any((e) => e.enabled)) {
-          // Attempt 1: Search by filename parsed title
-          var stashItem = await _stash.searchScene(
-            parsed.seriesTitle, settings.stashEndpoints);
+          MediaItem? stashItem;
+
+          // Attempt 1: Performer-First Search (if performers are available)
+          if (parsed.performers.isNotEmpty) {
+             print('[metadata] StashDB: Attempting performer-first search for "${parsed.seriesTitle}" with performer: ${parsed.performers.first}');
+             stashItem = await _stash.searchSceneByPerformer(
+               parsed.seriesTitle, 
+               parsed.performers.first, 
+               settings.stashEndpoints,
+             );
+          }
+
+          // Attempt 2: Standard title search (fallback)
+          if (stashItem == null) {
+             print('[metadata] StashDB: Performer search failed or no performers. Trying title search: "${parsed.seriesTitle}"');
+             stashItem = await _stash.searchScene(
+               parsed.seriesTitle, settings.stashEndpoints);
+          }
           
-          // Attempt 2: Search by parent folder name (Fallback)
+          // Attempt 3: Search by parent folder name (Fallback)
           if (stashItem == null) {
             try {
               String parentDir = '';
               
-              // Local File Strategy
               if (item.id.startsWith('onedrive')) {
-                  // OneDrive items: filePath is just filename. Use folderPath.
-                  // folderPath format: onedrive:ACCOUNT_ID/Path/To/Folder
                   parentDir = p.basename(item.folderPath);
               } else if (item.filePath.isNotEmpty) {
-                  // Local items: filePath is absolute path.
                   parentDir = p.basename(p.dirname(item.filePath));
               }
 
               if (parentDir.isNotEmpty && parentDir != parentDir.toUpperCase() && parentDir != '.') { 
-                 print('[metadata] StashDB: Filename search failed for "${parsed.seriesTitle}". Retrying with folder: "$parentDir"');
+                 print('[metadata] StashDB: Title search failed. Retrying with folder: "$parentDir"');
                  stashItem = await _stash.searchScene(
                    parentDir, settings.stashEndpoints);
 
-                 // Attempt 3: Parse parent folder name and search
+                 // Attempt 4: Parse parent folder name and search
                  if (stashItem == null) {
                     final parsedFolder = FilenameParser.parse(parentDir);
                     if (parsedFolder.seriesTitle.isNotEmpty && parsedFolder.seriesTitle != parsed.seriesTitle) {
@@ -101,6 +111,12 @@ class MetadataService {
           }
 
           if (stashItem != null) {
+            // Extract stashId from the returned item (format: stashdb:UUID)
+            String? stashId;
+            if (stashItem.id.startsWith('stashdb:')) {
+              stashId = stashItem.id.replaceFirst('stashdb:', '');
+            }
+
             return item.copyWith(
               title: stashItem.title,
               year: stashItem.year,
@@ -110,30 +126,24 @@ class MetadataService {
               isAdult: true,
               type: MediaType.scene,
               genres: stashItem.genres,
-              cast: stashItem.cast, 
+              cast: stashItem.cast,
+              stashId: stashId, // Lock the metadata
             );
           }
        }
-       // If not enabled or not found, return original item. 
-       // Do NOT fall through to TMDB/AniList.
        return item;
     }
 
     // Rule B: Anime -> AniList ONLY
     if (item.isAnime) {
-       // Prefer AniList for Anime is implied by "Library Type: Anime"
        var aniCandidate = await _ani.enrichWithAniList(working);
        if (aniCandidate.anilistId != null) {
           return _ensureTypeForTvHints(aniCandidate);
        }
-       // If AniList fails, return original item. 
-       // User requested "Anime handles metadata nothing else".
        return item;
     }
 
     // Rule C: Standard Content -> TMDB only (via Trakt/TMDB)
-    // If we are here, it's NOT Adult and NOT Anime.
-    
     MediaItem base;
     final bool looksLikeEpisode = working.season != null ||
           working.episode != null ||
@@ -174,7 +184,6 @@ class MetadataService {
             ));
           }
         } else {
-          // Movie flow
           final meta = await _trakt.searchMovie(searchTitle, year: working.year);
           if (meta == null) {
             base = _ensureTypeForTvHints(working);
