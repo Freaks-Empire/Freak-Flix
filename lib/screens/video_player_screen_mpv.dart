@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:provider/provider.dart';
@@ -12,7 +10,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../models/media_item.dart';
 import '../../providers/playback_provider.dart';
-import '../../services/graph_auth_service.dart';
 import '../../widgets/video_player/netflix_video_controls.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
@@ -41,10 +38,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   bool _showSkipIntro = false;
   Timer? _hideTimer;
   bool _isDisposed = false;
-
-  // Dragging
-  bool _isDragging = false;
-  double _dragValue = 0.0;
 
   @override
   void initState() {
@@ -125,7 +118,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   void _startHideTimer() {
     _hideTimer?.cancel();
     _hideTimer = Timer(const Duration(seconds: 4), () {
-      if (mounted && !_isDragging) setState(() => _showControls = false);
+      if (mounted) setState(() => _showControls = false);
     });
   }
 
