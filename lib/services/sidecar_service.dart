@@ -43,6 +43,26 @@ class SidecarService {
           builder.element('uniqueid', attributes: {'type': 'stashdb'}, nest: stashId);
           builder.element('stashid', nest: stashId);
       }
+
+      // Studio
+      if (item.overview != null && item.overview!.startsWith('Studio:')) {
+         // Extract studio from overview if strictly stored there
+         final studioName = item.overview!.split('\n').first.replaceFirst('Studio: ', '');
+         builder.element('studio', nest: studioName);
+      }
+
+      // Cast
+      if (item.cast.isNotEmpty) {
+        for (final member in item.cast) {
+          builder.element('actor', nest: () {
+            builder.element('name', nest: member.name);
+            builder.element('role', nest: 'Performer');
+            if (member.profileUrl != null) {
+              builder.element('thumb', nest: member.profileUrl);
+            }
+          });
+        }
+      }
       
       // Plot
       if (item.overview != null) {
@@ -69,14 +89,19 @@ class SidecarService {
       // Parse extended IDs
       final anilistIdStr = root.findElements('anilistid').firstOrNull?.innerText ??
                            root.findElements('uniqueid').where((e) => e.getAttribute('type') == 'anilist').firstOrNull?.innerText;
+      
+      // Parse Stash ID
+      final stashId = root.findElements('stashid').firstOrNull?.innerText ??
+                      root.findElements('uniqueid').where((e) => e.getAttribute('type') == 'stashdb').firstOrNull?.innerText;
                            
       final title = root.findElements('title').firstOrNull?.innerText;
       final yearStr = root.findElements('year').firstOrNull?.innerText;
       
-      if (tmdbIdStr != null || anilistIdStr != null || title != null) {
+      if (tmdbIdStr != null || anilistIdStr != null || stashId != null || title != null) {
           return {
              'tmdbId': int.tryParse(tmdbIdStr ?? ''),
              'anilistId': int.tryParse(anilistIdStr ?? ''),
+             'stashId': stashId,
              'title': title,
              'year': int.tryParse(yearStr ?? ''),
           };
