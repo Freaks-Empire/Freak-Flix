@@ -7,6 +7,7 @@ import '../utils/platform/platform.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:async';
 import 'dart:isolate';
+import 'dart:io';
 import 'package:file_picker/file_picker.dart' hide PlatformFile;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -711,12 +712,12 @@ class LibraryProvider extends ChangeNotifier {
 
   Future<void> _ingestItems(
       List<MediaItem> newItems, MetadataService? metadata) async {
-    final existingPaths = {for (var i in _allItems) i.filePath};
+    final existingPaths = {for (var i in _allItems) i.filePath: i.filePath};
     final itemsToEnrich = <MediaItem>[];
     
     // Identify items that are actually new to the library
     for (final item in newItems) {
-      if (!existingPaths.contains(item.filePath)) {
+      if (!existingPaths.containsKey(item.filePath)) {
         itemsToEnrich.add(item);
       }
     }
@@ -1048,6 +1049,15 @@ class LibraryProvider extends ChangeNotifier {
         final map = jsonDecode(response.body);
         final List<dynamic> value = map['value'] ?? [];
         
+        // 1. Index potential NFO siblings for quick lookup
+        final nfoMap = <String, Map<String, dynamic>>{};
+        for (final item in value) {
+          final name = item['name'] as String;
+          if (name.toLowerCase().endsWith('.nfo')) {
+            nfoMap[name.toLowerCase()] = item;
+          }
+        }
+
         for (final item in value) {
             if (_cancelScanRequested) break;
             
@@ -1075,7 +1085,38 @@ class LibraryProvider extends ChangeNotifier {
                // Check extension
                if (_isVideo(name)) {
                   _setScanStatus('Found: $name');
-                  final newItem = _createMediaItemFromGraph(item, accountId, baseFolderPath);
+                  var newItem = _createMediaItemFromGraph(item, accountId, baseFolderPath);
+                  
+                  // NEW: Sibling NFO Check
+                  final nfoName = '${p.basenameWithoutExtension(name)}.nfo'.toLowerCase();
+                  if (nfoMap.containsKey(nfoName)) {
+                     final nfoItem = nfoMap[nfoName]!;
+                     // Try to get download URL
+                     final downloadUrl = nfoItem['@microsoft.graph.downloadUrl'] as String?;
+                     if (downloadUrl != null) {
+                        try {
+                           // Use unauthenticated GET for downloadUrl (typically signed) or Auth if needed?
+                           // Graph documentation says downloadUrl is pre-authenticated for short time.
+                           final nfoRes = await http.get(Uri.parse(downloadUrl));
+                           if (nfoRes.statusCode == 200) {
+                               final parsedNfo = SidecarService.parseNfo(nfoRes.body);
+                               if (parsedNfo != null) {
+                                  newItem = newItem.copyWith(
+                                     stashId: parsedNfo['stashId'],
+                                     tmdbId: parsedNfo['tmdbId'],
+                                     anilistId: parsedNfo['anilistId'],
+                                     // Optional: override title/year from NFO?
+                                     title: parsedNfo['title'] ?? newItem.title,
+                                     year: parsedNfo['year'] ?? newItem.year,
+                                  );
+                               }
+                           }
+                        } catch (e) {
+                           debugPrint('NFO fetch failed for $name: $e');
+                        }
+                     }
+                  }
+
                   // Determine if adult/anime based on folder type immediately so it shows up in filtered view
                   final parentFolder = libraryFolders.firstWhereOrNull((f) {
                       if (f.accountId != accountId) return false;
@@ -1664,9 +1705,18 @@ void _scanDirectoryInIsolate(_ScanRequest request) {
        return const ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v'].contains(ext);
     }
     
+    // Pre-scan NFOs into a map
+    final nfoMap = <String, File>{};
+    for (final e in entities) {
+        if (e is File && p.extension(e.path).toLowerCase() == '.nfo') {
+            final key = p.withoutExtension(e.path).toLowerCase();
+            nfoMap[key] = e;
+        }
+    }
+
     for (final e in entities) {
         final pathStr = e.path;
-        if (isVideo(pathStr)) {
+        if (e is File && isVideo(pathStr)) {
             if (keywords != null && keywords.isNotEmpty) {
                  final name = p.basename(pathStr).toLowerCase();
                  if (!keywords.any((k) => name.contains(k))) continue;
@@ -1678,6 +1728,28 @@ void _scanDirectoryInIsolate(_ScanRequest request) {
              
              final parsed = FilenameParser.parse(fileName);
              
+             // NEW: Check for Sidecar NFO
+             final nfoKey = p.withoutExtension(filePath).toLowerCase();
+             String? stashId;
+             int? tmdbId;
+             int? anilistId;
+             String? nfoTitle;
+             int? nfoYear;
+             
+             if (nfoMap.containsKey(nfoKey)) {
+                try {
+                   final content = nfoMap[nfoKey]!.readAsStringSync();
+                   final parsedNfo = SidecarService.parseNfo(content);
+                   if (parsedNfo != null) {
+                      stashId = parsedNfo['stashId'];
+                      tmdbId = parsedNfo['tmdbId'];
+                      anilistId = parsedNfo['anilistId'];
+                      nfoTitle = parsedNfo['title'];
+                      nfoYear = parsedNfo['year'];
+                   }
+                } catch (_) {}
+             }
+
              items.add(MediaItem(
                 id: filePath.hashCode.toString(),
                 filePath: filePath,
@@ -1685,14 +1757,18 @@ void _scanDirectoryInIsolate(_ScanRequest request) {
                 folderPath: p.dirname(filePath),
                 sizeBytes: stat.size,
                 lastModified: stat.modified,
-                title: parsed.seriesTitle,
-                year: parsed.year,
+                title: nfoTitle ?? parsed.seriesTitle,
+                year: nfoYear ?? parsed.year,
                 type: parsed.studio != null ? MediaType.scene : MediaType.movie, 
                 season: parsed.season,
                 episode: parsed.episode,
                 isAnime: filePath.toLowerCase().contains('anime'),
                 showKey: p.dirname(filePath).toLowerCase(),
                 isAdult: parsed.studio != null,
+                // Apply locks
+                stashId: stashId,
+                tmdbId: tmdbId,
+                anilistId: anilistId,
              ));
         }
     }
@@ -1702,4 +1778,3 @@ void _scanDirectoryInIsolate(_ScanRequest request) {
     sendPort.send(<MediaItem>[]); 
   }
 }
-
