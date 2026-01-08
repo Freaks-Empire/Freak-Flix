@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
-
 class NetflixControls extends StatefulWidget {
   final Player player;
   final String title;
@@ -23,183 +22,166 @@ class NetflixControls extends StatefulWidget {
 }
 
 class _NetflixControlsState extends State<NetflixControls> {
-  bool _hovering = false;
-  bool _playing = false;
-  double _volume = 100.0;
-  
-  // Netflix Red Color
+  // Use a transparent-to-black gradient for the bottom area
   final Color _netflixRed = const Color(0xFFE50914);
 
-  @override
-  void initState() {
-    super.initState();
-    widget.player.stream.playing.listen((e) => setState(() => _playing = e));
+  void _onFullscreen() {
+    // Basic toggle - implementation depends on window manager but we can try generic logic
+    // or just leave it as a visual placeholder if no global handler is passed
   }
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: AnimatedOpacity(
-        opacity: _hovering ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 200),
-        child: Stack(
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: Container(
+        height: 120, // Tall enough for gradient fade
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.transparent, Colors.black],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            stops: [0.0, 0.8], // Accelerate opacity at the bottom
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            // 1. The "Top Shadow" (Title Area)
-            Align(
-              alignment: Alignment.topCenter,
-              child: Container(
-                height: 100,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.black87, Colors.transparent],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                      const SizedBox(width: 20),
-                      if (widget.episodeTitle.isNotEmpty) ...[
-                         Text(
-                          widget.title,
-                          style: const TextStyle(
-                            color: Colors.white70, 
-                            fontSize: 18, 
-                            fontWeight: FontWeight.bold
-                          ),
-                        ),
-                        const VerticalDivider(color: Colors.white54, indent: 10, endIndent: 10),
-                        Text(
-                          widget.episodeTitle,
-                          style: const TextStyle(
-                            color: Colors.white, 
-                            fontSize: 18,
-                            fontWeight: FontWeight.normal
-                          ),
-                        ),
-                      ] else 
-                        Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 18)),
-                      const Spacer(),
-                      const Icon(Icons.flag_outlined, color: Colors.white),
-                    ],
-                  ),
-                ),
+            // 1. The Ultra-Thin Seek Bar
+            // It sits flush on top of the buttons
+            SizedBox(
+              height: 12, // Minimal hit area
+              child: StreamBuilder<Duration>(
+                stream: widget.player.stream.position,
+                builder: (context, snapshot) {
+                  final pos = snapshot.data ?? Duration.zero;
+                  final total = widget.player.state.duration;
+                  return SliderTheme(
+                    data: SliderThemeData(
+                      trackHeight: 2, // Matches the reference image's thinness
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0), // Hidden thumb normally
+                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+                      activeTrackColor: _netflixRed,
+                      inactiveTrackColor: Colors.white24,
+                      thumbColor: _netflixRed,
+                      trackShape: _CustomTrackShape(), // Removes default padding
+                    ),
+                    child: Slider(
+                      value: pos.inSeconds.toDouble().clamp(0, total.inSeconds.toDouble()),
+                      max: total.inSeconds.toDouble(),
+                      onChanged: (v) => widget.player.seek(Duration(seconds: v.toInt())),
+                    ),
+                  );
+                },
               ),
             ),
 
-            // 2. The "Bottom Shadow" (Controls Area)
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                height: 140, // Taller to accommodate hover interactions
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.transparent, Colors.black87],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
+            // 2. The Control Row
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // --- LEFT GROUP ---
+                  // Play/Pause
+                  StreamBuilder<bool>(
+                    stream: widget.player.stream.playing,
+                    builder: (context, snapshot) {
+                      final isPlaying = snapshot.data ?? false;
+                      return IconButton(
+                        icon: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 36),
+                        color: Colors.white,
+                        onPressed: widget.player.playOrPause,
+                      );
+                    },
                   ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    // A. The Scrubber (Red Line)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: SizedBox(
-                        height: 20,
-                        child: StreamBuilder<Duration>(
-                          stream: widget.player.stream.position,
-                          builder: (context, snapshot) {
-                            final pos = snapshot.data ?? Duration.zero;
-                            final total = widget.player.state.duration;
-                            return SliderTheme(
-                              data: SliderThemeData(
-                                trackHeight: 3, // Netflix is thin
-                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                                activeTrackColor: _netflixRed,
-                                inactiveTrackColor: Colors.grey.withOpacity(0.5),
-                                thumbColor: _netflixRed,
-                              ),
-                              child: Slider(
-                                value: pos.inSeconds.toDouble().clamp(0, total.inSeconds.toDouble()),
-                                max: total.inSeconds.toDouble(),
-                                onChanged: (v) => widget.player.seek(Duration(seconds: v.toInt())),
-                              ),
-                            );
-                          },
+                  const SizedBox(width: 12),
+                  // Rewind 10 (Circular arrow style)
+                  _ControlIcon(
+                    icon: Icons.replay_10_rounded, 
+                    onTap: () => widget.player.seek(widget.player.state.position - const Duration(seconds: 10))
+                  ),
+                  // Forward 10
+                  _ControlIcon(
+                    icon: Icons.forward_10_rounded, 
+                    onTap: () => widget.player.seek(widget.player.state.position + const Duration(seconds: 10))
+                  ),
+                  const SizedBox(width: 8),
+                  // Volume
+                  _ControlIcon(icon: Icons.volume_up_rounded, onTap: () {}),
+
+                  // --- CENTER GROUP ---
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        widget.episodeTitle.isNotEmpty ? "${widget.title} - ${widget.episodeTitle}" : widget.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          shadows: [Shadow(blurRadius: 4, color: Colors.black)],
                         ),
                       ),
                     ),
+                  ),
 
-                    // B. The Buttons Row
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                      child: Row(
-                        children: [
-                          // Left Group
-                          IconButton(
-                            icon: Icon(_playing ? Icons.pause : Icons.play_arrow, size: 32, color: Colors.white),
-                            onPressed: widget.player.playOrPause,
-                          ),
-                          const SizedBox(width: 16),
-                          IconButton(
-                            icon: const Icon(Icons.replay_10, size: 28, color: Colors.white),
-                            onPressed: () => widget.player.seek(widget.player.state.position - const Duration(seconds: 10)),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.forward_10, size: 28, color: Colors.white),
-                            onPressed: () => widget.player.seek(widget.player.state.position + const Duration(seconds: 10)),
-                          ),
-                          const SizedBox(width: 16),
-                          IconButton(
-                            icon: Icon(_volume > 0 ? Icons.volume_up : Icons.volume_off, color: Colors.white, size: 28),
-                            onPressed: () {
-                              setState(() {
-                                _volume = _volume > 0 ? 0.0 : 100.0;
-                                widget.player.setVolume(_volume);
-                              });
-                            },
-                          ),
-                          
-                          const Spacer(),
-
-                          // Right Group
-                          Text(
-                            "Next Episode",
-                            style: TextStyle(color: Colors.white.withOpacity(0.7), fontWeight: FontWeight.bold),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.skip_next, size: 28, color: Colors.white),
-                            onPressed: widget.onNextEpisode,
-                          ),
-                          const SizedBox(width: 20),
-                          IconButton(
-                             icon: const Icon(Icons.subtitles, color: Colors.white, size: 28),
-                             onPressed: widget.onShowAudioSubs,
-                          ),
-                          const SizedBox(width: 20),
-                          const Icon(Icons.speed, color: Colors.white, size: 28),
-                          const SizedBox(width: 20),
-                          const Icon(Icons.fullscreen, color: Colors.white, size: 32),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                  // --- RIGHT GROUP ---
+                  // Next Episode (Skip style icon)
+                  _ControlIcon(icon: Icons.skip_next_rounded, onTap: widget.onNextEpisode),
+                  const SizedBox(width: 8),
+                  // Episodes List (Box stack icon)
+                  _ControlIcon(icon: Icons.layers_outlined, onTap: () {}),
+                   const SizedBox(width: 8),
+                  // Audio/Subtitles (Bubble icon)
+                  _ControlIcon(icon: Icons.cloud_queue, onTap: widget.onShowAudioSubs), // Using cloud as rough match for that "server" icon
+                  const SizedBox(width: 8),
+                  // Settings (Gear)
+                  _ControlIcon(icon: Icons.settings_outlined, onTap: () {}),
+                  const SizedBox(width: 8),
+                  // Fullscreen (Corners icon)
+                  _ControlIcon(icon: Icons.fullscreen_rounded, onTap: _onFullscreen),
+                ],
               ),
             ),
           ],
         ),
       ),
     );
+  }
+}
+
+// Helper for standard white icons
+class _ControlIcon extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _ControlIcon({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(icon, color: Colors.white, size: 28),
+      onPressed: onTap,
+      splashRadius: 20,
+    );
+  }
+}
+
+// Removes the default padding at the ends of the slider
+class _CustomTrackShape extends RoundedRectSliderTrackShape {
+  @override
+  Rect getPreferredRect({
+    required RenderBox parentBox,
+    Offset offset = Offset.zero,
+    required SliderThemeData sliderTheme,
+    bool isEnabled = false,
+    bool isDiscrete = false,
+  }) {
+    final double trackHeight = sliderTheme.trackHeight!;
+    final double trackLeft = offset.dx;
+    final double trackTop = offset.dy + (parentBox.size.height - trackHeight) / 2;
+    final double trackWidth = parentBox.size.width;
+    return Rect.fromLTWH(trackLeft, trackTop, trackWidth, trackHeight);
   }
 }

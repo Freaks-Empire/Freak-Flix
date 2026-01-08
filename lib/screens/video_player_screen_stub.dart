@@ -3,7 +3,7 @@
 
 import 'dart:async';
 import 'dart:html' as html;
-import 'dart:ui' as ui;
+
 import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
 
@@ -327,78 +327,89 @@ class _WebNetflixControlsState extends State<_WebNetflixControls> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    // A. The Scrubber
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: SizedBox(
-                        height: 20,
-                        child: SliderTheme(
-                          data: SliderThemeData(
-                            trackHeight: 3, 
-                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                            activeTrackColor: _netflixRed,
-                            inactiveTrackColor: Colors.grey.withOpacity(0.5),
-                            thumbColor: _netflixRed,
-                          ),
-                          child: Slider(
-                            value: _progress.clamp(0, _duration),
-                            max: _duration,
-                            onChanged: _seek,
-                          ),
+                    // 1. Ultra-Thin Seek Bar
+                    SizedBox(
+                      height: 12, 
+                      child: SliderTheme(
+                        data: SliderThemeData(
+                          trackHeight: 2, 
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
+                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+                          activeTrackColor: _netflixRed,
+                          inactiveTrackColor: Colors.white24,
+                          thumbColor: _netflixRed,
+                          trackShape: _CustomTrackShape(),
+                        ),
+                        child: Slider(
+                          value: _progress.clamp(0, _duration),
+                          max: _duration,
+                          onChanged: _seek,
                         ),
                       ),
                     ),
 
-                    // B. The Buttons Row
+                    // 2. The Buttons Row
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
+                          // --- LEFT GROUP ---
                           IconButton(
-                            icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, size: 32, color: Colors.white),
+                            icon: Icon(_isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 36),
+                            color: Colors.white,
                             onPressed: _togglePlay,
                           ),
-                          const SizedBox(width: 16),
-                          IconButton(
-                            icon: const Icon(Icons.replay_10, size: 28, color: Colors.white),
-                            onPressed: () => _seek(_progress - 10),
+                          const SizedBox(width: 12),
+                          _ControlIcon(
+                             icon: Icons.replay_10_rounded, 
+                             onTap: () => _seek(_progress - 10)
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.forward_10, size: 28, color: Colors.white),
-                            onPressed: () => _seek(_progress + 10),
+                          _ControlIcon(
+                             icon: Icons.forward_10_rounded, 
+                             onTap: () => _seek(_progress + 10)
                           ),
-                          const SizedBox(width: 16),
-                          IconButton(
-                            icon: Icon(_volume > 0 ? Icons.volume_up : Icons.volume_off, color: Colors.white, size: 28),
-                            onPressed: _setVolume,
+                          const SizedBox(width: 8),
+                          _ControlIcon(
+                             icon: Icons.volume_up_rounded, 
+                             onTap: _setVolume
                           ),
                           
-                          const Spacer(),
+                          // --- CENTER GROUP ---
+                          Expanded(
+                            child: Center(
+                              child: Text(
+                                widget.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  shadows: [Shadow(blurRadius: 4, color: Colors.black)],
+                                ),
+                              ),
+                            ),
+                          ),
 
-                          Text(
-                            "Next Episode",
-                            style: TextStyle(color: Colors.white.withOpacity(0.7), fontWeight: FontWeight.bold),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.skip_next, size: 28, color: Colors.white),
-                            onPressed: widget.onNext,
-                          ),
-                          const SizedBox(width: 20),
-                          // Web doesn't typically support multiple tracks easily without MSE logic
-                          const Icon(Icons.subtitles, color: Colors.white38, size: 28), 
-                          const SizedBox(width: 20),
-                          const Icon(Icons.speed, color: Colors.white, size: 28),
-                          const SizedBox(width: 20),
-                          IconButton(
-                             icon: const Icon(Icons.fullscreen, color: Colors.white, size: 32),
-                             onPressed: () {
+                          // --- RIGHT GROUP ---
+                          _ControlIcon(icon: Icons.skip_next_rounded, onTap: widget.onNext ?? () {}),
+                          const SizedBox(width: 8),
+                          _ControlIcon(icon: Icons.layers_outlined, onTap: () {}),
+                          const SizedBox(width: 8),
+                          _ControlIcon(icon: Icons.cloud_queue, onTap: () {}),
+                          const SizedBox(width: 8),
+                          _ControlIcon(icon: Icons.settings_outlined, onTap: () => setState(() => _showSettings = !_showSettings)),
+                          const SizedBox(width: 8),
+                          _ControlIcon(
+                             icon: Icons.fullscreen_rounded, 
+                             onTap: () {
                                if (html.document.fullscreenElement != null) {
                                  html.document.exitFullscreen();
                                } else {
                                  html.document.documentElement?.requestFullscreen();
                                }
-                             },
+                             }
                           ),
                         ],
                       ),
