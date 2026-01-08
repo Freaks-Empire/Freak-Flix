@@ -181,6 +181,29 @@ class StashDbService {
     }
   ''';
 
+  static const String _querySearchPerformer = r'''
+    query SearchPerformer($name: String!) {
+      searchPerformer(term: $name) {
+        id
+        name
+      }
+    }
+  ''';
+
+  static const String _querySearchPerformerBox = r'''
+    query SearchPerformerBox($name: String!) {
+      queryPerformers(input: {
+        text: $name
+        per_page: 3
+      }) {
+        performers {
+          id
+          name
+        }
+      }
+    }
+  ''';
+
   static const String _queryFindPerformer = r'''
     query FindPerformer($id: ID!) {
       findPerformer(id: $id) {
@@ -428,7 +451,6 @@ class StashDbService {
         if (sceneData != null) {
             return _mapSceneToMediaItem(sceneData, 'Unknown');
         } else if (isStashBox) {
-          // Fallback: Check if it's a Movie (TPDB often distinguishes strictly)
           debugPrint('StashDB [${ep.name}]: Scene not found, trying Movie...');
           final movieData = await _executeQuery(
             query: _queryFindMovieBox,
@@ -454,12 +476,11 @@ class StashDbService {
     final cleanTitle = _cleanTitle(title);
     
     for (final ep in endpoints) {
-      if (!ep.enabled) continue; // Allow empty API key (local stash often no auth)
+      if (!ep.enabled) continue;
       
       debugPrint('StashDB [${ep.name}]: Searching for "$cleanTitle"');
       final isStashBox = _isBox(ep.url);
 
-      // Helper to execute and parse scene search
       Future<MediaItem?> trySearch(String query, String opName, bool isBox, {bool isMovie = false}) async {
         try {
            final data = await _executeQuery(
@@ -488,7 +509,6 @@ class StashDbService {
             );
           }
         } catch (e) {
-          // Ignore specific query errors to allow fallbacks
           if (e.toString().contains('Cannot query field')) {
              debugPrint('StashDB [${ep.name}]: $opName not supported by schema.');
           } else {
@@ -498,17 +518,13 @@ class StashDbService {
         return null;
       }
 
-      // 1. Try Primary Scene Search (Box or App based on URL hint)
       MediaItem? result;
       if (isStashBox) {
         result = await trySearch(_queryFindScenesBox, 'QueryScenes', true);
-        // 2. Fallback: Try App Search if Box failed (maybe URL is Box but running App?)
         if (result == null) result = await trySearch(_queryFindScenes, 'FindScenes', false);
-        // 3. Fallback: Try Movie Search (TPDB distinguishes Movies vs Scenes)
         if (result == null) result = await trySearch(_queryQueryMoviesBox, 'QueryMoviesBox', true, isMovie: true);
       } else {
         result = await trySearch(_queryFindScenes, 'FindScenes', false);
-        // Fallback: Try Box Search if App failed
         if (result == null) result = await trySearch(_queryFindScenesBox, 'QueryScenes', true);
       }
 
@@ -519,9 +535,89 @@ class StashDbService {
     return null;
   }
 
+  /// Performer-aware scene search: Finds performer ID, fetches their scenes, matches by title.
+  /// Returns the best match or null.
+  Future<MediaItem?> searchSceneByPerformer(
+    String sceneTitle,
+    String performerName,
+    List<StashEndpoint> endpoints,
+  ) async {
+    if (performerName.trim().isEmpty || sceneTitle.trim().isEmpty) return null;
+
+    final cleanTitle = _cleanTitle(sceneTitle);
+    final cleanPerformer = performerName.trim().toLowerCase();
+
+    debugPrint('StashDB: Performer-first search: "$cleanPerformer" in "$cleanTitle"');
+
+    for (final ep in endpoints) {
+      if (!ep.enabled) continue;
+
+      try {
+        // 1. Find Performer ID
+        final isStashBox = _isBox(ep.url);
+        final searchQuery = isStashBox ? _querySearchPerformerBox : _querySearchPerformer;
+        final searchOp = isStashBox ? 'SearchPerformerBox' : 'SearchPerformer';
+
+        final searchData = await _executeQuery(
+          query: searchQuery,
+          operationName: searchOp,
+          variables: {'name': performerName},
+          apiKey: ep.apiKey,
+          baseUrl: ep.url,
+        );
+
+        List<dynamic>? performers;
+        if (isStashBox) {
+          performers = searchData?['queryPerformers']?['performers'] as List?;
+        } else {
+          performers = searchData?['searchPerformer'] as List?;
+        }
+
+        if (performers == null || performers.isEmpty) {
+          debugPrint('StashDB [${ep.name}]: Performer "$performerName" not found');
+          continue;
+        }
+
+        // 2. Get Performer's Scenes (first 50 to be thorough)
+        final performerId = performers.first['id'] as String;
+        debugPrint('StashDB [${ep.name}]: Found performer ID $performerId');
+
+        final scenes = await getPerformerScenes(performerId, [ep], page: 1, perPage: 50);
+
+        if (scenes.isEmpty) {
+          debugPrint('StashDB [${ep.name}]: No scenes found for performer');
+          continue;
+        }
+
+        // 3. Score and Match
+        MediaItem? bestMatch;
+        double bestScore = 0.0;
+
+        for (final scene in scenes) {
+          final sceneTitle = scene.title?.toLowerCase() ?? '';
+          final score = _fuzzyMatch(cleanTitle.toLowerCase(), sceneTitle);
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = scene;
+          }
+        }
+
+        // 4. Return if confident (>0.5 similarity)
+        if (bestScore > 0.5 && bestMatch != null) {
+          debugPrint('StashDB [${ep.name}]: Matched scene "${bestMatch.title}" (score: ${bestScore.toStringAsFixed(2)})');
+          return bestMatch;
+        }
+
+      } catch (e) {
+        debugPrint('StashDB [${ep.name}]: Performer search error: $e');
+      }
+    }
+
+    return null;
+  }
+
   /// Gets scenes for a specific performer (paginated, single page).
-  /// Aggregates results from all endpoints? Or just tries all until results found?
-  /// For pagination consistency, aggregation is hard. We will return results from the first endpoint that has data.
   Future<List<MediaItem>> getPerformerScenes(String performerId, List<StashEndpoint> endpoints, {int page = 1, int perPage = 20}) async {
     
     for (final ep in endpoints) {
@@ -585,7 +681,7 @@ class StashDbService {
           p = data?['findPerformer'] as Map<String, dynamic>?;
         }
         if (p != null) {
-          return StashPerformer.fromJson(p as Map<String, dynamic>);
+          return StashPerformer.fromJson(p);
         }
       } catch (e) {
         debugPrint('StashDB [${ep.name}]: Get Performer Details failed: $e');
@@ -594,7 +690,6 @@ class StashDbService {
     return null;
   }
   
-  /// Gets performer details by ID (Legacy simplified).
   Future<CastMember?> getPerformer(String id, List<StashEndpoint> endpoints) async {
     for (final ep in endpoints) {
       if (!ep.enabled) continue;
@@ -642,8 +737,6 @@ class StashDbService {
 
   // --- Helper Methods ---
 
-  /// Executes a GraphQL query and returns the 'data' field.
-  /// Throws exceptions on HTTP errors or GraphQL errors.
   Future<Map<String, dynamic>?> _executeQuery({
     required String query,
     required String operationName,
@@ -653,7 +746,6 @@ class StashDbService {
   }) async {
     final uri = Uri.parse(baseUrl.isEmpty ? _defaultEndpoint : baseUrl);
     
-    // StashDB typically uses 'ApiKey' header
     final headers = {
       'Content-Type': 'application/json',
       'ApiKey': apiKey.trim(),
@@ -683,34 +775,44 @@ class StashDbService {
   }
 
   String _cleanTitle(String title) {
-    // 1. Remove extension
     var cleaned = title.replaceAll(RegExp(r'\.(mp4|mkv|avi|wmv|mov|webm)$', caseSensitive: false), '');
-    
-    // 2. Remove dots, underscores, hyphens
     cleaned = cleaned.replaceAll(RegExp(r'[._-]'), ' ');
 
-    // 3. Remove common release junk (Case insensitive)
-    // "XXX", "P2P", "PRT" (Private?), "SD", "HD", "4K", "1080p", etc.
     final junkPattern = RegExp(
       r'\b(xxx|p2p|prt|sd|hd|720p|1080p|2160p|4k|mp4|full|uhd|hevc|x264|x265|aac|webdl|web-dl|webrip|bluray|blueray|bdrip|dvdrip|hdtv)\b',
       caseSensitive: false,
     );
     cleaned = cleaned.replaceAll(junkPattern, ' ');
-
-    // 4. Remove trailing numbers (years, dates, or random digits at the end)
-    // First collapse/trim spaces so we don't fail on "Title 29 "
     cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
-    
-    // Now strip numeric suffix
     cleaned = cleaned.replaceAll(RegExp(r'\s+\d+$'), ''); 
     
-    return cleaned;
+    return cleaned.trim();
+  }
+
+  /// Simple fuzzy matching: calculates similarity between two strings.
+  /// Returns a score between 0.0 (no match) and 1.0 (exact match).
+  double _fuzzyMatch(String query, String target) {
+    if (query == target) return 1.0;
+
+    // Exact substring match gets high score
+    if (target.contains(query)) return 0.9;
+    if (query.contains(target)) return 0.85;
+
+    // Word overlap scoring
+    final queryWords = query.split(' ').where((w) => w.isNotEmpty).toSet();
+    final targetWords = target.split(' ').where((w) => w.isNotEmpty).toSet();
+
+    if (queryWords.isEmpty || targetWords.isEmpty) return 0.0;
+
+    final intersection = queryWords.intersection(targetWords).length;
+    final union = queryWords.union(targetWords).length;
+
+    return intersection / union; // Jaccard similarity
   }
 
   MediaItem _mapSceneToMediaItem(dynamic sceneData, String originalFileName, {MediaType type = MediaType.scene}) {
     final scene = sceneData as Map<String, dynamic>;
     
-    // Extract Poster
     String? poster;
     final images = scene['images'] as List?;
     if (images != null && images.isNotEmpty) {
@@ -719,7 +821,6 @@ class StashDbService {
       poster = scene['front_image']['url'];
     }
 
-    // Extract Cast
     final rawPerformers = scene['performers'] as List?;
     debugPrint('StashDB: Parsing performers. Count: ${rawPerformers?.length}');
     
@@ -730,7 +831,6 @@ class StashDbService {
           return null;
         }
         
-        // Handle both Stash App (image_path) and Stash Box (images list)
         String? profileUrl;
         if (perf['image_path'] != null) {
           profileUrl = perf['image_path'];
@@ -748,13 +848,11 @@ class StashDbService {
     }).whereType<CastMember>().toList() ?? [];
     debugPrint('StashDB: Extracted ${cast.length} cast members');
 
-    // Extract Tags/Genres
     final tags = (scene['tags'] as List?)
         ?.map((t) => t['name'] as String?)
         .whereType<String>()
         .toList() ?? [];
 
-    // Construct Overview
     String overview = scene['details'] ?? '';
     final studio = scene['studio']?['name'];
     
@@ -762,10 +860,8 @@ class StashDbService {
       overview = 'Studio: $studio\n\n$overview';
     }
 
-    // StashDB dates are YYYY-MM-DD
     final date = DateTime.tryParse(scene['date'] ?? '');
 
-    // Extract Backdrop (Priority: paths.screenshot -> paths.preview -> poster)
     String? backdrop;
     final paths = scene['paths'] as Map<String, dynamic>?;
     if (paths != null) {
@@ -775,18 +871,14 @@ class StashDbService {
     } else if (scene['back_image'] != null) {
        backdrop = scene['back_image']['url'];
     }
-    // Fallback to primary poster if no specific backdrop for now
     backdrop ??= poster;
 
-    // Extract Duration
     int? durationSeconds;
-    // 1. Scene direct duration (Box)
     if (scene['duration'] != null) {
        final d = scene['duration'];
        if (d is num) durationSeconds = d.toInt();
        else if (d is String) durationSeconds = int.tryParse(d);
     }
-    // 2. File duration (Stash App)
     if (durationSeconds == null || durationSeconds == 0) {
        final files = scene['files'] as List?;
        if (files != null && files.isNotEmpty) {
@@ -801,8 +893,8 @@ class StashDbService {
       id: "stashdb:${scene['id']}",
       title: scene['title'] ?? originalFileName,
       fileName: originalFileName,
-      filePath: '', // Populated by LibraryProvider
-      folderPath: '', // Populated by LibraryProvider
+      filePath: '',
+      folderPath: '',
       sizeBytes: 0, 
       lastModified: date ?? DateTime.now(),
       year: date?.year,
@@ -816,6 +908,7 @@ class StashDbService {
       isAdult: true,
     );
   }
+  
   bool _isBox(String url) {
     return url.contains('stashdb.org') || url.contains('theporndb.net');
   }
