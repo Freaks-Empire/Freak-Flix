@@ -69,6 +69,7 @@ Write-Host "MSIX prepared: $msixDest" -ForegroundColor Green
 # --- 4) Generate/Update appinstaller ---
 $packageUriBase    = 'https://freaks-empire.github.io/Freak-Flix'
 $appInstallerPath  = Join-Path $PSScriptRoot 'FreakFlix.appinstaller'
+$pagesOutput       = Join-Path $PSScriptRoot 'docs'
 
 $appInstallerXml = @"
 <?xml version="1.0" encoding="utf-8"?>
@@ -91,13 +92,20 @@ $appInstallerXml = @"
 Set-Content -Path $appInstallerPath -Value $appInstallerXml -NoNewline
 Write-Host "AppInstaller updated: $appInstallerPath (Version $fullVersion)" -ForegroundColor Green
 
+# --- 4b) Copy installer assets to GitHub Pages folder (docs) ---
+New-Item -ItemType Directory -Path $pagesOutput -Force | Out-Null
+$pagesMsixPath = Join-Path $pagesOutput $msixName
+$pagesAppInstallerPath = Join-Path $pagesOutput 'FreakFlix.appinstaller'
+Copy-Item $msixDest $pagesMsixPath -Force
+Copy-Item $appInstallerPath $pagesAppInstallerPath -Force
+Write-Host "Copied MSIX + appinstaller to docs/:`n - $pagesMsixPath`n - $pagesAppInstallerPath" -ForegroundColor Green
+
 # --- 5) Final instructions ---
 Write-Host "`n=== NEXT STEPS ===" -ForegroundColor Yellow
 Write-Host "1) Push the updated files:" -ForegroundColor Yellow
-Write-Host "   git add pubspec.yaml FreakFlix.appinstaller build/windows/x64/runner/Release/$msixName" -ForegroundColor Gray
+Write-Host "   git add pubspec.yaml FreakFlix.appinstaller build/windows/x64/runner/Release/$msixName docs/FreakFlix.appinstaller docs/$msixName" -ForegroundColor Gray
 Write-Host "   git commit -m \"release: $fullVersion\"" -ForegroundColor Gray
 Write-Host "   git push" -ForegroundColor Gray
-Write-Host "2) Upload the MSIX and appinstaller to GitHub Pages at: $packageUriBase" -ForegroundColor Yellow
-Write-Host "   (Ensure the .msix filename matches $msixName in the appinstaller.)" -ForegroundColor Gray
+Write-Host "2) GitHub Pages already has artifacts staged in docs/. Ensure Pages serves from /docs (default) or move to your chosen path." -ForegroundColor Yellow
 Write-Host "3) Users can install/update via the appinstaller URL:" -ForegroundColor Yellow
 Write-Host "   $packageUriBase/FreakFlix.appinstaller" -ForegroundColor Gray
