@@ -15,10 +15,10 @@ $ErrorActionPreference = 'Stop'
 
 # --- 1) Gather Git-derived version pieces ---
 $majorMinor  = '1.0'
-$buildNumber = (git rev-list --count HEAD).Trim() # Monotonic build counter
+try { $buildNumber = (git rev-list --count HEAD).Trim() } catch { $buildNumber = '0' }
+try { $shortHash   = (git rev-parse --short HEAD).Trim() } catch { $shortHash = '000000' }
 $revision    = '0'
 $fullVersion = "$majorMinor.$buildNumber.$revision"    # e.g., 1.0.152.0
-$shortHash   = (git rev-parse --short HEAD).Trim()       # e.g., a1b2c
 
 Write-Host "Computed version: $fullVersion (short hash: $shortHash)" -ForegroundColor Cyan
 
@@ -71,15 +71,20 @@ $packageUriBase    = 'https://freaks-empire.github.io/Freak-Flix'
 $appInstallerPath  = Join-Path $PSScriptRoot 'FreakFlix.appinstaller'
 
 $appInstallerXml = @"
-<AppInstaller xmlns="http://schemas.microsoft.com/appx/appinstaller/2018">
-  <MainBundle
-    Name="FreaksEmpire.FreakFlix"
-    Publisher="CN=MNDL"
-    Version="$fullVersion"
-    Uri="$packageUriBase/$msixName" />
-  <UpdateSettings>
-    <OnLaunch HoursBetweenUpdateChecks="24" />
-  </UpdateSettings>
+<?xml version="1.0" encoding="utf-8"?>
+<AppInstaller
+        xmlns="http://schemas.microsoft.com/appx/appinstaller/2018"
+        Version="$fullVersion"
+        Uri="$packageUriBase/FreakFlix.appinstaller">
+    <MainPackage
+        Name="FreaksEmpire.FreakFlix"
+        Publisher="CN=MNDL"
+        Version="$fullVersion"
+        ProcessorArchitecture="x64"
+        Uri="$packageUriBase/$msixName" />
+    <UpdateSettings>
+        <OnLaunch HoursBetweenUpdateChecks="0" />
+    </UpdateSettings>
 </AppInstaller>
 "@
 
