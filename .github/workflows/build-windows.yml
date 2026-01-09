@@ -29,6 +29,18 @@ jobs:
       - name: Fetch dependencies
         run: flutter pub get
 
+      - name: Create .env (prefer secret)
+        shell: pwsh
+        env:
+          ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
+        run: |
+          if ($env:ENV_FILE_CONTENT) {
+            # Write multiline secret into .env
+            $env:ENV_FILE_CONTENT | Out-File -FilePath ".env" -Encoding utf8
+          } elseif (-Not (Test-Path ".env") -and (Test-Path ".env.example")) {
+            Copy-Item ".env.example" ".env"
+          }
+
       - name: Build Windows release
         run: flutter build windows --release
 

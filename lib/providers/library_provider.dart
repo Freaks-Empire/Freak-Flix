@@ -1078,37 +1078,9 @@ class LibraryProvider extends ChangeNotifier {
     
     while (nextLink != null && !_cancelScanRequested) {
       try {
-        // Use direct HTTP to avoid GraphAuthService proxy confusion if on Native (URL is absolute)
-        // If on Web, we might need proxy? 
-        // GraphAuthService.graphBaseUrl handles proxy prefix.
-        // But here we constructed full URL.
-        // If kIsWeb, we need to strip 'https://graph.microsoft.com/v1.0' and prepend proxy?
-        // Actually, let's rely on http.get handling it if CORS is allowed directly (usually not).
-        // WE NEED GraphAuthService HELPER TO CALL WITH CORRECT PROXY IF WEB.
-        
-        // Helper:
-        final uri = Uri.parse(nextLink);
-        // On Web, we must route these calls through our proxy if NOT using implicit flow/direct.
-        // But our GraphAuthService is configured to use /api/graph/v1.0 proxy on web.
-        // So we should construct relative URLs or use a helper.
-        // Let's use a quick helper to "proxify" if needed.
-        
-        Uri finalUri = uri;
-        if (kIsWeb && uri.host == 'graph.microsoft.com') {
-             // Replace host/scheme with relative proxy path
-             // Path usually starts with /v1.0/...
-             final path = uri.path; // /v1.0/me/drive...
-             // Proxy logic: /api/graph/v1.0/me... 
-             // graphBaseUrl returns '/api/graph/v1.0'
-             // So we just need to append the path part AFTER v1.0?
-             // Or just replace the base.
-             // Simple: 
-             final newPath = path.replaceFirst('/v1.0', graph_auth.GraphAuthService.instance.graphBaseUrl);
-             // Preserve query
-             finalUri = Uri(path: newPath, query: uri.query);
-        }
+           final uri = Uri.parse(nextLink);
 
-        final response = await http.get(finalUri, headers: {'Authorization': 'Bearer $token'});
+           final response = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
         if (response.statusCode != 200) {
            debugPrint('Graph Walk Error: ${response.statusCode} - ${response.body}');
            return;

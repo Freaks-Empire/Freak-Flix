@@ -1,33 +1,6 @@
 [build]
   command = "bash ./netlify/build.sh"
   publish = "build/web"
-  
-[build.environment]
-  NEWRELIC_ACCOUNT_ID = "7549480"
-  NEWRELIC_INGEST_LICENSE_KEY = "fb2f0c5e7bfdd1bd78272780e045fda0FFFFNRAL"
-  NEWRELIC_BROWSER_LICENSE_KEY = "9170E67887E3ECB6E8C79895885F9A6D1D713A930CD40B5F0B0A646EC7A9F448"
-  NEWRELIC_APP_ID = "true"
-
-[[redirects]]
-  from = "/api/ms_auth/*"
-  to = "/.netlify/functions/ms_auth_proxy"
-  status = 200
-  force = true
-
-[[plugins]]
-  package = "@netlify/plugin-functions-install-core"
-
-[[redirects]]
-  from = "/api/stash/*"
-  to = "/.netlify/functions/stash_proxy"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/graph/*"
-  to = "https://graph.microsoft.com/:splat"
-  status = 200
-  force = true
 
 # Route all paths to the SPA entry so client-side routing works.
 [[redirects]]
