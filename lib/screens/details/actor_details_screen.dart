@@ -1,5 +1,4 @@
 /// lib/screens/details/actor_details_screen.dart
-import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -13,10 +12,8 @@ import '../../services/stash_db_service.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../services/metadata_service.dart'; // Import MetadataService
-import '../../models/stash_endpoint.dart';
 import '../../models/stash_performer.dart';
 import '../../widgets/discover_card.dart';
-import '../../widgets/safe_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ActorDetailsScreen extends StatefulWidget {
@@ -610,46 +607,39 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
   }
 
   Widget _buildHorizontalList(List<TmdbItem> items) {
-    // Show all in a responsive grid that expands vertically with the page scroll.
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cardWidth = constraints.maxWidth >= 1100
-            ? 200.0
-            : constraints.maxWidth >= 800
-                ? 180.0
-                : 160.0;
-        return Wrap(
-          spacing: 12,
-          runSpacing: 16,
-          children: items
-              .map((item) => SizedBox(
-                    width: cardWidth,
-                    child: DiscoverCard(item: item),
-                  ))
-              .toList(),
-        );
-      },
+    // Responsive poster grid using max extent; auto-wraps with 2:3 aspect ratio.
+    const targetWidth = 180.0; // poster-ish width
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: items.length,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: targetWidth,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 10,
+        childAspectRatio: 2 / 3,
+      ),
+      itemBuilder: (context, i) => DiscoverCard(item: items[i]),
     );
   }
 
   Widget _buildSceneGrid(List<MediaItem> scenes, bool isLocal) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cardWidth = constraints.maxWidth >= 1100
-            ? 260.0
-            : constraints.maxWidth >= 800
-                ? 220.0
-                : 180.0;
-        final spacing = 14.0;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: 14,
-          children: scenes
-              .map((scene) => SizedBox(
-                    width: cardWidth,
-                    child: _SceneCard(item: scene, isLocal: isLocal),
-                  ))
-              .toList(),
+        // Use maxCrossAxisExtent for responsive wrapping based on available width.
+        const targetWidth = 260.0; // Acts like “max card width”; more space -> more columns.
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: scenes.length,
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: targetWidth,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 10,
+            // More vertical room to avoid overflow when showing labels/text.
+            childAspectRatio: 4 / 3,
+          ),
+          itemBuilder: (context, i) => _SceneCard(item: scenes[i], isLocal: isLocal),
         );
       },
     );
@@ -811,48 +801,58 @@ class _SceneCard extends StatelessWidget {
             context.push('/media/${item.id}', extra: item);
          }
       },
-      child: SizedBox(
-        width: 300,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AspectRatio(
-              aspectRatio: 16/9,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (item.posterUrl != null || item.backdropUrl != null)
-                      Image.network(item.posterUrl ?? item.backdropUrl!, fit: BoxFit.cover,
-                      errorBuilder: (_,__,___) => Container(color: Colors.grey[900]))
-                    else
-                      Container(color: Colors.grey[900]),
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: isLocal ? Colors.green.withOpacity(0.85) : Colors.blueAccent.withOpacity(0.85),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          isLocal ? 'In Library' : 'StashDB',
-                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
-                        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AspectRatio(
+            aspectRatio: 16/9,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (item.posterUrl != null || item.backdropUrl != null)
+                    Image.network(item.posterUrl ?? item.backdropUrl!, fit: BoxFit.cover,
+                    errorBuilder: (_,__,___) => Container(color: Colors.grey[900]))
+                  else
+                    Container(color: Colors.grey[900]),
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isLocal ? Colors.green.withOpacity(0.85) : Colors.blueAccent.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        isLocal ? 'In Library' : 'StashDB',
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(item.title ?? item.fileName, maxLines: 1, overflow: TextOverflow.ellipsis,
-             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-             Text(item.year?.toString() ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11)),
-          ],
-        ),
+          ),
+          const SizedBox(height: 4),
+          Flexible(
+            child: Text(
+              item.title ?? item.fileName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            item.year?.toString() ?? '',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+        ],
       ),
     );
   }

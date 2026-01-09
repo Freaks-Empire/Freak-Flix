@@ -1,0 +1,47 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
+      - main
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Fetch dependencies
+        run: flutter pub get
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Zip Windows release
+        shell: pwsh
+        run: |
+          $source = "build/windows/x64/runner/Release"
+          $zip = "build/freakflix-windows-release.zip"
+          if (Test-Path $zip) { Remove-Item $zip }
+          Compress-Archive -Path "$source/*" -DestinationPath $zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: freakflix-windows-release
+          path: build/freakflix-windows-release.zip
