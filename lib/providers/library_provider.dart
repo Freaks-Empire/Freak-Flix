@@ -35,33 +35,35 @@ class LibraryProvider extends ChangeNotifier {
   static const _libraryFoldersKey = 'library_folders_v1';
 
   final SettingsProvider settings;
-  
+
   // backing store
   List<MediaItem> _allItems = [];
-  
+
   // exposed to UI (filtered + user data applied)
   List<MediaItem> _filteredItems = [];
-  
+
   List<MediaItem> get items => _filteredItems;
   List<MediaItem> get allItems => List.unmodifiable(_allItems);
-  
+
   List<MediaItem> get continueWatchingItems {
     return _filteredItems.where((item) {
       final pos = item.lastPositionSeconds;
-      final total = item.totalDurationSeconds ?? (item.runtimeMinutes != null ? item.runtimeMinutes! * 60 : 0);
-      
+      final total = item.totalDurationSeconds ??
+          (item.runtimeMinutes != null ? item.runtimeMinutes! * 60 : 0);
+
       // Basic check: has position, not fully watched
       if (pos <= 0) return false;
       if (item.isWatched) return false;
-      
-      // Optional: ignore if < 5% or > 95%? 
-      // For now, raw check is fine. 
+
+      // Optional: ignore if < 5% or > 95%?
+      // For now, raw check is fine.
       // User might want to resume end credits?
       // Usually "Continue Watching" excludes finished items.
-      
+
       return true;
     }).toList()
-      ..sort((a, b) => b.lastModified.compareTo(a.lastModified)); // Most recently modified/watched first
+      ..sort((a, b) => b.lastModified
+          .compareTo(a.lastModified)); // Most recently modified/watched first
   }
 
   List<MediaItem> get historyItems {
@@ -84,22 +86,23 @@ class LibraryProvider extends ChangeNotifier {
   UserProfile? _currentProfile;
   Map<String, UserMediaData> _currentUserData = {};
 
-  void updateProfile(UserProfile? profile, Map<String, UserMediaData> userData) {
+  void updateProfile(
+      UserProfile? profile, Map<String, UserMediaData> userData) {
     _currentProfile = profile;
     _currentUserData = userData;
     _rebuildFilteredItems();
   }
-  
+
   void _rebuildFilteredItems() {
     // 1. Filter by Access Control
     Iterable<MediaItem> visible = _allItems;
-    
+
     if (_currentProfile?.allowedFolderIds != null) {
       final allowed = _currentProfile!.allowedFolderIds!.toSet();
       // Need to map items to their folder IDs.
       // Current MediaItem doesn't strictly store folder ID, but it stores 'onedrive_ACCOUNTID_FOLDERID' logic or paths.
       // We need to check if the item's folder path matches any allowed folder path.
-      
+
       // Optimization: Build a list of allowed paths prefixes
       final allowedPaths = libraryFolders
           .where((f) => allowed.contains(f.id))
@@ -107,34 +110,42 @@ class LibraryProvider extends ChangeNotifier {
           .toList();
 
       if (allowedPaths.isEmpty && allowed.isNotEmpty) {
-          // Profile has restrictions but we found no matching folder objects? Block all.
-           visible = [];
+        // Profile has restrictions but we found no matching folder objects? Block all.
+        visible = [];
       } else {
         visible = visible.where((item) {
-           final itemPath = item.folderPath.toLowerCase();
-           for (final p in allowedPaths) {
-             if (itemPath.startsWith(p)) return true;
-           }
-           return false;
+          final itemPath = item.folderPath.toLowerCase();
+          for (final p in allowedPaths) {
+            if (itemPath.startsWith(p)) return true;
+          }
+          return false;
         });
       }
     }
-    
+
+    // 1b. Hide adult content if disabled in settings
+    if (!settings.enableAdultContent) {
+      visible = visible.where((item) => !item.isAdult);
+    }
+
     // 2. Apply User Data (Watch History)
     _filteredItems = visible.map((item) {
-        final data = _currentUserData[item.id];
-        if (data != null) {
-           return item.copyWith(
-             lastPositionSeconds: data.positionSeconds,
-             isWatched: data.isWatched,
-           );
-        }
-        return item; // Item default is unwatched / 0 pos
+      final data = _currentUserData[item.id];
+      if (data != null) {
+        return item.copyWith(
+          lastPositionSeconds: data.positionSeconds,
+          isWatched: data.isWatched,
+        );
+      }
+      return item; // Item default is unwatched / 0 pos
     }).toList();
-    
+
     notifyListeners();
   }
 
+  void _onSettingsChanged() {
+    _rebuildFilteredItems();
+  }
 
   // Scan progress state
   bool isScanning = false;
@@ -155,8 +166,8 @@ class LibraryProvider extends ChangeNotifier {
     currentScanItem = null;
 
     if (Platform.isAndroid || Platform.isIOS) {
-       WakelockPlus.enable();
-       _requestNotificationPermission();
+      WakelockPlus.enable();
+      _requestNotificationPermission();
     }
 
     if (Platform.isAndroid) {
@@ -200,15 +211,15 @@ class LibraryProvider extends ChangeNotifier {
     scanningStatus = '';
 
     if (Platform.isAndroid || Platform.isIOS) {
-       WakelockPlus.disable();
+      WakelockPlus.disable();
     }
-    
+
     if (Platform.isAndroid) {
       FlutterForegroundTask.stopService();
     }
-    
+
     if (!Platform.isIOS) {
-       _showCompletionNotification();
+      _showCompletionNotification();
     }
 
     notifyListeners();
@@ -220,8 +231,14 @@ class LibraryProvider extends ChangeNotifier {
         await Permission.notification.request();
       }
     } else if (Platform.isWeb) {
-       await _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
-       await _notifications.resolvePlatformSpecificImplementation<MacOSFlutterLocalNotificationsPlugin>()?.requestPermissions(alert: true, badge: true, sound: true);
+      await _notifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+      await _notifications
+          .resolvePlatformSpecificImplementation<
+              MacOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
     }
   }
 
@@ -258,8 +275,6 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-
-
   void _updateScanningStatus() {
     if (!isScanning) {
       scanningStatus = '';
@@ -271,18 +286,19 @@ class LibraryProvider extends ChangeNotifier {
     String statusMsg = '';
 
     if (totalToScan > 0) {
-      statusMsg = 'Scanning $where  ($scannedCount / $totalToScan)â€¦ ${item.isEmpty ? '' : item}';
+      statusMsg =
+          'Scanning $where  ($scannedCount / $totalToScan)â€¦ ${item.isEmpty ? '' : item}';
     } else {
       statusMsg = 'Scanning $whereâ€¦ ${item.isEmpty ? '' : item}';
     }
 
     scanningStatus = statusMsg;
-    
+
     if (Platform.isAndroid) {
-        FlutterForegroundTask.updateService(
-          notificationTitle: 'Freak-Flix Scanning',
-          notificationText: statusMsg,
-        );
+      FlutterForegroundTask.updateService(
+        notificationTitle: 'Freak-Flix Scanning',
+        notificationText: statusMsg,
+      );
     }
   }
 
@@ -293,23 +309,29 @@ class LibraryProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    settings.removeListener(_onSettingsChanged);
     _configChangedController.close();
     super.dispose();
   }
 
   LibraryProvider(this.settings) {
-    if (!Platform.isIOS) { // Only exclude iOS from this specific init if desired, but general init is safe
-       _initNotifications();
+    if (!Platform.isIOS) {
+      // Only exclude iOS from this specific init if desired, but general init is safe
+      _initNotifications();
     }
     if (Platform.isAndroid) {
       _initForegroundTask();
     }
+
+    settings.addListener(_onSettingsChanged);
   }
 
-  final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _notifications =
+      FlutterLocalNotificationsPlugin();
 
   Future<void> _initNotifications() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestSoundPermission: false,
       requestBadgePermission: false,
@@ -318,13 +340,16 @@ class LibraryProvider extends ChangeNotifier {
     // Linux/Windows use default settings or specific if needed.
     // Windows requires no specific init settings class in basic usage, but we pass generic init.
     const initSettings = InitializationSettings(
-      android: androidSettings, 
+      android: androidSettings,
       iOS: iosSettings,
       linux: LinuxInitializationSettings(defaultActionName: 'Open'),
       macOS: iosSettings, // Reusing darwin settings
-      windows: WindowsInitializationSettings(appName: 'Freak-Flix', appUserModelId: 'com.freakflix.app', guid: '81a3d53b-9e4b-48fb-9c9b-1e247470f7d5'),
+      windows: WindowsInitializationSettings(
+          appName: 'Freak-Flix',
+          appUserModelId: 'com.freakflix.app',
+          guid: '81a3d53b-9e4b-48fb-9c9b-1e247470f7d5'),
     );
-    
+
     await _notifications.initialize(initSettings);
   }
 
@@ -333,7 +358,8 @@ class LibraryProvider extends ChangeNotifier {
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'scanning_channel',
         channelName: 'Library Scanning',
-        channelDescription: 'Shows progress when scanning library in background',
+        channelDescription:
+            'Shows progress when scanning library in background',
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.LOW,
       ),
@@ -355,15 +381,17 @@ class LibraryProvider extends ChangeNotifier {
 
   Future<void> loadLibrary() async {
     debugPrint('LibraryProvider: Loading library from file storage...');
-    
+
     // 1. Load Folders
     try {
-      final folderJson = await PersistenceService.instance.loadString(_foldersFile);
+      final folderJson =
+          await PersistenceService.instance.loadString(_foldersFile);
       if (folderJson != null) {
         libraryFolders = (jsonDecode(folderJson) as List<dynamic>)
             .map((e) => LibraryFolder.fromJson(e as Map<String, dynamic>))
             .toList();
-        debugPrint('LibraryProvider: Loaded ${libraryFolders.length} folders from file.');
+        debugPrint(
+            'LibraryProvider: Loaded ${libraryFolders.length} folders from file.');
       } else {
         // Migration check
         await _migrateFoldersFromPrefs();
@@ -372,17 +400,19 @@ class LibraryProvider extends ChangeNotifier {
       debugPrint('LibraryProvider: Error loading folders: $e');
       libraryFolders = [];
     }
-    
+
     // 2. Load Items
     try {
-      final itemsJson = await PersistenceService.instance.loadCompressed(_itemsFile);
+      final itemsJson =
+          await PersistenceService.instance.loadCompressed(_itemsFile);
       if (itemsJson != null) {
-          debugPrint('LibraryProvider: Found compressed items file. Parsing...');
-          _allItems = MediaItem.listFromJson(itemsJson);
-          debugPrint('LibraryProvider: Loaded ${_allItems.length} items from file.');
+        debugPrint('LibraryProvider: Found compressed items file. Parsing...');
+        _allItems = MediaItem.listFromJson(itemsJson);
+        debugPrint(
+            'LibraryProvider: Loaded ${_allItems.length} items from file.');
       } else {
-         debugPrint('LibraryProvider: No items file found. Checking legacy...');
-         await _migrateItemsFromPrefs();
+        debugPrint('LibraryProvider: No items file found. Checking legacy...');
+        await _migrateItemsFromPrefs();
       }
     } catch (e) {
       debugPrint('LibraryProvider: Error loading items: $e');
@@ -391,112 +421,113 @@ class LibraryProvider extends ChangeNotifier {
 
     // Reclassify/Update
     await _reclassifyItems();
-    
+
     notifyListeners();
   }
-  
+
   Future<void> _migrateFoldersFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_libraryFoldersKey);
     if (raw == null) return;
-    
+
     try {
       libraryFolders = (jsonDecode(raw) as List<dynamic>)
-            .map((e) => LibraryFolder.fromJson(e as Map<String, dynamic>))
-            .toList();
+          .map((e) => LibraryFolder.fromJson(e as Map<String, dynamic>))
+          .toList();
       await _saveLibraryFolders();
       debugPrint('LibraryProvider: Migrated folders from SharedPreferences.');
     } catch (_) {}
   }
-  
+
   Future<void> _migrateItemsFromPrefs() async {
-     final prefs = await SharedPreferences.getInstance();
-     final raw = prefs.getString(_prefsKey);
-     if (raw == null) return;
-     
-     try {
-        if (raw.trim().startsWith('[')) {
-           _allItems = MediaItem.listFromJson(raw);
-        } else {
-           final bytes = base64Decode(raw);
-           final decompressed = GZipDecoder().decodeBytes(bytes);
-           final jsonStr = utf8.decode(decompressed);
-           _allItems = MediaItem.listFromJson(jsonStr);
-        }
-        await saveLibrary();
-        debugPrint('LibraryProvider: Migrated items from SharedPreferences.');
-     } catch (_) {}
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_prefsKey);
+    if (raw == null) return;
+
+    try {
+      if (raw.trim().startsWith('[')) {
+        _allItems = MediaItem.listFromJson(raw);
+      } else {
+        final bytes = base64Decode(raw);
+        final decompressed = GZipDecoder().decodeBytes(bytes);
+        final jsonStr = utf8.decode(decompressed);
+        _allItems = MediaItem.listFromJson(jsonStr);
+      }
+      await saveLibrary();
+      debugPrint('LibraryProvider: Migrated items from SharedPreferences.');
+    } catch (_) {}
   }
 
   Future<void> _reclassifyItems() async {
-      bool updated = false;
-      for (var i = 0; i < _allItems.length; i++) {
-        final item = _allItems[i];
-        final parsed = FilenameParser.parse(item.fileName);
-        
-        // Find parent folder to determine strict type
-        LibraryFolder? parentFolder;
-        
-        // Check Cloud Folders
-        if (item.id.startsWith('onedrive_')) {
-             parentFolder = libraryFolders.firstWhereOrNull((f) {
-                 if (f.accountId.isEmpty) return false;
-                 // Ensure path has leading slash for consistency
-                 final fPath = f.path.startsWith('/') ? f.path : '/${f.path}';
-                 // If f.path is empty/root, it becomes '/'.
-                 final prefix = 'onedrive:${f.accountId}${fPath == '/' ? '/' : fPath}';
-                 return item.folderPath.startsWith(prefix);
-             });
-        } 
-        // Check Local Folders
-        else {
-             parentFolder = libraryFolders.firstWhereOrNull((f) {
-                 if (f.accountId.isNotEmpty) return false;
-                 return item.filePath.toLowerCase().startsWith(f.path.toLowerCase());
-             });
-        }
-        
-        bool newIsAnime = item.isAnime;
-        bool newIsAdult = item.isAdult;
-        MediaType newType = item.type;
-        
-        if (parentFolder != null) {
-            newIsAnime = parentFolder.type == LibraryType.anime;
-            newIsAdult = parentFolder.type == LibraryType.adult;
-            
-            // Re-infer type based on folder strictness + filename hints
-            if (parentFolder.type == LibraryType.movies) {
-               newType = MediaType.movie;
-            } else if (parentFolder.type == LibraryType.tv || parentFolder.type == LibraryType.anime) {
-               newType = MediaType.tv;
-            } else if (parentFolder.type == LibraryType.adult) {
-               newType = MediaType.scene;
-            } else {
-               // Other/Unknown: Keep inference but remove anime guessing if not strictly anime?
-               // Actually we'll keep inference for 'Other'.
-               newType = _inferTypeFromPath(item); 
-            }
-        } 
+    bool updated = false;
+    for (var i = 0; i < _allItems.length; i++) {
+      final item = _allItems[i];
+      final parsed = FilenameParser.parse(item.fileName);
 
-        final updatedItem = _allItems[i].copyWith(
-          title: parsed.seriesTitle.isNotEmpty
-              ? parsed.seriesTitle
-              : _allItems[i].title,
-          season: _allItems[i].season ??
-              parsed.season ??
-              (parsed.episode != null ? 1 : null),
-          episode: _allItems[i].episode ?? parsed.episode,
-          type: newType,
-          isAnime: newIsAnime,
-          isAdult: newIsAdult,
-          year: _allItems[i].year ?? parsed.year,
-        );
-        if (updatedItem != _allItems[i]) {
-          _allItems[i] = updatedItem;
-          updated = true;
+      // Find parent folder to determine strict type
+      LibraryFolder? parentFolder;
+
+      // Check Cloud Folders
+      if (item.id.startsWith('onedrive_')) {
+        parentFolder = libraryFolders.firstWhereOrNull((f) {
+          if (f.accountId.isEmpty) return false;
+          // Ensure path has leading slash for consistency
+          final fPath = f.path.startsWith('/') ? f.path : '/${f.path}';
+          // If f.path is empty/root, it becomes '/'.
+          final prefix = 'onedrive:${f.accountId}${fPath == '/' ? '/' : fPath}';
+          return item.folderPath.startsWith(prefix);
+        });
+      }
+      // Check Local Folders
+      else {
+        parentFolder = libraryFolders.firstWhereOrNull((f) {
+          if (f.accountId.isNotEmpty) return false;
+          return item.filePath.toLowerCase().startsWith(f.path.toLowerCase());
+        });
+      }
+
+      bool newIsAnime = item.isAnime;
+      bool newIsAdult = item.isAdult;
+      MediaType newType = item.type;
+
+      if (parentFolder != null) {
+        newIsAnime = parentFolder.type == LibraryType.anime;
+        newIsAdult = parentFolder.type == LibraryType.adult;
+
+        // Re-infer type based on folder strictness + filename hints
+        if (parentFolder.type == LibraryType.movies) {
+          newType = MediaType.movie;
+        } else if (parentFolder.type == LibraryType.tv ||
+            parentFolder.type == LibraryType.anime) {
+          newType = MediaType.tv;
+        } else if (parentFolder.type == LibraryType.adult) {
+          newType = MediaType.scene;
+        } else {
+          // Other/Unknown: Keep inference but remove anime guessing if not strictly anime?
+          // Actually we'll keep inference for 'Other'.
+          newType = _inferTypeFromPath(item);
         }
       }
-      if (updated) await saveLibrary();
+
+      final updatedItem = _allItems[i].copyWith(
+        title: parsed.seriesTitle.isNotEmpty
+            ? parsed.seriesTitle
+            : _allItems[i].title,
+        season: _allItems[i].season ??
+            parsed.season ??
+            (parsed.episode != null ? 1 : null),
+        episode: _allItems[i].episode ?? parsed.episode,
+        type: newType,
+        isAnime: newIsAnime,
+        isAdult: newIsAdult,
+        year: _allItems[i].year ?? parsed.year,
+      );
+      if (updatedItem != _allItems[i]) {
+        _allItems[i] = updatedItem;
+        updated = true;
+      }
+    }
+    if (updated) await saveLibrary();
   }
 
   Future<void> saveLibrary() async {
@@ -534,21 +565,22 @@ class LibraryProvider extends ChangeNotifier {
     // Remove associated items
     final bool isCloud = folder.accountId.isNotEmpty;
     if (isCloud) {
-       // Cloud items: ID format onedrive_{accountId}_{id}
-       // We need to be careful not to remove items from OTHER folders of same account if they exist
-       // But usually we filter by path.
-       // Let's rely on path matching.
-       final prefix = 'onedrive:${folder.accountId}${folder.path.isEmpty ? '/' : folder.path}';
-       _allItems.removeWhere((i) {
-         if (!i.id.startsWith('onedrive_${folder.accountId}_')) return false;
-         // Check if item belongs to this folder hierarchy
-         // item.folderPath example: 'onedrive:ACCOUNTID/Movies/Action'
-         // prefix: 'onedrive:ACCOUNTID/Movies'
-         return i.folderPath.startsWith(prefix);
-       });
+      // Cloud items: ID format onedrive_{accountId}_{id}
+      // We need to be careful not to remove items from OTHER folders of same account if they exist
+      // But usually we filter by path.
+      // Let's rely on path matching.
+      final prefix =
+          'onedrive:${folder.accountId}${folder.path.isEmpty ? '/' : folder.path}';
+      _allItems.removeWhere((i) {
+        if (!i.id.startsWith('onedrive_${folder.accountId}_')) return false;
+        // Check if item belongs to this folder hierarchy
+        // item.folderPath example: 'onedrive:ACCOUNTID/Movies/Action'
+        // prefix: 'onedrive:ACCOUNTID/Movies'
+        return i.folderPath.startsWith(prefix);
+      });
     } else {
-       // Local items
-       _allItems.removeWhere((i) => i.filePath.startsWith(folder.path));
+      // Local items
+      _allItems.removeWhere((i) => i.filePath.startsWith(folder.path));
     }
 
     _configChangedController.add(null);
@@ -559,10 +591,10 @@ class LibraryProvider extends ChangeNotifier {
   Future<void> removeLibraryFoldersForAccount(String accountId) async {
     libraryFolders.removeWhere((f) => f.accountId == accountId);
     await _saveLibraryFolders();
-    
+
     // Remove all items for this account
     _allItems.removeWhere((i) => i.id.startsWith('onedrive_${accountId}_'));
-    
+
     _configChangedController.add(null);
     notifyListeners();
     await saveLibrary();
@@ -577,12 +609,15 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> rescanFolder(LibraryFolder folder, {required graph_auth.GraphAuthService auth, MetadataService? metadata}) async {
+  Future<void> rescanFolder(LibraryFolder folder,
+      {required graph_auth.GraphAuthService auth,
+      MetadataService? metadata}) async {
     isLoading = true;
     notifyListeners();
     try {
       if (folder.accountId.isNotEmpty) {
-        await rescanOneDriveFolder(auth: auth, folder: folder, metadata: metadata);
+        await rescanOneDriveFolder(
+            auth: auth, folder: folder, metadata: metadata);
       } else {
         await _scanLocalFolder(folder.path, metadata: metadata);
       }
@@ -625,7 +660,7 @@ class LibraryProvider extends ChangeNotifier {
     } finally {
       finishScan();
       await saveLibrary();
-	  _configChangedController.add(null);
+      _configChangedController.add(null);
     }
   }
 
@@ -634,38 +669,44 @@ class LibraryProvider extends ChangeNotifier {
     _allItems.removeWhere((item) {
       // OneDrive
       if (item.id.startsWith('onedrive_')) {
-         return !libraryFolders.any((f) {
-             if (f.accountId.isEmpty) return false;
-             // item.id format: onedrive_{accountId}_{fileId}
-             // Ensure access to this specific account folder
-             // And strictly, check if folder path covers it.
-             final prefix = 'onedrive:${f.accountId}${f.path.isEmpty ? '/' : f.path}';
-             return item.folderPath.startsWith(prefix);
-         });
+        return !libraryFolders.any((f) {
+          if (f.accountId.isEmpty) return false;
+          // item.id format: onedrive_{accountId}_{fileId}
+          // Ensure access to this specific account folder
+          // And strictly, check if folder path covers it.
+          final prefix =
+              'onedrive:${f.accountId}${f.path.isEmpty ? '/' : f.path}';
+          return item.folderPath.startsWith(prefix);
+        });
       }
-      
+
       // Local
       return !libraryFolders.any((f) {
-          if (f.accountId.isNotEmpty) return false;
-          // Case-insensitive check for Windows friendliness
-          return item.filePath.toLowerCase().startsWith(f.path.toLowerCase());
+        if (f.accountId.isNotEmpty) return false;
+        // Case-insensitive check for Windows friendliness
+        return item.filePath.toLowerCase().startsWith(f.path.toLowerCase());
       });
     });
-    
+
     if (_allItems.length != before) {
-        debugPrint('LibraryProvider: Pruned ${before - _allItems.length} orphan items.');
-        notifyListeners();
+      debugPrint(
+          'LibraryProvider: Pruned ${before - _allItems.length} orphan items.');
+      notifyListeners();
     }
   }
 
-  Future<void> refetchAllMetadata(MetadataService metadata, {bool onlyMissing = false}) async {
+  Future<void> refetchAllMetadata(MetadataService metadata,
+      {bool onlyMissing = false}) async {
     isLoading = true;
     scanningStatus = 'Refreshing metadata...';
     notifyListeners();
 
     try {
-      final itemsToProcess = onlyMissing 
-          ? _allItems.where((i) => i.tmdbId == null && i.anilistId == null && !i.isAdult).toList()
+      final itemsToProcess = onlyMissing
+          ? _allItems
+              .where(
+                  (i) => i.tmdbId == null && i.anilistId == null && !i.isAdult)
+              .toList()
           : _allItems;
 
       if (itemsToProcess.isEmpty) {
@@ -681,9 +722,10 @@ class LibraryProvider extends ChangeNotifier {
         scanningStatus =
             'Refreshing metadata (${i + 1}/${itemsToProcess.length}) ${batch.first.title ?? batch.first.fileName}';
         notifyListeners();
-        
-        final enrichedBatch = await Future.wait(batch.map((item) => metadata.enrich(item)));
-        
+
+        final enrichedBatch =
+            await Future.wait(batch.map((item) => metadata.enrich(item)));
+
         for (int j = 0; j < batch.length; j++) {
           final enriched = enrichedBatch[j];
           final index = _allItems.indexWhere((e) => e.id == enriched.id);
@@ -695,7 +737,7 @@ class LibraryProvider extends ChangeNotifier {
 
         // Incremental save every 25 items
         if ((i + batch.length) % 25 == 0) {
-           await saveLibrary();
+          await saveLibrary();
         }
       }
 
@@ -707,14 +749,13 @@ class LibraryProvider extends ChangeNotifier {
     } finally {
       isLoading = false;
       // Clear status after a delay? For now, leave it or clear it.
-      // _setScanStatus(''); 
-      _configChangedController.add(null); 
+      // _setScanStatus('');
+      _configChangedController.add(null);
     }
   }
 
-
-
-  Future<void> pickAndScan({MetadataService? metadata, LibraryType? forcedType}) async {
+  Future<void> pickAndScan(
+      {MetadataService? metadata, LibraryType? forcedType}) async {
     error = null;
     beginScan(sourceLabel: 'Local files');
     try {
@@ -725,21 +766,23 @@ class LibraryProvider extends ChangeNotifier {
           allowedExtensions: ['mp4', 'mkv', 'avi', 'mov', 'webm'],
         );
         if (result == null) return;
-        final files = result.paths.whereType<String>().map(PlatformFile.new).toList();
+        final files =
+            result.paths.whereType<String>().map(PlatformFile.new).toList();
         await _ingestFiles(files, metadata);
       } else {
         final path = await FilePicker.platform.getDirectoryPath();
         if (path == null) return;
-        
+
         // Add to persistent library folders if not exists
         final exists = libraryFolders.any((f) => f.path == path);
         if (!exists) {
-            await addLibraryFolder(LibraryFolder(
-                id: DateTime.now().millisecondsSinceEpoch.toString(),
-                path: path,
-                accountId: '',
-                type: forcedType ?? LibraryType.other // Use forcedType if provided
-            ));
+          await addLibraryFolder(LibraryFolder(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              path: path,
+              accountId: '',
+              type:
+                  forcedType ?? LibraryType.other // Use forcedType if provided
+              ));
         }
 
         await _scanLocalFolder(path, metadata: metadata);
@@ -753,7 +796,8 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateLibraryFolderType(String folderId, LibraryType newType) async {
+  Future<void> updateLibraryFolderType(
+      String folderId, LibraryType newType) async {
     final index = libraryFolders.indexWhere((f) => f.id == folderId);
     if (index != -1) {
       final old = libraryFolders[index];
@@ -768,7 +812,8 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _ingestFiles(List<PlatformFile> files, MetadataService? metadata) async {
+  Future<void> _ingestFiles(
+      List<PlatformFile> files, MetadataService? metadata) async {
     final newItems = <MediaItem>[];
     for (final f in files) {
       if (_isVideo(f.path)) {
@@ -782,7 +827,7 @@ class LibraryProvider extends ChangeNotifier {
       List<MediaItem> newItems, MetadataService? metadata) async {
     final existingPaths = {for (var i in _allItems) i.filePath};
     final itemsToEnrich = <MediaItem>[];
-    
+
     // Identify items that are actually new to the library
     for (final item in newItems) {
       if (!existingPaths.contains(item.filePath)) {
@@ -793,138 +838,143 @@ class LibraryProvider extends ChangeNotifier {
     final map = {for (var i in _allItems) i.filePath: i};
     for (final newItem in newItems) {
       if (!map.containsKey(newItem.filePath)) {
-         map[newItem.filePath] = newItem;
+        map[newItem.filePath] = newItem;
       } else {
-         // Merge Check: If existing item has WRONG classification vs new item (which comes from strict folder), update it.
-         final existing = map[newItem.filePath]!;
-         if (existing.isAdult != newItem.isAdult || 
-             existing.isAnime != newItem.isAnime ||
-             (existing.type != newItem.type && newItem.type != MediaType.unknown)) {
-             
-             map[newItem.filePath] = existing.copyWith(
-               isAdult: newItem.isAdult,
-               isAnime: newItem.isAnime,
-               type: newItem.type != MediaType.unknown ? newItem.type : existing.type,
-             );
-         }
+        // Merge Check: If existing item has WRONG classification vs new item (which comes from strict folder), update it.
+        final existing = map[newItem.filePath]!;
+        if (existing.isAdult != newItem.isAdult ||
+            existing.isAnime != newItem.isAnime ||
+            (existing.type != newItem.type &&
+                newItem.type != MediaType.unknown)) {
+          map[newItem.filePath] = existing.copyWith(
+            isAdult: newItem.isAdult,
+            isAnime: newItem.isAnime,
+            type: newItem.type != MediaType.unknown
+                ? newItem.type
+                : existing.type,
+          );
+        }
       }
     }
     _allItems = map.values.toList()
       ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
-    
+
     _rebuildFilteredItems(); // Update filtered view immediately
     notifyListeners();
 
-    if (settings.autoFetchAfterScan && metadata != null && itemsToEnrich.isNotEmpty) {
+    if (settings.autoFetchAfterScan &&
+        metadata != null &&
+        itemsToEnrich.isNotEmpty) {
       // Parallelize metadata enrichment with a concurrency limit
       const batchSize = 5;
       for (int i = 0; i < itemsToEnrich.length; i += batchSize) {
         final batch = itemsToEnrich.skip(i).take(batchSize).toList();
-        _setScanStatus('Fetching metadata: ${batch.first.title ?? batch.first.fileName} ...');
-        final enrichedBatch = await Future.wait(batch.map((item) => metadata.enrich(item)));
-        
+        _setScanStatus(
+            'Fetching metadata: ${batch.first.title ?? batch.first.fileName} ...');
+        final enrichedBatch =
+            await Future.wait(batch.map((item) => metadata.enrich(item)));
+
         for (int j = 0; j < batch.length; j++) {
           final enriched = enrichedBatch[j];
           final index = _allItems.indexWhere((e) => e.id == enriched.id);
           if (index != -1) _allItems[index] = enriched;
-          
-           // --- Persistent Metadata (Sidecar) & Renaming Logic ---
-           _queuePersistentMetadata(enriched);
+
+          // --- Persistent Metadata (Sidecar) & Renaming Logic ---
+          _queuePersistentMetadata(enriched);
         }
 
         notifyListeners();
 
         // Incremental save every 25 items
         if ((i + batch.length) % 25 == 0) {
-           await saveLibrary();
+          await saveLibrary();
         }
       }
     }
   }
 
-
   /// Manually runs the Sidecar Write & Auto-Rename logic on ALL current items.
   void enforceSidecarsAndNaming() {
     _setScanStatus('Enforcing metadata & naming rules...');
     notifyListeners();
-    
+
     int processed = 0;
     for (final item in _allItems) {
-       _queuePersistentMetadata(item);
-       processed++;
-       if (processed % 50 == 0) notifyListeners();
+      _queuePersistentMetadata(item);
+      processed++;
+      if (processed % 50 == 0) notifyListeners();
     }
-    
+
     // We don't await the queue here, just the scheduling.
     Future.delayed(const Duration(seconds: 1), () {
-        _setScanStatus(''); // Clear status
-        notifyListeners();
+      _setScanStatus(''); // Clear status
+      notifyListeners();
     });
   }
 
   /// Helper to queue Sidecar writes and Renaming for an item
   void _queuePersistentMetadata(MediaItem enriched) {
     if (!enriched.id.startsWith('onedrive_')) return;
-    
+
     // Check if we have enough metadata to be useful
-    final hasMeta = enriched.tmdbId != null || enriched.anilistId != null || enriched.type == MediaType.scene;
+    final hasMeta = enriched.tmdbId != null ||
+        enriched.anilistId != null ||
+        enriched.type == MediaType.scene;
     if (!hasMeta) return;
 
     final parts = enriched.id.split('_');
     if (parts.length < 3) return;
-    
+
     final accountId = parts[1];
     final itemId = parts[2];
 
     // 1. Write NFO Sidecar
     final prefix = 'onedrive:$accountId';
     if (enriched.folderPath.startsWith(prefix)) {
-        var relPath = enriched.folderPath.substring(prefix.length);
-        // Robustly remove all leading slashes
-        while (relPath.startsWith('/')) {
-           relPath = relPath.substring(1);
-        }
-        final parentRef = relPath.isEmpty ? 'root' : 'root:/$relPath';
-        
-        final nfoName = '${p.basenameWithoutExtension(enriched.fileName)}.nfo';
-        
-        // "Enforce" implies ensuring it exists.
-        final nfoContent = SidecarService.generateNfo(enriched);
-        
-        TaskQueueService.instance.run('Saving metadata: $nfoName', () async {
-             await graph_auth.GraphAuthService.instance.uploadString(
-                accountId: accountId,
-                parentId: parentRef, 
-                filename: nfoName,
-                content: nfoContent,
-            );
-        });
+      var relPath = enriched.folderPath.substring(prefix.length);
+      // Robustly remove all leading slashes
+      while (relPath.startsWith('/')) {
+        relPath = relPath.substring(1);
+      }
+      final parentRef = relPath.isEmpty ? 'root' : 'root:/$relPath';
+
+      final nfoName = '${p.basenameWithoutExtension(enriched.fileName)}.nfo';
+
+      // "Enforce" implies ensuring it exists.
+      final nfoContent = SidecarService.generateNfo(enriched);
+
+      TaskQueueService.instance.run('Saving metadata: $nfoName', () async {
+        await graph_auth.GraphAuthService.instance.uploadString(
+          accountId: accountId,
+          parentId: parentRef,
+          filename: nfoName,
+          content: nfoContent,
+        );
+      });
     }
 
     // 2. Rename SCENES (Adult) if needed
     if (enriched.type == MediaType.scene && enriched.title != null) {
-        final yearPart = enriched.year != null ? ' (${enriched.year})' : '';
-        final ext = p.extension(enriched.fileName);
-        final expectedName = '${enriched.title}$yearPart$ext';
-        
-        final safeName = expectedName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '');
-        
-        if (enriched.fileName != safeName) {
-            TaskQueueService.instance.run('Renaming: ${enriched.fileName} -> $safeName', () async {
-                final ok = await graph_auth.GraphAuthService.instance.renameItem(
-                    accountId: accountId,
-                    itemId: itemId,
-                    newName: safeName
-                );
-                if (ok) {
-                  final idx = _allItems.indexWhere((e) => e.id == enriched.id);
-                  if (idx != -1) {
-                      _allItems[idx] = enriched.copyWith(fileName: safeName);
-                      notifyListeners();
-                  }
-                }
-            });
-        }
+      final yearPart = enriched.year != null ? ' (${enriched.year})' : '';
+      final ext = p.extension(enriched.fileName);
+      final expectedName = '${enriched.title}$yearPart$ext';
+
+      final safeName = expectedName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '');
+
+      if (enriched.fileName != safeName) {
+        TaskQueueService.instance
+            .run('Renaming: ${enriched.fileName} -> $safeName', () async {
+          final ok = await graph_auth.GraphAuthService.instance.renameItem(
+              accountId: accountId, itemId: itemId, newName: safeName);
+          if (ok) {
+            final idx = _allItems.indexWhere((e) => e.id == enriched.id);
+            if (idx != -1) {
+              _allItems[idx] = enriched.copyWith(fileName: safeName);
+              notifyListeners();
+            }
+          }
+        });
+      }
     }
   }
 
@@ -971,7 +1021,8 @@ class LibraryProvider extends ChangeNotifier {
         scanningStatus =
             '[$label] (${i + 1}/${targetItems.length}) ${batch.first.title ?? batch.first.fileName} ...';
         notifyListeners();
-        final enrichedBatch = await Future.wait(batch.map((item) => metadata.enrich(item)));
+        final enrichedBatch =
+            await Future.wait(batch.map((item) => metadata.enrich(item)));
         for (int j = 0; j < batch.length; j++) {
           final index = _allItems.indexWhere((e) => e.id == batch[j].id);
           if (index != -1) {
@@ -982,7 +1033,7 @@ class LibraryProvider extends ChangeNotifier {
 
         // Incremental save every 25 items
         if ((i + batch.length) % 25 == 0) {
-           await saveLibrary();
+          await saveLibrary();
         }
       }
 
@@ -993,7 +1044,7 @@ class LibraryProvider extends ChangeNotifier {
     } finally {
       isLoading = false;
       // Let the finished message linger briefly; UI may clear it after delay.
-      _configChangedController.add(null); 
+      _configChangedController.add(null);
     }
   }
 
@@ -1011,20 +1062,20 @@ class LibraryProvider extends ChangeNotifier {
       final account = auth.accounts.firstWhere(
         (a) => a.id == folder.accountId,
         orElse: () =>
-        throw Exception('No account found for id ${folder.accountId}'),
+            throw Exception('No account found for id ${folder.accountId}'),
       );
       final token = await auth.getFreshAccessToken(account.id);
-      
+
       // Client-Side Scan
       // 1. Determine Root Endpoint
       // If folder.id looks like a Graph ID (not a timestamp/uuid we generated), use it.
       // But typically we store our own IDs. We rely on path if id is not a Graph ID?
       // Actually, let's just stick to Path-based lookup for simplicity unless we stored the DriveItem ID.
       // Our LibraryFolder.id is usually a timestamp. So we use path.
-      
+
       String requestUrl;
       final baseUrl = '${auth.graphBaseUrl}/me/drive';
-      
+
       // Normalize path
       String path = folder.path.trim();
       if (path.startsWith('/')) path = path.substring(1);
@@ -1037,23 +1088,19 @@ class LibraryProvider extends ChangeNotifier {
       }
 
       _setScanStatus('Scanning cloud files in $folderLabel...');
-      
+
       final foundItems = <MediaItem>[];
       await _walkOneDriveFolder(
-        token: token, 
-        url: requestUrl, 
-      // Use proper path joining prevents double slashes
-      baseFolderPath: 'onedrive:${account.id}${path.isEmpty ? '' : '/$path'}',
-      accountId: account.id,
-      collectedItems: foundItems,
-    );
-      
-      
+        token: token,
+        url: requestUrl,
+        // Use proper path joining prevents double slashes
+        baseFolderPath: 'onedrive:${account.id}${path.isEmpty ? '' : '/$path'}',
+        accountId: account.id,
+        collectedItems: foundItems,
+      );
+
       // Ingest & Enrich (Parallel)
       await _ingestItems(foundItems, metadata);
-
-
-
     } catch (e) {
       error = 'Cloud scan failed: $e';
       debugPrint('OneDrive Scan Error: $e');
@@ -1073,120 +1120,129 @@ class LibraryProvider extends ChangeNotifier {
     required List<MediaItem> collectedItems,
   }) async {
     if (_cancelScanRequested) return;
-    
+
     String? nextLink = url;
-    
+
     while (nextLink != null && !_cancelScanRequested) {
       try {
-           final uri = Uri.parse(nextLink);
+        final uri = Uri.parse(nextLink);
 
-           final response = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+        final response =
+            await http.get(uri, headers: {'Authorization': 'Bearer $token'});
         if (response.statusCode != 200) {
-           debugPrint('Graph Walk Error: ${response.statusCode} - ${response.body}');
-           return;
+          debugPrint(
+              'Graph Walk Error: ${response.statusCode} - ${response.body}');
+          return;
         }
 
         final map = jsonDecode(response.body);
         final List<dynamic> value = map['value'] ?? [];
-        
-        for (final item in value) {
-            if (_cancelScanRequested) break;
-            
-            final name = item['name'] as String;
-            final isFolder = item['folder'] != null;
-            final isFile = item['file'] != null;
-            final id = item['id'] as String;
-            
-            if (isFolder) {
-               // Recurse
-               // "children" usage? Or construct new URL?
-               // If folder, we can just append :/children to its item path or use item ID.
-               // Using item ID is safer for special chars.
-               // URL: /me/drive/items/{item-id}/children
-               String childUrl = 'https://graph.microsoft.com/v1.0/me/drive/items/$id/children';
-               
-               await _walkOneDriveFolder(
-                 token: token,
-                 url: childUrl,
-                 baseFolderPath: '$baseFolderPath/$name',
-                 accountId: accountId,
-                 collectedItems: collectedItems,
-               );
-            } else if (isFile) {
-               // Check extension
-               if (_isVideo(name)) {
-                  _setScanStatus('Found: $name');
-                  var newItem = _createMediaItemFromGraph(item, accountId, baseFolderPath);
 
-                  // Try to read sibling NFO to lock metadata (stashid, etc.)
-                  final nfoName = '${p.basenameWithoutExtension(name)}.nfo';
-                  final nfoEntry = value.cast<Map<String, dynamic>?>().firstWhere(
+        for (final item in value) {
+          if (_cancelScanRequested) break;
+
+          final name = item['name'] as String;
+          final isFolder = item['folder'] != null;
+          final isFile = item['file'] != null;
+          final id = item['id'] as String;
+
+          if (isFolder) {
+            // Recurse
+            // "children" usage? Or construct new URL?
+            // If folder, we can just append :/children to its item path or use item ID.
+            // Using item ID is safer for special chars.
+            // URL: /me/drive/items/{item-id}/children
+            String childUrl =
+                'https://graph.microsoft.com/v1.0/me/drive/items/$id/children';
+
+            await _walkOneDriveFolder(
+              token: token,
+              url: childUrl,
+              baseFolderPath: '$baseFolderPath/$name',
+              accountId: accountId,
+              collectedItems: collectedItems,
+            );
+          } else if (isFile) {
+            // Check extension
+            if (_isVideo(name)) {
+              _setScanStatus('Found: $name');
+              var newItem =
+                  _createMediaItemFromGraph(item, accountId, baseFolderPath);
+
+              // Try to read sibling NFO to lock metadata (stashid, etc.)
+              final nfoName = '${p.basenameWithoutExtension(name)}.nfo';
+              final nfoEntry = value.cast<Map<String, dynamic>?>().firstWhere(
                     (e) => e != null && (e['name'] as String? ?? '') == nfoName,
                     orElse: () => null,
                   );
-                  final nfoDownloadUrl = nfoEntry != null ? nfoEntry['@microsoft.graph.downloadUrl'] as String? : null;
-                  if (nfoDownloadUrl != null) {
-                    try {
-                      final nfoRes = await http.get(Uri.parse(nfoDownloadUrl));
-                      if (nfoRes.statusCode == 200) {
-                        final nfoData = SidecarService.parseNfo(nfoRes.body);
-                        if (nfoData != null) {
-                          newItem = newItem.copyWith(
-                            stashId: nfoData['stashId'] as String?,
-                            tmdbId: nfoData['tmdbId'] as int? ?? newItem.tmdbId,
-                            anilistId: nfoData['anilistId'] as int? ?? newItem.anilistId,
-                            title: nfoData['title'] as String? ?? newItem.title,
-                            year: nfoData['year'] as int? ?? newItem.year,
-                          );
-                          if (nfoData['stashId'] != null) {
-                            debugPrint('LibraryProvider: Found stashid ${nfoData['stashId']} in NFO for $name');
-                          }
-                        }
+              final nfoDownloadUrl = nfoEntry != null
+                  ? nfoEntry['@microsoft.graph.downloadUrl'] as String?
+                  : null;
+              if (nfoDownloadUrl != null) {
+                try {
+                  final nfoRes = await http.get(Uri.parse(nfoDownloadUrl));
+                  if (nfoRes.statusCode == 200) {
+                    final nfoData = SidecarService.parseNfo(nfoRes.body);
+                    if (nfoData != null) {
+                      newItem = newItem.copyWith(
+                        stashId: nfoData['stashId'] as String?,
+                        tmdbId: nfoData['tmdbId'] as int? ?? newItem.tmdbId,
+                        anilistId:
+                            nfoData['anilistId'] as int? ?? newItem.anilistId,
+                        title: nfoData['title'] as String? ?? newItem.title,
+                        year: nfoData['year'] as int? ?? newItem.year,
+                      );
+                      if (nfoData['stashId'] != null) {
+                        debugPrint(
+                            'LibraryProvider: Found stashid ${nfoData['stashId']} in NFO for $name');
                       }
-                    } catch (_) {
-                      // Ignore NFO fetch errors; continue without lock
                     }
                   }
+                } catch (_) {
+                  // Ignore NFO fetch errors; continue without lock
+                }
+              }
 
-                  // Determine if adult/anime based on folder type immediately so it shows up in filtered view
-                  final parentFolder = libraryFolders.firstWhereOrNull((f) {
-                      if (f.accountId != accountId) return false;
-                      final fPath = f.path.startsWith('/') ? f.path : '/${f.path}';
-                      final prefix = 'onedrive:${f.accountId}${fPath == '/' ? '/' : fPath}';
-                      return newItem.folderPath.startsWith(prefix);
-                  });
-                  
-                  bool initialIsAdult = newItem.isAdult;
-                  bool initialIsAnime = newItem.isAnime;
-                  MediaType initialType = newItem.type;
+              // Determine if adult/anime based on folder type immediately so it shows up in filtered view
+              final parentFolder = libraryFolders.firstWhereOrNull((f) {
+                if (f.accountId != accountId) return false;
+                final fPath = f.path.startsWith('/') ? f.path : '/${f.path}';
+                final prefix =
+                    'onedrive:${f.accountId}${fPath == '/' ? '/' : fPath}';
+                return newItem.folderPath.startsWith(prefix);
+              });
 
-                  if (parentFolder != null) {
-                       if (parentFolder.type == LibraryType.adult) {
-                           initialIsAdult = true;
-                           initialType = MediaType.scene;
-                       }
-                       if (parentFolder.type == LibraryType.anime) initialIsAnime = true;
-                  }
+              bool initialIsAdult = newItem.isAdult;
+              bool initialIsAnime = newItem.isAnime;
+              MediaType initialType = newItem.type;
 
-                  final adjustedItem = newItem.copyWith(
-                      isAdult: initialIsAdult,
-                      isAnime: initialIsAnime,
-                      type: initialType
-                  );
+              if (parentFolder != null) {
+                if (parentFolder.type == LibraryType.adult) {
+                  initialIsAdult = true;
+                  initialType = MediaType.scene;
+                }
+                if (parentFolder.type == LibraryType.anime)
+                  initialIsAnime = true;
+              }
 
-                  await _ingestItems([adjustedItem], null); // No metadata fetch here!
-                  collectedItems.add(adjustedItem);
-                  
-                  scannedCount++;
-                  // Throttle saving to avoid UI jank
-                  if (scannedCount % 50 == 0) await saveLibrary();
-                  notifyListeners();
-               }
+              final adjustedItem = newItem.copyWith(
+                  isAdult: initialIsAdult,
+                  isAnime: initialIsAnime,
+                  type: initialType);
+
+              await _ingestItems(
+                  [adjustedItem], null); // No metadata fetch here!
+              collectedItems.add(adjustedItem);
+
+              scannedCount++;
+              // Throttle saving to avoid UI jank
+              if (scannedCount % 50 == 0) await saveLibrary();
+              notifyListeners();
             }
+          }
         }
-        
+
         nextLink = map['@odata.nextLink'];
-        
       } catch (e) {
         debugPrint('Graph Walk Exception: $e');
         nextLink = null;
@@ -1194,15 +1250,17 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
-  MediaItem _createMediaItemFromGraph(Map<String, dynamic> json, String accountId, String folderPath) {
+  MediaItem _createMediaItemFromGraph(
+      Map<String, dynamic> json, String accountId, String folderPath) {
     final id = json['id'] as String;
     final name = json['name'] as String;
     final size = json['size'] as int? ?? 0;
     final lastModStr = json['lastModifiedDateTime'] as String?;
-    final lastMod = lastModStr != null ? DateTime.parse(lastModStr) : DateTime.now();
-    
+    final lastMod =
+        lastModStr != null ? DateTime.parse(lastModStr) : DateTime.now();
+
     final parsed = FilenameParser.parse(name);
-    
+
     // Construct overview with Studio if available
     String? overview;
     if (parsed.studio != null) {
@@ -1211,11 +1269,17 @@ class LibraryProvider extends ChangeNotifier {
 
     List<CastMember> cast = [];
     if (parsed.performers.isNotEmpty) {
-      cast = parsed.performers.map<CastMember>((p) => CastMember(name: p, id: '', character: 'Performer', source: CastSource.stashDb)).toList();
+      cast = parsed.performers
+          .map<CastMember>((p) => CastMember(
+              name: p,
+              id: '',
+              character: 'Performer',
+              source: CastSource.stashDb))
+          .toList();
     }
     // Usually: onedrive_{accountId}_{fileId}
     final itemId = 'onedrive_${accountId}_$id';
-    
+
     return MediaItem(
       id: itemId,
       filePath: name, // Display purpose mostly
@@ -1227,24 +1291,28 @@ class LibraryProvider extends ChangeNotifier {
       year: parsed.year, // Use parsed year (from date or YYYY)
       overview: overview,
       cast: cast,
-      isAdult: parsed.studio != null, // Hint: if studio parsed, likely adult scene
+      isAdult:
+          parsed.studio != null, // Hint: if studio parsed, likely adult scene
       type: parsed.studio != null ? MediaType.scene : MediaType.unknown,
     );
   }
 
   bool _isVideo(String path) {
     final ext = p.extension(path).toLowerCase();
-    return const ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v'].contains(ext);
+    return const ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v']
+        .contains(ext);
   }
 
   MediaItem _parseFile(PlatformFile f) {
     final filePath = f.path;
     final fileName = p.basename(filePath);
     final folder = filePath.isNotEmpty ? p.dirname(filePath) : '';
-    final id = filePath.isNotEmpty ? filePath.hashCode.toString() : fileName.hashCode.toString();
-    
+    final id = filePath.isNotEmpty
+        ? filePath.hashCode.toString()
+        : fileName.hashCode.toString();
+
     final size = f.statSync().size;
-    
+
     final parsed = FilenameParser.parse(fileName);
     final animeHint = folder.toLowerCase().contains('anime');
 
@@ -1255,11 +1323,17 @@ class LibraryProvider extends ChangeNotifier {
 
     List<CastMember> cast = [];
     if (parsed.performers.isNotEmpty) {
-      cast = parsed.performers.map<CastMember>((p) => CastMember(name: p, id: '', character: 'Performer', source: CastSource.stashDb)).toList();
+      cast = parsed.performers
+          .map<CastMember>((p) => CastMember(
+              name: p,
+              id: '',
+              character: 'Performer',
+              source: CastSource.stashDb))
+          .toList();
     }
-    
-    final type = parsed.studio != null ? MediaType.scene : MediaType.movie; 
-    
+
+    final type = parsed.studio != null ? MediaType.scene : MediaType.movie;
+
     var item = MediaItem(
       id: id,
       filePath: filePath,
@@ -1302,28 +1376,21 @@ class LibraryProvider extends ChangeNotifier {
     return item;
   }
 
-
-
   Future<void> clear() async {
     _allItems = [];
     await saveLibrary();
     notifyListeners();
   }
 
-
-
-
-
   List<MediaItem> get movies =>
       items.where((i) => i.type == MediaType.movie && !i.isAdult).toList();
 
-  List<MediaItem> get adult =>
-      items.where((i) => i.isAdult).toList();
+  List<MediaItem> get adult => items.where((i) => i.isAdult).toList();
 
   // Group TV/anime by showKey and aggregate episodes under one show card.
   // TV tab excludes anime; Anime tab shows only anime.
-  List<MediaItem> get tv =>
-      _groupShows(items.where((i) => i.type == MediaType.tv && !i.isAnime && !i.isAdult));
+  List<MediaItem> get tv => _groupShows(
+      items.where((i) => i.type == MediaType.tv && !i.isAnime && !i.isAdult));
 
   List<MediaItem> get anime =>
       _groupShows(items.where((i) => i.type == MediaType.tv && i.isAnime));
@@ -1334,8 +1401,9 @@ class LibraryProvider extends ChangeNotifier {
   List<TvShowGroup> get groupedAnimeShows => _groupShowsToGroups(
       items.where((i) => i.type == MediaType.tv && i.isAnime));
 
-  List<MediaItem> get continueWatching =>
-      items.where((i) => i.lastPositionSeconds > 0 && !i.isWatched && !i.isAdult).toList();
+  List<MediaItem> get continueWatching => items
+      .where((i) => i.lastPositionSeconds > 0 && !i.isWatched && !i.isAdult)
+      .toList();
 
   List<MediaItem> get recentlyAdded {
     final sorted = items.where((i) => !i.isAdult).toList()
@@ -1350,16 +1418,16 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   /// Returns recommended local items based on type.
-  /// Logic: Unwatched items, filtered by type, sorted by Rating desc or Random? 
+  /// Logic: Unwatched items, filtered by type, sorted by Rating desc or Random?
   /// Let's go with Random unwatched for discovery, or Rating.
   /// User asked for "Recommended only show local files".
   List<MediaItem> getRecommendedLocal(DiscoverType type) {
     if (items.isEmpty) return [];
 
     // Base filter: Not Watched, Not Adult (unless specifically asked, but DiscoverType usually handles that separately)
-    // Actually DiscoverType.adult exists? 
+    // Actually DiscoverType.adult exists?
     // Let's stick to standard types.
-    
+
     var pool = items.where((i) => !i.isWatched && !i.isAdult);
 
     switch (type) {
@@ -1377,7 +1445,7 @@ class LibraryProvider extends ChangeNotifier {
         // Mixed
         break;
     }
-    
+
     // Group by Show to avoid showing every single episode
     final uniqueList = <MediaItem>[];
     final seenShows = <String>{};
@@ -1387,7 +1455,10 @@ class LibraryProvider extends ChangeNotifier {
         uniqueList.add(item);
       } else {
         // TV / Anime
-        final key = item.showKey ?? item.tmdbId?.toString() ?? item.title ?? item.folderPath;
+        final key = item.showKey ??
+            item.tmdbId?.toString() ??
+            item.title ??
+            item.folderPath;
         if (!seenShows.contains(key)) {
           seenShows.add(key);
           uniqueList.add(item);
@@ -1397,13 +1468,9 @@ class LibraryProvider extends ChangeNotifier {
 
     // Shuffle for discovery
     uniqueList.shuffle();
-    
+
     return uniqueList.take(20).toList();
   }
-
-
-
-
 
   MediaItem? findByTmdbId(int tmdbId) {
     return items.firstWhereOrNull((i) => i.tmdbId == tmdbId);
@@ -1414,36 +1481,44 @@ class LibraryProvider extends ChangeNotifier {
   Future<void> rescanItem(MediaItem item, {MetadataService? metadata}) async {
     bool targetSpecificFolder = false;
     String? scanPath;
-    
-    if (item.folderPath.isNotEmpty && PlatformDirectory(item.folderPath).existsSync()) {
+
+    if (item.folderPath.isNotEmpty &&
+        PlatformDirectory(item.folderPath).existsSync()) {
       scanPath = item.folderPath;
       targetSpecificFolder = true;
     }
 
     final keywords = <String>[];
     if (!targetSpecificFolder) {
-      final clean = (item.title ?? item.fileName).replaceAll(RegExp(r'[^a-zA-Z0-9\s]'), ' ');
-      final parts = clean.toLowerCase().split(' ').where((s) => s.isNotEmpty).toList();
+      final clean = (item.title ?? item.fileName)
+          .replaceAll(RegExp(r'[^a-zA-Z0-9\s]'), ' ');
+      final parts =
+          clean.toLowerCase().split(' ').where((s) => s.isNotEmpty).toList();
       keywords.addAll(parts);
     }
 
     if (targetSpecificFolder && scanPath != null) {
-        await _scanLocalFolder(scanPath, metadata: metadata);
+      await _scanLocalFolder(scanPath, metadata: metadata);
     } else {
       for (final folder in libraryFolders) {
         if (folder.accountId.isEmpty) {
-          await _scanLocalFolder(folder.path, metadata: metadata, keywords: keywords, libraryType: folder.type);
+          await _scanLocalFolder(folder.path,
+              metadata: metadata, keywords: keywords, libraryType: folder.type);
         }
       }
     }
   }
 
   /// Explicitly rescan a single item for metadata updates (Cloud or local).
-  Future<void> rescanSingleItem(MediaItem item, MetadataService metadata) async {
-      await _refetchMetadataForItems([item], metadata, 'Single Item');
+  Future<void> rescanSingleItem(
+      MediaItem item, MetadataService metadata) async {
+    await _refetchMetadataForItems([item], metadata, 'Single Item');
   }
 
-  Future<void> _scanLocalFolder(String path, {MetadataService? metadata, List<String>? keywords, LibraryType? libraryType}) async {
+  Future<void> _scanLocalFolder(String path,
+      {MetadataService? metadata,
+      List<String>? keywords,
+      LibraryType? libraryType}) async {
     final sourceLabel = 'Folder: $path';
     beginScan(sourceLabel: sourceLabel);
 
@@ -1470,9 +1545,10 @@ class LibraryProvider extends ChangeNotifier {
         for (var i = 0; i < scannedItems.length; i++) {
           final item = scannedItems[i];
           if (libraryType == LibraryType.adult) {
-            scannedItems[i] = item.copyWith(isAdult: true, type: MediaType.scene);
+            scannedItems[i] =
+                item.copyWith(isAdult: true, type: MediaType.scene);
           } else if (libraryType == LibraryType.anime) {
-             scannedItems[i] = item.copyWith(isAnime: true);
+            scannedItems[i] = item.copyWith(isAnime: true);
           }
         }
       }
@@ -1483,7 +1559,7 @@ class LibraryProvider extends ChangeNotifier {
     } finally {
       finishScan();
       await saveLibrary();
-	  _configChangedController.add(null);
+      _configChangedController.add(null);
     }
   }
 
@@ -1497,15 +1573,15 @@ class LibraryProvider extends ChangeNotifier {
   Map<String, UserMediaData> extractLegacyHistory() {
     final map = <String, UserMediaData>{};
     for (final item in _allItems) {
-       if (item.isWatched || item.lastPositionSeconds > 0) {
-           map[item.id] = UserMediaData(
-               mediaId: item.id,
-               positionSeconds: item.lastPositionSeconds,
-               isWatched: item.isWatched,
-               lastUpdated: DateTime.now(),
-           );
-           // Optional: clear legacy data from item? No, keep it as backup or for legacy readers.
-       }
+      if (item.isWatched || item.lastPositionSeconds > 0) {
+        map[item.id] = UserMediaData(
+          mediaId: item.id,
+          positionSeconds: item.lastPositionSeconds,
+          isWatched: item.isWatched,
+          lastUpdated: DateTime.now(),
+        );
+        // Optional: clear legacy data from item? No, keep it as backup or for legacy readers.
+      }
     }
     return map;
   }
@@ -1515,12 +1591,13 @@ class LibraryProvider extends ChangeNotifier {
     final relevant = _allItems.where((i) {
       if (folder.accountId.isNotEmpty) {
         // OneDrive items use ID convention: onedrive_{accountId}_{itemId}
-        // But checking by path is safer for nested folders? 
+        // But checking by path is safer for nested folders?
         // Our folderPath logic is 'onedrive:{accountId}:{path}'
         // Let's verify if item belongs to this library folder tree.
         // Actually, scanOneDrive uses 'onedrive:{accountId}' prefix for all items from that account.
         // To distinguish between two folders from SAME account, we need path check.
-        final rootPath = 'onedrive:${folder.accountId}${folder.path.isEmpty ? '/' : folder.path}';
+        final rootPath =
+            'onedrive:${folder.accountId}${folder.path.isEmpty ? '/' : folder.path}';
         return i.folderPath.startsWith(rootPath);
       } else {
         // Local: path starts with folder.path
@@ -1535,11 +1612,12 @@ class LibraryProvider extends ChangeNotifier {
 
   Future<void> importState(Map<String, dynamic> data) async {
     debugPrint('LibraryProvider: Importing library state...');
-    
+
     // 1. Import Folders
     final rawFolders = data['folders'] as List<dynamic>?;
     if (rawFolders != null) {
-      debugPrint('LibraryProvider: Processing ${rawFolders.length} folders from backup');
+      debugPrint(
+          'LibraryProvider: Processing ${rawFolders.length} folders from backup');
       final incomingFolders = rawFolders
           .map((e) => LibraryFolder.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -1551,61 +1629,63 @@ class LibraryProvider extends ChangeNotifier {
 
       for (final inc in incomingFolders) {
         // Check if exists by unique ID + Account
-        final existsById = mergedFolders.any((curr) => 
-            curr.id == inc.id && curr.accountId == inc.accountId);
-            
+        final existsById = mergedFolders.any(
+            (curr) => curr.id == inc.id && curr.accountId == inc.accountId);
+
         if (!existsById) {
-           // For local folders, also check by Path to avoid duplicates just because ID is different
-           if (inc.accountId.isEmpty) {
-              final existsByPath = mergedFolders.any((curr) => 
-                  curr.accountId.isEmpty && 
-                  curr.path.toLowerCase() == inc.path.toLowerCase()); // Windows insensitive
-              
-              if (!existsByPath) {
-                 mergedFolders.add(inc);
-              }
-           } else {
-              // Cloud folder: Add if ID didn't match
+          // For local folders, also check by Path to avoid duplicates just because ID is different
+          if (inc.accountId.isEmpty) {
+            final existsByPath = mergedFolders.any((curr) =>
+                curr.accountId.isEmpty &&
+                curr.path.toLowerCase() ==
+                    inc.path.toLowerCase()); // Windows insensitive
+
+            if (!existsByPath) {
               mergedFolders.add(inc);
-           }
+            }
+          } else {
+            // Cloud folder: Add if ID didn't match
+            mergedFolders.add(inc);
+          }
         }
       }
-      
+
       libraryFolders = mergedFolders;
-      debugPrint('LibraryProvider: Final folder count: ${libraryFolders.length}');
-      
+      debugPrint(
+          'LibraryProvider: Final folder count: ${libraryFolders.length}');
+
       await _saveLibraryFolders();
       notifyListeners();
     }
-
 
     // 2. Import Items
     final rawItems = data['items'];
     if (rawItems != null) {
       List<MediaItem> cloudItems = [];
-      
+
       if (rawItems is List) {
-         // Already decoded List
-         cloudItems = rawItems
-             .map((e) => MediaItem.fromJson(e as Map<String, dynamic>))
-             .toList();
+        // Already decoded List
+        cloudItems = rawItems
+            .map((e) => MediaItem.fromJson(e as Map<String, dynamic>))
+            .toList();
       } else if (rawItems is String) {
-         // Encoded String (Edge case if passed differently)
-         cloudItems = MediaItem.listFromJson(rawItems);
+        // Encoded String (Edge case if passed differently)
+        cloudItems = MediaItem.listFromJson(rawItems);
       }
-      
-      debugPrint('LibraryProvider: Processing ${cloudItems.length} items from backup');
-      
+
+      debugPrint(
+          'LibraryProvider: Processing ${cloudItems.length} items from backup');
+
       final map = {for (var i in _allItems) i.id: i};
       for (final i in cloudItems) {
         // Overwrite local with cloud/backup version
-        map[i.id] = i; 
+        map[i.id] = i;
       }
       _allItems = map.values.toList()
         ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
-      
+
       debugPrint('LibraryProvider: Final item count: ${_allItems.length}');
-      
+
       await saveLibrary();
       notifyListeners();
       _configChangedController.add(null);
@@ -1627,8 +1707,6 @@ MediaType _inferTypeFromPath(MediaItem item) {
   if (hasTvPattern) return MediaType.tv;
   return MediaType.movie;
 }
-
-
 
 String _seriesKey(MediaItem item) {
   if (item.showKey != null && item.showKey!.isNotEmpty) return item.showKey!;
@@ -1741,65 +1819,80 @@ Future<void> _scanRecursive(
   try {
     // Explicitly skip system folders that often cause crashes/hangs
     final name = p.basename(dir.path);
-    if (const {'\$Recycle.Bin', 'System Volume Information', 'Windows', 'Program Files', 'Program Files (x86)'}.contains(name)) {
-       return;
+    if (const {
+      '\$Recycle.Bin',
+      'System Volume Information',
+      'Windows',
+      'Program Files',
+      'Program Files (x86)'
+    }.contains(name)) {
+      return;
     }
 
     // List non-recursively first
-    await for (final fsEntity in dir.list(recursive: false, followLinks: false).handleError((e) { 
-        debugPrint('Skip dir error: $e'); 
+    await for (final fsEntity
+        in dir.list(recursive: false, followLinks: false).handleError((e) {
+      debugPrint('Skip dir error: $e');
     })) {
       try {
         if (fsEntity is PlatformFile) {
-           final pathStr = fsEntity.path;
-           final ext = p.extension(pathStr).toLowerCase();
-           final isVideo = const ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v'].contains(ext);
-           
-           if (isVideo) {
-               if (keywords != null && keywords.isNotEmpty) {
-                   final fName = p.basename(pathStr).toLowerCase();
-                   if (!keywords.any((k) => fName.contains(k))) continue;
-               }
+          final pathStr = fsEntity.path;
+          final ext = p.extension(pathStr).toLowerCase();
+          final isVideo = const [
+            '.mp4',
+            '.mkv',
+            '.avi',
+            '.mov',
+            '.webm',
+            '.m4v'
+          ].contains(ext);
 
-               final fileName = p.basename(pathStr);
-               // Stat might fail too
-               final stat = fsEntity.statSync();
+          if (isVideo) {
+            if (keywords != null && keywords.isNotEmpty) {
+              final fName = p.basename(pathStr).toLowerCase();
+              if (!keywords.any((k) => fName.contains(k))) continue;
+            }
 
-               final parsed = FilenameParser.parse(fileName);
+            final fileName = p.basename(pathStr);
+            // Stat might fail too
+            final stat = fsEntity.statSync();
 
-               final item = MediaItem(
-                  id: pathStr.hashCode.toString(),
-                  filePath: pathStr,
-                  fileName: fileName,
-                  folderPath: p.dirname(pathStr),
-                  sizeBytes: stat.size,
-                  lastModified: stat.modified,
-                  title: parsed.seriesTitle,
-                  year: parsed.year,
-                  type: parsed.studio != null ? MediaType.scene : MediaType.movie,
-                  season: parsed.season,
-                  episode: parsed.episode,
-                  isAnime: pathStr.toLowerCase().contains('anime'),
-                  showKey: p.dirname(pathStr).toLowerCase(),
-                  isAdult: parsed.studio != null,
-               );
+            final parsed = FilenameParser.parse(fileName);
 
-               buffer.add(item);
-               
-               // Debug Log for crash tracing
-               // debugPrint('Scanned: $pathStr');
+            final item = MediaItem(
+              id: pathStr.hashCode.toString(),
+              filePath: pathStr,
+              fileName: fileName,
+              folderPath: p.dirname(pathStr),
+              sizeBytes: stat.size,
+              lastModified: stat.modified,
+              title: parsed.seriesTitle,
+              year: parsed.year,
+              type: parsed.studio != null ? MediaType.scene : MediaType.movie,
+              season: parsed.season,
+              episode: parsed.episode,
+              isAnime: pathStr.toLowerCase().contains('anime'),
+              showKey: p.dirname(pathStr).toLowerCase(),
+              isAdult: parsed.studio != null,
+            );
 
-               if (buffer.length >= bufferSize) {
-                  sendPort.send(List<MediaItem>.from(buffer));
-                  buffer.clear();
-               }
-           }
+            buffer.add(item);
+
+            // Debug Log for crash tracing
+            // debugPrint('Scanned: $pathStr');
+
+            if (buffer.length >= bufferSize) {
+              sendPort.send(List<MediaItem>.from(buffer));
+              buffer.clear();
+            }
+          }
         } else if (fsEntity is PlatformDirectory) {
-           // Recurse manually
-           await _scanRecursive(fsEntity, keywords, buffer, sendPort, bufferSize);
+          // Recurse manually
+          await _scanRecursive(
+              fsEntity, keywords, buffer, sendPort, bufferSize);
         }
       } catch (innerE) {
-         // debugPrint('Skip entity error: $innerE');
+        // debugPrint('Skip entity error: $innerE');
       }
     }
   } catch (dirE) {
@@ -1829,11 +1922,10 @@ Future<void> _scanDirectoryInIsolate(_ScanRequest request) async {
     if (buffer.isNotEmpty) {
       sendPort.send(List<MediaItem>.from(buffer));
     }
-    
+
     sendPort.send(true); // DONE signal
   } catch (e) {
     debugPrint('Isolate Fatal Error: $e');
     sendPort.send(true);
   }
 }
-

@@ -1,15 +1,3 @@
-<#
-build_release.ps1
-One-click Flutter Windows MSIX release with Git-driven versioning and appinstaller generation.
-
-Steps:
-- Compute version as Major.Minor (static) + commit count + revision.
-- Update msix_config in pubspec.yaml (version, display name, identity, publisher).
-- Build Windows release and MSIX.
-- Rename MSIX to include the version and emit an appinstaller pointing to GitHub Pages.
-- Print git push/upload instructions.
-#>
-
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -57,12 +45,12 @@ flutter build windows --release
 flutter pub run msix:create
 
 $msixName   = "FreakFlix_$fullVersion.msix"
-$msixSource = Join-Path $PSScriptRoot 'build\windows\x64\runner\Release\app.msix'
-$msixDest   = Join-Path $PSScriptRoot "build\windows\x64\runner\Release\$msixName"
-
-if (-not (Test-Path $msixSource)) {
-    throw "MSIX not found at $msixSource. Check msix:create output path."
+$msixDir    = Join-Path $PSScriptRoot 'build\windows\x64\runner\Release'
+$msixSource = Get-ChildItem -Path $msixDir -Filter *.msix -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if (-not $msixSource) {
+    throw "MSIX not found in $msixDir. Check msix:create output path."
 }
+$msixDest = Join-Path $msixDir $msixName
 Copy-Item $msixSource $msixDest -Force
 Write-Host "MSIX prepared: $msixDest" -ForegroundColor Green
 
