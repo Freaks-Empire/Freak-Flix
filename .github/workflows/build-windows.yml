@@ -29,6 +29,16 @@ jobs:
       - name: Fetch dependencies
         run: flutter pub get
 
+      - name: Compute git version
+        shell: pwsh
+        run: |
+          $branch = $env:GITHUB_REF_NAME
+          if (-not $branch) { $branch = git rev-parse --abbrev-ref HEAD }
+          $sha = $env:GITHUB_SHA
+          $short = if ($sha) { $sha.Substring(0,7) } else { git rev-parse --short HEAD }
+          $version = "$branch@$short"
+          echo "GIT_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Create .env (prefer secret)
         shell: pwsh
         env:
@@ -42,7 +52,9 @@ jobs:
           }
 
       - name: Build Windows release
-        run: flutter build windows --release
+        env:
+          GIT_VERSION: ${{ env.GIT_VERSION }}
+        run: flutter build windows --release --dart-define=GIT_VERSION=$env:GIT_VERSION
 
       - name: Zip Windows release
         shell: pwsh
