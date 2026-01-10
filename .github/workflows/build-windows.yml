@@ -76,7 +76,7 @@ jobs:
       - name: Copy versioned exe
         shell: pwsh
         run: |
-          $source = "build/windows/x64/runner/Release/freak_flix.exe"
+          $source = "build/windows/x64/runner/Release/freakflix.exe"
           $target = "build/windows/x64/runner/Release/freakflix-$($env:BUILD_NUMBER).exe"
           if (Test-Path $source) { Copy-Item $source $target -Force }
           else { throw "Executable not found at $source" }
