@@ -1382,37 +1382,49 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<MediaItem> get movies =>
-      items.where((i) => i.type == MediaType.movie && !i.isAdult).toList();
+    List<MediaItem> get movies => settings.enableAdultContent
+      ? items.where((i) => i.type == MediaType.movie).toList()
+      : items.where((i) => i.type == MediaType.movie && !i.isAdult).toList();
 
   List<MediaItem> get adult => items.where((i) => i.isAdult).toList();
 
   // Group TV/anime by showKey and aggregate episodes under one show card.
   // TV tab excludes anime; Anime tab shows only anime.
-  List<MediaItem> get tv => _groupShows(
-      items.where((i) => i.type == MediaType.tv && !i.isAnime && !i.isAdult));
+    List<MediaItem> get tv => _groupShows(settings.enableAdultContent
+      ? items.where((i) => i.type == MediaType.tv && !i.isAnime)
+      : items.where((i) => i.type == MediaType.tv && !i.isAnime && !i.isAdult));
 
   List<MediaItem> get anime =>
       _groupShows(items.where((i) => i.type == MediaType.tv && i.isAnime));
 
-  List<TvShowGroup> get groupedTvShows => _groupShowsToGroups(
-      items.where((i) => i.type == MediaType.tv && !i.isAnime && !i.isAdult));
+    List<TvShowGroup> get groupedTvShows => _groupShowsToGroups(
+      settings.enableAdultContent
+        ? items.where((i) => i.type == MediaType.tv && !i.isAnime)
+        : items
+          .where((i) => i.type == MediaType.tv && !i.isAnime && !i.isAdult));
 
   List<TvShowGroup> get groupedAnimeShows => _groupShowsToGroups(
       items.where((i) => i.type == MediaType.tv && i.isAnime));
 
-  List<MediaItem> get continueWatching => items
-      .where((i) => i.lastPositionSeconds > 0 && !i.isWatched && !i.isAdult)
-      .toList();
+    List<MediaItem> get continueWatching => settings.enableAdultContent
+      ? items
+        .where((i) => i.lastPositionSeconds > 0 && !i.isWatched)
+        .toList()
+      : items
+        .where((i) =>
+          i.lastPositionSeconds > 0 && !i.isWatched && !i.isAdult)
+        .toList();
 
   List<MediaItem> get recentlyAdded {
-    final sorted = items.where((i) => !i.isAdult).toList()
+    final pool = settings.enableAdultContent ? items : items.where((i) => !i.isAdult);
+    final sorted = pool.toList()
       ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
     return sorted.take(20).toList();
   }
 
   List<MediaItem> get topRated {
-    final sorted = items.where((i) => !i.isAdult).toList()
+    final pool = settings.enableAdultContent ? items : items.where((i) => !i.isAdult);
+    final sorted = pool.toList()
       ..sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
     return sorted.take(20).toList();
   }
@@ -1424,11 +1436,10 @@ class LibraryProvider extends ChangeNotifier {
   List<MediaItem> getRecommendedLocal(DiscoverType type) {
     if (items.isEmpty) return [];
 
-    // Base filter: Not Watched, Not Adult (unless specifically asked, but DiscoverType usually handles that separately)
-    // Actually DiscoverType.adult exists?
-    // Let's stick to standard types.
-
-    var pool = items.where((i) => !i.isWatched && !i.isAdult);
+    // Base filter: Not Watched; include adult only when allowed.
+    var pool = settings.enableAdultContent
+      ? items.where((i) => !i.isWatched)
+      : items.where((i) => !i.isWatched && !i.isAdult);
 
     switch (type) {
       case DiscoverType.movie:
