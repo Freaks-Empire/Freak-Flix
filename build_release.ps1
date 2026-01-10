@@ -50,8 +50,9 @@ $msixSource = Get-ChildItem -Path $msixDir -Filter *.msix -File | Sort-Object La
 if (-not $msixSource) {
     throw "MSIX not found in $msixDir. Check msix:create output path."
 }
+$msixSourcePath = $msixSource.FullName
 $msixDest = Join-Path $msixDir $msixName
-Copy-Item $msixSource $msixDest -Force
+Copy-Item $msixSourcePath $msixDest -Force
 Write-Host "MSIX prepared: $msixDest" -ForegroundColor Green
 
 # --- 4) Generate/Update appinstaller ---
