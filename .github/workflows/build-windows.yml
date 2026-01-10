@@ -4,12 +4,20 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - dev
       - main
+      - dev
+
+permissions:
+  contents: write
 
 jobs:
   build-windows:
     runs-on: windows-latest
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+      GRAPH_CLIENT_ID: ${{ secrets.GRAPH_CLIENT_ID }}
+      GRAPH_TENANT_ID: ${{ secrets.GRAPH_TENANT_ID }}
+      TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,24 +28,11 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Flutter version
-        run: flutter --version
-
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
 
-      - name: Fetch dependencies
-        run: flutter pub get
-
-      - name: Compute git version
-        shell: pwsh
-        run: |
-          $branch = $env:GITHUB_REF_NAME
-          if (-not $branch) { $branch = git rev-parse --abbrev-ref HEAD }
-          $sha = $env:GITHUB_SHA
-          $short = if ($sha) { $sha.Substring(0,7) } else { git rev-parse --short HEAD }
-          $version = "$branch@$short"
-          echo "GIT_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Flutter version
+        run: flutter --version
 
       - name: Create .env (prefer secret)
         shell: pwsh
@@ -45,27 +40,78 @@ jobs:
           ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
         run: |
           if ($env:ENV_FILE_CONTENT) {
-            # Write multiline secret into .env
             $env:ENV_FILE_CONTENT | Out-File -FilePath ".env" -Encoding utf8
           } elseif (-Not (Test-Path ".env") -and (Test-Path ".env.example")) {
             Copy-Item ".env.example" ".env"
+          } else {
+            # Minimal .env to satisfy build-time defines if provided as secrets
+            "GRAPH_CLIENT_ID=$($env:GRAPH_CLIENT_ID)" | Out-File -FilePath ".env" -Encoding utf8
+            "GRAPH_TENANT_ID=$($env:GRAPH_TENANT_ID)" | Out-File -FilePath ".env" -Append -Encoding utf8
+            "TRAKT_CLIENT_ID=$($env:TRAKT_CLIENT_ID)" | Out-File -FilePath ".env" -Append -Encoding utf8
           }
 
-      - name: Build Windows release
-        env:
-          GIT_VERSION: ${{ env.GIT_VERSION }}
-        run: flutter build windows --release --dart-define=GIT_VERSION=$env:GIT_VERSION
+      - name: Install dependencies
+        run: flutter pub get
 
-      - name: Zip Windows release
+      - name: Compute git version
         shell: pwsh
         run: |
-          $source = "build/windows/x64/runner/Release"
-          $zip = "build/freakflix-windows-release.zip"
-          if (Test-Path $zip) { Remove-Item $zip }
-          Compress-Archive -Path "$source/*" -DestinationPath $zip
+          $branch = $env:GITHUB_REF_NAME
+          if (-not $branch) { $branch = git rev-parse --abbrev-ref HEAD }
+          $short = git rev-parse --short HEAD
+          $version = "$branch@$short"
+          echo "GIT_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Upload artifact
+      - name: Build Windows release with run_number
+        env:
+          GIT_VERSION: ${{ env.GIT_VERSION }}
+        run: >
+          flutter build windows --release
+          --build-number ${{ env.BUILD_NUMBER }}
+          --dart-define=GIT_VERSION=${{ env.GIT_VERSION }}
+          --dart-define=GRAPH_CLIENT_ID=${{ env.GRAPH_CLIENT_ID }}
+          --dart-define=GRAPH_TENANT_ID=${{ env.GRAPH_TENANT_ID }}
+          --dart-define=TRAKT_CLIENT_ID=${{ env.TRAKT_CLIENT_ID }}
+
+      - name: Copy versioned exe
+        shell: pwsh
+        run: |
+          $source = "build/windows/x64/runner/Release/freak_flix.exe"
+          $target = "build/windows/x64/runner/Release/freakflix-$($env:BUILD_NUMBER).exe"
+          if (Test-Path $source) { Copy-Item $source $target -Force }
+          else { throw "Executable not found at $source" }
+
+      - name: Generate version.json
+        shell: pwsh
+        run: |
+          $versionLine = (Get-Content pubspec.yaml | Select-String '^version:\s*([0-9]+\.[0-9]+\.[0-9]+)').Matches[0].Groups[1].Value
+          $build = [int]$env:BUILD_NUMBER
+          $repo = "${{ github.repository }}"
+          $tag = "build-$build"
+          $exeFile = "freakflix-$build.exe"
+          $exeUrl = "https://github.com/$repo/releases/download/$tag/$exeFile"
+          $payload = @{ version = $versionLine; build = $build; exeUrl = $exeUrl }
+          $payload | ConvertTo-Json -Depth 4 | Out-File -FilePath version.json -Encoding utf8
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: freakflix-windows-release
-          path: build/freakflix-windows-release.zip
+          name: freakflix-windows-${{ env.BUILD_NUMBER }}
+          path: |
+            build/windows/x64/runner/Release/freakflix-${{ env.BUILD_NUMBER }}.exe
+            version.json
+
+      - name: Publish Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ env.BUILD_NUMBER }}
+          name: Build ${{ env.BUILD_NUMBER }}
+          files: |
+            build/windows/x64/runner/Release/freakflix-${{ env.BUILD_NUMBER }}.exe
+            version.json
+          body: |
+            Automated Windows build.
+            Commit: ${{ github.sha }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,7 +1,7 @@
 name: freak_flix
 description: "Freak-Flix: local-only Netflix-style media library"
 publish_to: "none"
-version: 1.1.0+1
+version: 1.1.0+0
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -60,8 +60,10 @@ flutter:
     - assets/
 
 msix_config:
-  display_name: Freak-Flix [99438dc]
+  display_name: Freak-Flix [13c733a]
   identity_name: FreaksEmpire.FreakFlix
   publisher: CN=MNDL
-  msix_version: 1.0.364.0
+  msix_version: 1.0.366.0
+  certificate_path: C:/certs/freakflix-dev.pfx
+  certificate_password: P@ssw0rd!
   store: false

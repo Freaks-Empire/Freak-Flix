@@ -23,6 +23,63 @@ class _SearchScreenState extends State<SearchScreen> {
   Timer? _debounce;
   List<String> _recentSearches = [];
 
+  // Lightweight diacritic folding for common Latin characters so searches stay ASCII-only.
+  static const Map<String, String> _folding = {
+    'á': 'a',
+    'à': 'a',
+    'â': 'a',
+    'ä': 'a',
+    'ã': 'a',
+    'å': 'a',
+    'ç': 'c',
+    'é': 'e',
+    'è': 'e',
+    'ê': 'e',
+    'ë': 'e',
+    'í': 'i',
+    'ì': 'i',
+    'î': 'i',
+    'ï': 'i',
+    'ñ': 'n',
+    'ó': 'o',
+    'ò': 'o',
+    'ô': 'o',
+    'ö': 'o',
+    'õ': 'o',
+    'ú': 'u',
+    'ù': 'u',
+    'û': 'u',
+    'ü': 'u',
+    'ý': 'y',
+    'ÿ': 'y',
+    'Á': 'a',
+    'À': 'a',
+    'Â': 'a',
+    'Ä': 'a',
+    'Ã': 'a',
+    'Å': 'a',
+    'Ç': 'c',
+    'É': 'e',
+    'È': 'e',
+    'Ê': 'e',
+    'Ë': 'e',
+    'Í': 'i',
+    'Ì': 'i',
+    'Î': 'i',
+    'Ï': 'i',
+    'Ñ': 'n',
+    'Ó': 'o',
+    'Ò': 'o',
+    'Ô': 'o',
+    'Ö': 'o',
+    'Õ': 'o',
+    'Ú': 'u',
+    'Ù': 'u',
+    'Û': 'u',
+    'Ü': 'u',
+    'Ý': 'y',
+  };
+
   @override
   void initState() {
     super.initState();
@@ -53,29 +110,29 @@ class _SearchScreenState extends State<SearchScreen> {
     await prefs.setStringList('recent_searches', list);
     setState(() => _recentSearches = list);
   }
-  
+
   Future<void> _removeRecent(String query) async {
-      final prefs = await SharedPreferences.getInstance();
-      final list = prefs.getStringList('recent_searches') ?? [];
-      list.remove(query);
-      await prefs.setStringList('recent_searches', list);
-      setState(() => _recentSearches = list);
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('recent_searches') ?? [];
+    list.remove(query);
+    await prefs.setStringList('recent_searches', list);
+    setState(() => _recentSearches = list);
   }
 
   Future<void> _clearRecents() async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('recent_searches');
-      setState(() => _recentSearches = []);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('recent_searches');
+    setState(() => _recentSearches = []);
   }
 
   void _onSearchChanged(String query) {
     if (query.isEmpty) {
       if (_debounce?.isActive ?? false) _debounce!.cancel();
-        setState(() {
-            _isSearching = false;
-            _results = [];
-        });
-        return;
+      setState(() {
+        _isSearching = false;
+        _results = [];
+      });
+      return;
     }
 
     if (_debounce?.isActive ?? false) _debounce!.cancel();
@@ -86,7 +143,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Future<void> _performSearch(String query) async {
     if (query.isEmpty) return;
-    
+
     setState(() {
       _isSearching = true;
       _loading = true;
@@ -95,9 +152,10 @@ class _SearchScreenState extends State<SearchScreen> {
     try {
       final service = context.read<TmdbService>();
       final results = await service.searchMulti(query);
+      final filtered = _filterResults(results, query);
       if (mounted) {
         setState(() {
-          _results = results;
+          _results = filtered;
           _loading = false;
         });
         _addRecent(query);
@@ -105,6 +163,31 @@ class _SearchScreenState extends State<SearchScreen> {
     } catch (e) {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  List<TmdbItem> _filterResults(List<TmdbItem> items, String query) {
+    final q = _normalizeText(query);
+    if (q.isEmpty) return items;
+    final tokens =
+        q.split(' ').where((token) => token.isNotEmpty).toList(growable: false);
+    if (tokens.isEmpty) return items;
+
+    bool matches(TmdbItem item) {
+      final title = _normalizeText(item.title);
+      final overview = _normalizeText(item.overview ?? '');
+      final haystack = '$title $overview';
+      // Require every token to appear somewhere in the title or overview.
+      return tokens.every((t) => haystack.contains(t));
+    }
+
+    return items.where(matches).toList(growable: false);
+  }
+
+  String _normalizeText(String input) {
+    final lower = input.toLowerCase();
+    final folded = lower.split('').map((ch) => _folding[ch] ?? ch).join();
+    final cleaned = folded.replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
+    return cleaned.trim().replaceAll(RegExp(r' +'), ' ');
   }
 
   @override
@@ -131,26 +214,28 @@ class _SearchScreenState extends State<SearchScreen> {
                 },
               ),
             ),
-            
+
             // LOADING INDICATOR
             if (_loading)
-               const SliverToBoxAdapter(
-                 child: Padding(
-                   padding: EdgeInsets.only(top: 100),
-                   child: Center(child: CircularProgressIndicator(color: AppColors.accent)),
-                 ),
-               )
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.only(top: 100),
+                  child: Center(
+                      child:
+                          CircularProgressIndicator(color: AppColors.accent)),
+                ),
+              )
 
             // 2. CONTENT SWITCHER
             else if (!_isSearching) ...[
               // ZERO STATE (Discovery)
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
-              
+
               // RECENT SEARCHES
               if (_recentSearches.isNotEmpty) ...[
                 SliverToBoxAdapter(
                   child: SectionHeader(
-                    title: "Recent Searches", 
+                    title: "Recent Searches",
                     action: "Clear All",
                     onAction: _clearRecents,
                   ),
@@ -158,12 +243,12 @@ class _SearchScreenState extends State<SearchScreen> {
                 SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (ctx, index) => RecentSearchTile(
-                        text: _recentSearches[index],
-                        onTap: () {
-                             _controller.text = _recentSearches[index];
-                             _performSearch(_recentSearches[index]);
-                        },
-                        onDelete: () => _removeRecent(_recentSearches[index]),
+                      text: _recentSearches[index],
+                      onTap: () {
+                        _controller.text = _recentSearches[index];
+                        _performSearch(_recentSearches[index]);
+                      },
+                      onDelete: () => _removeRecent(_recentSearches[index]),
                     ),
                     childCount: _recentSearches.length,
                   ),
@@ -171,26 +256,27 @@ class _SearchScreenState extends State<SearchScreen> {
                 const SliverToBoxAdapter(child: SizedBox(height: 32)),
               ],
 
-              const SliverToBoxAdapter(child: SectionHeader(title: "Browse by Genre")),
+              const SliverToBoxAdapter(
+                  child: SectionHeader(title: "Browse by Genre")),
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                sliver: SliverToBoxAdapter(
-                    child: GenreCloud(
-                        onGenreSelected: (genre) {
-                            _controller.text = genre;
-                            _performSearch(genre);
-                        },
-                    )
-                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                sliver: SliverToBoxAdapter(child: GenreCloud(
+                  onGenreSelected: (genre) {
+                    _controller.text = genre;
+                    _performSearch(genre);
+                  },
+                )),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
-              
+
               // TRENDING
-              const SliverToBoxAdapter(child: SectionHeader(title: "Trending Today")),
+              const SliverToBoxAdapter(
+                  child: SectionHeader(title: "Trending Today")),
               const SliverToBoxAdapter(child: SizedBox(height: 12)),
               const SliverToBoxAdapter(child: TrendingHorizontalList()),
-              const SliverToBoxAdapter(child: SizedBox(height: 40)), // Bottom padding
-
+              const SliverToBoxAdapter(
+                  child: SizedBox(height: 40)), // Bottom padding
             ] else ...[
               // ACTIVE SEARCH RESULTS GRID
               SliverPadding(

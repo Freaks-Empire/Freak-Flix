@@ -68,7 +68,7 @@ $appInstallerXml = @"
         Uri="$packageUriBase/FreakFlix.appinstaller">
     <MainPackage
         Name="FreaksEmpire.FreakFlix"
-        Publisher="CN=MNDL"
+    Publisher="CN=FreakFlix Dev"
         Version="$fullVersion"
         ProcessorArchitecture="x64"
         Uri="$packageUriBase/$msixName" />
