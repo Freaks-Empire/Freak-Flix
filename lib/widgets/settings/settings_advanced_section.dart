@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../providers/settings_provider.dart';
 import '../../services/stash_db_service.dart';
@@ -18,6 +19,8 @@ class SettingsAdvancedSection extends StatefulWidget {
 class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
   final StashDbService _stashService = StashDbService();
   String _version = '';
+
+  static final _appInstallerUri = Uri.parse('https://freaks-empire.github.io/Freak-Flix/FreakFlix.appinstaller');
 
   // Controllers for Dialog
   final _stashNameCtrl = TextEditingController();
@@ -145,7 +148,12 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
               icon: LucideIcons.info,
               title: 'App Version',
               subtitle: _version.isEmpty ? 'Loading...' : _version,
-              trailing: const SizedBox(),
+              trailing: FilledButton.icon(
+                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12)),
+                onPressed: _launchUpdater,
+                icon: const Icon(LucideIcons.refreshCcw, size: 16),
+                label: const Text('Check update'),
+              ),
               isLast: true,
             ),
           ],
@@ -248,6 +256,16 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
                 ),
               ],
             );
+          }
+
+          Future<void> _launchUpdater() async {
+            if (!await launchUrl(_appInstallerUri, mode: LaunchMode.externalApplication)) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Unable to open updater')), 
+                );
+              }
+            }
           }
         ),
       );
