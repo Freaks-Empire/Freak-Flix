@@ -3,6 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 import '../../providers/settings_provider.dart';
 import '../../services/stash_db_service.dart';
@@ -21,8 +25,8 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
   final StashDbService _stashService = StashDbService();
   String _version = '';
 
-  static final _appInstallerUri = Uri.parse(
-      'https://freaks-empire.github.io/Freak-Flix/FreakFlix.appinstaller');
+  // URL to your version.json in GitHub Releases or static branch
+  static const _versionJsonUrl = 'https://github.com/Freaks-Empire/Freak-Flix/releases/download/build-13/version.json';
 
   // Controllers for Dialog
   final _stashNameCtrl = TextEditingController();
@@ -280,13 +284,58 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
   }
 
   Future<void> _launchUpdater() async {
-    if (!await launchUrl(_appInstallerUri,
-        mode: LaunchMode.externalApplication)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unable to open updater')),
-        );
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final currentBuild = int.tryParse(info.buildNumber) ?? 0;
+      final res = await http.get(Uri.parse(_versionJsonUrl));
+      if (res.statusCode != 200) {
+        messenger.showSnackBar(const SnackBar(content: Text('Update check failed (version.json not found)')));
+        return;
       }
+      final data = jsonDecode(res.body);
+      final remoteBuild = data['build'] as int? ?? 0;
+      final remoteVersion = data['version'] as String? ?? '';
+      final exeUrl = data['exeUrl'] as String?;
+      final changelog = data['changelog'] as String? ?? '';
+      if (remoteBuild > currentBuild && exeUrl != null) {
+        // Show update dialog
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('Update Available ($remoteVersion)'),
+            content: Text('A new version is available.\n\n$changelog'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Update & Restart')),
+            ],
+          ),
+        );
+        if (confirmed == true) {
+          try {
+            messenger.showSnackBar(const SnackBar(content: Text('Downloading update...')));
+            final tempDir = await getTemporaryDirectory();
+            final exeName = exeUrl.split('/').last;
+            final exePath = '${tempDir.path}/$exeName';
+            final exeRes = await http.get(Uri.parse(exeUrl));
+            if (exeRes.statusCode != 200) {
+              messenger.showSnackBar(const SnackBar(content: Text('Failed to download update.')));
+              return;
+            }
+            final file = File(exePath);
+            await file.writeAsBytes(exeRes.bodyBytes);
+            messenger.showSnackBar(const SnackBar(content: Text('Launching updater...')));
+            await Process.start(exePath, [], mode: ProcessStartMode.detached);
+            exit(0);
+          } catch (e) {
+            messenger.showSnackBar(SnackBar(content: Text('Update failed: $e')));
+          }
+        }
+      } else {
+        messenger.showSnackBar(const SnackBar(content: Text('You are up to date.')));
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Update check failed: $e')));
     }
   }
 }
