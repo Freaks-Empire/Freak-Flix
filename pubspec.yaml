@@ -64,6 +64,4 @@ msix_config:
   identity_name: FreaksEmpire.FreakFlix
   publisher: CN=MNDL
   msix_version: 1.0.366.0
-  certificate_path: C:/certs/freakflix-dev.pfx
-  certificate_password: P@ssw0rd!
-  store: false
+  store: true
