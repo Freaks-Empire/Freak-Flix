@@ -26,7 +26,8 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
   String _version = '';
 
   // URL to your version.json in GitHub Releases or static branch
-  static const _versionJsonUrl = 'https://github.com/Freaks-Empire/Freak-Flix/releases/download/build-13/version.json';
+  static const _versionJsonUrl =
+      'https://github.com/Freaks-Empire/Freak-Flix/releases/download/build-13/version.json';
 
   // Controllers for Dialog
   final _stashNameCtrl = TextEditingController();
@@ -290,7 +291,8 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
       final currentBuild = int.tryParse(info.buildNumber) ?? 0;
       final res = await http.get(Uri.parse(_versionJsonUrl));
       if (res.statusCode != 200) {
-        messenger.showSnackBar(const SnackBar(content: Text('Update check failed (version.json not found)')));
+        messenger.showSnackBar(const SnackBar(
+            content: Text('Update check failed (version.json not found)')));
         return;
       }
       final data = jsonDecode(res.body);
@@ -306,36 +308,46 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
             title: Text('Update Available ($remoteVersion)'),
             content: Text('A new version is available.\n\n$changelog'),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Update & Restart')),
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel')),
+              FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Update & Restart')),
             ],
           ),
         );
         if (confirmed == true) {
           try {
-            messenger.showSnackBar(const SnackBar(content: Text('Downloading update...')));
+            messenger.showSnackBar(
+                const SnackBar(content: Text('Downloading update...')));
             final tempDir = await getTemporaryDirectory();
             final exeName = exeUrl.split('/').last;
             final exePath = '${tempDir.path}/$exeName';
             final exeRes = await http.get(Uri.parse(exeUrl));
             if (exeRes.statusCode != 200) {
-              messenger.showSnackBar(const SnackBar(content: Text('Failed to download update.')));
+              messenger.showSnackBar(
+                  const SnackBar(content: Text('Failed to download update.')));
               return;
             }
             final file = File(exePath);
             await file.writeAsBytes(exeRes.bodyBytes);
-            messenger.showSnackBar(const SnackBar(content: Text('Launching updater...')));
+            messenger.showSnackBar(
+                const SnackBar(content: Text('Launching updater...')));
             await Process.start(exePath, [], mode: ProcessStartMode.detached);
             exit(0);
           } catch (e) {
-            messenger.showSnackBar(SnackBar(content: Text('Update failed: $e')));
+            messenger
+                .showSnackBar(SnackBar(content: Text('Update failed: $e')));
           }
         }
       } else {
-        messenger.showSnackBar(const SnackBar(content: Text('You are up to date.')));
+        messenger
+            .showSnackBar(const SnackBar(content: Text('You are up to date.')));
       }
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Update check failed: $e')));
+      messenger
+          .showSnackBar(SnackBar(content: Text('Update check failed: $e')));
     }
   }
 }
