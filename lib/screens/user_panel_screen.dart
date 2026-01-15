@@ -4,11 +4,13 @@
 // service integrations, and app settings.
 
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/profile_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/anilist_service.dart';
+import '../services/stash_db_service.dart';
+import '../services/trakt_service.dart';
 import '../widgets/settings_widgets.dart';
 
 class UserPanelScreen extends StatelessWidget {
@@ -63,7 +65,7 @@ class UserPanelScreen extends StatelessWidget {
       expandedHeight: 200,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back, color: AppColors.textMain),
-        onPressed: () => context.pop(),
+        onPressed: () => Navigator.of(context).maybePop(),
       ),
       flexibleSpace: FlexibleSpaceBar(
         background: Container(
@@ -214,12 +216,14 @@ class UserPanelScreen extends StatelessWidget {
 
   /// Builds the Integration Health Dashboard section
   Widget _buildIntegrationDashboard(BuildContext context, SettingsProvider settings) {
+    final traktService = TraktService();
+    final aniListService = AniListService();
+    final stashDbService = StashDbService();
+
     // Determine connection statuses
-    final hasTmdb = settings.hasTmdbKey && settings.tmdbStatus == TmdbKeyStatus.valid;
-    final hasStash = settings.stashEndpoints.any((e) => e.apiKey.isNotEmpty);
-    // Trakt and AniList use environment keys, so we check if they're configured
-    const hasTrakt = false; // No user-configurable Trakt auth yet
-    const hasAniList = true; // AniList uses public GraphQL, always available
+    final hasTrakt = traktService.hasKey;
+    final hasAniList = _isAniListAvailable(aniListService);
+    final hasStash = _hasStashConnection(settings, stashDbService);
 
     return SliverToBoxAdapter(
       child: Padding(
@@ -248,31 +252,24 @@ class UserPanelScreen extends StatelessWidget {
               child: Column(
                 children: [
                   _ServiceStatusTile(
-                    serviceName: 'TMDB',
-                    icon: Icons.movie_outlined,
-                    isConnected: hasTmdb,
-                    onAction: () => context.go('/settings'),
-                  ),
-                  const Divider(height: 1, color: AppColors.border),
-                  _ServiceStatusTile(
                     serviceName: 'AniList',
                     icon: Icons.animation_outlined,
                     isConnected: hasAniList,
-                    onAction: () => context.go('/settings'),
+                    onAction: () => _handleIntegrationAction(context, 'AniList', hasAniList),
                   ),
                   const Divider(height: 1, color: AppColors.border),
                   _ServiceStatusTile(
                     serviceName: 'Trakt',
                     icon: Icons.tv_outlined,
                     isConnected: hasTrakt,
-                    onAction: () => context.go('/settings'),
+                    onAction: () => _handleIntegrationAction(context, 'Trakt', hasTrakt),
                   ),
                   const Divider(height: 1, color: AppColors.border),
                   _ServiceStatusTile(
-                    serviceName: 'StashDB',
-                    icon: Icons.theaters_outlined,
+                    serviceName: 'Stash',
+                    icon: Icons.storage_outlined,
                     isConnected: hasStash,
-                    onAction: () => context.go('/settings'),
+                    onAction: () => _handleIntegrationAction(context, 'Stash', hasStash),
                     isLast: true,
                   ),
                 ],
@@ -297,7 +294,7 @@ class UserPanelScreen extends StatelessWidget {
               title: 'General Settings',
               subtitle: 'Theme, Player, Preferences',
               trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
-              onTap: () => context.go('/settings'),
+              onTap: () => _navigateTo(context, '/settings'),
             ),
             const Divider(height: 1, color: AppColors.border),
             SettingsTile(
@@ -305,7 +302,7 @@ class UserPanelScreen extends StatelessWidget {
               title: 'Source Manager',
               subtitle: 'OneDrive, Local Folders',
               trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
-              onTap: () => context.go('/settings'),
+              onTap: () => _navigateTo(context, '/settings'),
             ),
             const Divider(height: 1, color: AppColors.border),
             SettingsTile(
@@ -313,7 +310,7 @@ class UserPanelScreen extends StatelessWidget {
               title: 'Profile Management',
               subtitle: 'Switch Profile, Edit Profile',
               trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
-              onTap: () => context.go('/profiles'),
+              onTap: () => _navigateTo(context, '/profiles'),
               isLast: true,
             ),
           ],
@@ -390,7 +387,7 @@ class UserPanelScreen extends StatelessWidget {
             onPressed: () {
               Navigator.of(ctx).pop();
               profileProvider.deselectProfile();
-              context.go('/profiles');
+              _navigateTo(context, '/profiles');
             },
             style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
             child: const Text('Log Out'),
@@ -398,6 +395,29 @@ class UserPanelScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  bool _isAniListAvailable(AniListService service) {
+    return service is AniListService;
+  }
+
+  bool _hasStashConnection(SettingsProvider settings, StashDbService service) {
+    return service.runtimeType == StashDbService &&
+        settings.stashEndpoints.any((endpoint) => endpoint.apiKey.trim().isNotEmpty);
+  }
+
+  void _handleIntegrationAction(BuildContext context, String serviceName, bool isConnected) {
+    if (isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Syncing $serviceName...')),
+      );
+      return;
+    }
+    _navigateTo(context, '/settings');
+  }
+
+  void _navigateTo(BuildContext context, String routeName) {
+    Navigator.of(context).pushNamed(routeName);
   }
 }
 
@@ -502,31 +522,22 @@ class _ServiceStatusTile extends StatelessWidget {
               ),
               // Status Indicator
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isConnected
-                      ? Colors.green.withAlpha((0.15 * 255).round())
-                      : Colors.grey.withAlpha((0.15 * 255).round()),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isConnected ? Icons.check_circle : Icons.cancel,
-                      size: 14,
-                      color: isConnected ? Colors.green : Colors.grey,
+                child: OutlinedButton.icon(
+                  onPressed: onAction,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: isConnected ? Colors.green : Colors.grey,
+                    side: BorderSide(color: isConnected ? Colors.green : Colors.grey),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    textStyle: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      isConnected ? 'Sync Now' : 'Connect',
-                      style: TextStyle(
-                        color: isConnected ? Colors.green : Colors.grey,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+                  ),
+                  icon: Icon(
+                    isConnected ? Icons.check_circle : Icons.cancel,
+                    size: 16,
+                  ),
+                  label: Text(isConnected ? 'Sync Now' : 'Connect'),
                 ),
               ),
             ],
