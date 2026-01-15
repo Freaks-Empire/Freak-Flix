@@ -104,7 +104,7 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
                   OutlinedButton.icon(
                     icon: const Icon(LucideIcons.history, size: 16),
                     label: const Text('View Version History'),
-                    onPressed: (_isProcessing || primaryAccount == null)
+                    onPressed: (_isProcessing || primaryAccount == null || !syncActive)
                         ? null
                         : () => _showVersionHistory(
                             context, settings, primaryAccount),

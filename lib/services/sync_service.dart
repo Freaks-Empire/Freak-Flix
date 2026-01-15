@@ -92,8 +92,9 @@ class SyncService {
   /// Create a "Save Point" (Backup)
   Future<void> createSnapshot(
       Map<String, dynamic> data, String deviceName) async {
-    if (_db == null || _userId == null)
-      throw Exception('Cloud sync not active on this platform');
+    if (_db == null || _userId == null) {
+      throw Exception('Sync not available on this platform. Use local backup instead.');
+    }
 
     final payload = Map<String, dynamic>.from(data);
 
