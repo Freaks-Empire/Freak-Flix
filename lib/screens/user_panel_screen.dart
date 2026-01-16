@@ -4,12 +4,11 @@
 // service integrations, and app settings.
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/profile_provider.dart';
 import '../providers/settings_provider.dart';
-import '../services/anilist_service.dart';
-import '../services/stash_db_service.dart';
 import '../services/trakt_service.dart';
 import '../widgets/settings_widgets.dart';
 
@@ -65,7 +64,7 @@ class UserPanelScreen extends StatelessWidget {
       expandedHeight: 200,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back, color: AppColors.textMain),
-        onPressed: () => Navigator.of(context).maybePop(),
+        onPressed: () => context.pop(),
       ),
       flexibleSpace: FlexibleSpaceBar(
         background: Container(
@@ -216,14 +215,10 @@ class UserPanelScreen extends StatelessWidget {
 
   /// Builds the Integration Health Dashboard section
   Widget _buildIntegrationDashboard(BuildContext context, SettingsProvider settings) {
-    final traktService = TraktService();
-    final aniListService = AniListService();
-    final stashDbService = StashDbService();
-
     // Determine connection statuses
-    final hasTrakt = traktService.hasKey;
-    final hasAniList = _isAniListAvailable(aniListService);
-    final hasStash = _hasStashConnection(settings, stashDbService);
+    final hasTrakt = TraktService().hasKey;
+    const hasAniList = true; // AniList uses the public GraphQL API.
+    final hasStash = _hasStashConnection(settings);
 
     return SliverToBoxAdapter(
       child: Padding(
@@ -294,7 +289,7 @@ class UserPanelScreen extends StatelessWidget {
               title: 'General Settings',
               subtitle: 'Theme, Player, Preferences',
               trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
-              onTap: () => _navigateTo(context, '/settings'),
+              onTap: () => context.go('/settings'),
             ),
             const Divider(height: 1, color: AppColors.border),
             SettingsTile(
@@ -302,7 +297,7 @@ class UserPanelScreen extends StatelessWidget {
               title: 'Source Manager',
               subtitle: 'OneDrive, Local Folders',
               trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
-              onTap: () => _navigateTo(context, '/settings'),
+              onTap: () => context.go('/settings'),
             ),
             const Divider(height: 1, color: AppColors.border),
             SettingsTile(
@@ -310,7 +305,7 @@ class UserPanelScreen extends StatelessWidget {
               title: 'Profile Management',
               subtitle: 'Switch Profile, Edit Profile',
               trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
-              onTap: () => _navigateTo(context, '/profiles'),
+              onTap: () => context.go('/profiles'),
               isLast: true,
             ),
           ],
@@ -387,7 +382,7 @@ class UserPanelScreen extends StatelessWidget {
             onPressed: () {
               Navigator.of(ctx).pop();
               profileProvider.deselectProfile();
-              _navigateTo(context, '/profiles');
+              context.go('/profiles');
             },
             style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
             child: const Text('Log Out'),
@@ -397,13 +392,8 @@ class UserPanelScreen extends StatelessWidget {
     );
   }
 
-  bool _isAniListAvailable(AniListService service) {
-    return service is AniListService;
-  }
-
-  bool _hasStashConnection(SettingsProvider settings, StashDbService service) {
-    return service.runtimeType == StashDbService &&
-        settings.stashEndpoints.any((endpoint) => endpoint.apiKey.trim().isNotEmpty);
+  bool _hasStashConnection(SettingsProvider settings) {
+    return settings.stashEndpoints.any((endpoint) => endpoint.apiKey.trim().isNotEmpty);
   }
 
   void _handleIntegrationAction(BuildContext context, String serviceName, bool isConnected) {
@@ -413,11 +403,7 @@ class UserPanelScreen extends StatelessWidget {
       );
       return;
     }
-    _navigateTo(context, '/settings');
-  }
-
-  void _navigateTo(BuildContext context, String routeName) {
-    Navigator.of(context).pushNamed(routeName);
+    context.go('/settings');
   }
 }
 
