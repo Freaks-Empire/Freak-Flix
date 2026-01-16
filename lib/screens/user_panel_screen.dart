@@ -214,12 +214,9 @@ class UserPanelScreen extends StatelessWidget {
 
   /// Builds the Integration Health Dashboard section
   Widget _buildIntegrationDashboard(BuildContext context, SettingsProvider settings) {
-    // Determine connection statuses
-    final hasTmdb = settings.hasTmdbKey && settings.tmdbStatus == TmdbKeyStatus.valid;
     final hasStash = settings.stashEndpoints.any((e) => e.apiKey.isNotEmpty);
-    // Trakt and AniList use environment keys, so we check if they're configured
-    const hasTrakt = false; // No user-configurable Trakt auth yet
-    const hasAniList = true; // AniList uses public GraphQL, always available
+    const hasTrakt = false;
+    const hasAniList = false;
 
     return SliverToBoxAdapter(
       child: Padding(
@@ -239,18 +236,18 @@ class UserPanelScreen extends StatelessWidget {
                 ),
               ),
             ),
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.surface,
+            Card(
+              color: AppColors.surface,
+              shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
+                side: const BorderSide(color: AppColors.border),
               ),
               child: Column(
                 children: [
                   _ServiceStatusTile(
-                    serviceName: 'TMDB',
-                    icon: Icons.movie_outlined,
-                    isConnected: hasTmdb,
+                    serviceName: 'Trakt',
+                    icon: Icons.tv_outlined,
+                    isConnected: hasTrakt,
                     onAction: () => context.go('/settings'),
                   ),
                   const Divider(height: 1, color: AppColors.border),
@@ -262,15 +259,8 @@ class UserPanelScreen extends StatelessWidget {
                   ),
                   const Divider(height: 1, color: AppColors.border),
                   _ServiceStatusTile(
-                    serviceName: 'Trakt',
-                    icon: Icons.tv_outlined,
-                    isConnected: hasTrakt,
-                    onAction: () => context.go('/settings'),
-                  ),
-                  const Divider(height: 1, color: AppColors.border),
-                  _ServiceStatusTile(
-                    serviceName: 'StashDB',
-                    icon: Icons.theaters_outlined,
+                    serviceName: 'Stash',
+                    icon: Icons.movie_outlined,
                     isConnected: hasStash,
                     onAction: () => context.go('/settings'),
                     isLast: true,
@@ -286,35 +276,57 @@ class UserPanelScreen extends StatelessWidget {
 
   /// Builds the Settings Navigation List
   Widget _buildSettingsList(BuildContext context) {
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-        child: SettingsGroup(
-          title: 'Settings',
-          children: [
-            SettingsTile(
-              icon: Icons.settings_outlined,
-              title: 'General Settings',
-              subtitle: 'Theme, Player, Preferences',
-              trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
-              onTap: () => context.go('/settings'),
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      sliver: SliverList(
+        delegate: SliverChildListDelegate(
+          [
+            const Padding(
+              padding: EdgeInsets.only(left: 4, bottom: 12),
+              child: Text(
+                'SETTINGS',
+                style: TextStyle(
+                  color: AppColors.textSub,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.1,
+                ),
+              ),
             ),
-            const Divider(height: 1, color: AppColors.border),
-            SettingsTile(
-              icon: Icons.folder_outlined,
-              title: 'Source Manager',
-              subtitle: 'OneDrive, Local Folders',
-              trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
-              onTap: () => context.go('/settings'),
-            ),
-            const Divider(height: 1, color: AppColors.border),
-            SettingsTile(
-              icon: Icons.people_outline,
-              title: 'Profile Management',
-              subtitle: 'Switch Profile, Edit Profile',
-              trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
-              onTap: () => context.go('/profiles'),
-              isLast: true,
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                children: [
+                  SettingsTile(
+                    icon: Icons.settings_outlined,
+                    title: 'General Settings',
+                    subtitle: 'Theme, Player, Preferences',
+                    trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
+                    onTap: () => context.go('/settings'),
+                  ),
+                  const Divider(height: 1, color: AppColors.border),
+                  SettingsTile(
+                    icon: Icons.folder_outlined,
+                    title: 'Source Manager',
+                    subtitle: 'OneDrive, Local Folders',
+                    trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
+                    onTap: () => context.go('/settings'),
+                  ),
+                  const Divider(height: 1, color: AppColors.border),
+                  SettingsTile(
+                    icon: Icons.people_outline,
+                    title: 'Profile Management',
+                    subtitle: 'Switch Profile, Edit Profile',
+                    trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
+                    onTap: () => context.go('/profiles'),
+                    isLast: true,
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -472,6 +484,10 @@ class _ServiceStatusTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = isConnected ? Colors.green : Colors.grey;
+    final label = isConnected ? 'Sync Now' : 'Connect';
+    final iconData = isConnected ? Icons.check_circle : Icons.cancel;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -501,33 +517,19 @@ class _ServiceStatusTile extends StatelessWidget {
                 ),
               ),
               // Status Indicator
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isConnected
-                      ? Colors.green.withAlpha((0.15 * 255).round())
-                      : Colors.grey.withAlpha((0.15 * 255).round()),
-                  borderRadius: BorderRadius.circular(8),
+              TextButton.icon(
+                onPressed: onAction,
+                style: TextButton.styleFrom(
+                  foregroundColor: color,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  backgroundColor: color.withAlpha((0.12 * 255).round()),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isConnected ? Icons.check_circle : Icons.cancel,
-                      size: 14,
-                      color: isConnected ? Colors.green : Colors.grey,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      isConnected ? 'Sync Now' : 'Connect',
-                      style: TextStyle(
-                        color: isConnected ? Colors.green : Colors.grey,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
+                icon: Icon(iconData, size: 14),
+                label: Text(label),
               ),
             ],
           ),
