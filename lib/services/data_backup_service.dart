@@ -104,4 +104,21 @@ class DataBackupService {
     }
   }
 
+  Future<void> backupToOneDrive(String accountId) async {
+    try {
+      final jsonStr = await createBackupJson();
+      final bytes = utf8.encode(jsonStr);
+      final fileName = 'freakflix_backup_${DateTime.now().millisecondsSinceEpoch}.json';
+
+      await GraphAuthService.instance.uploadFileBytes(
+        accountId,
+        'freakflix_backups/$fileName',
+        bytes,
+      );
+      debugPrint('DataBackupService: Backup uploaded to OneDrive: $fileName');
+    } catch (e) {
+      debugPrint('DataBackupService: Backup upload failed: $e');
+      rethrow;
+    }
+  }
 }

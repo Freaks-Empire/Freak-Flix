@@ -277,15 +277,36 @@ class TmdbService {
     return TmdbTv.fromJson(data);
   }
 
-  Future<List<TmdbItem>> getTrending() async {
-    // /trending/all/day
-    // https://developer.themoviedb.org/reference/trending-all
+
+
+  Future<List<TmdbItem>> getTrendingMovies() async {
+    return _fetchItems('/3/trending/movie/day');
+  }
+
+  Future<List<TmdbItem>> getTrendingTv() async {
+    return _fetchItems('/3/trending/tv/day');
+  }
+
+  Future<List<TmdbItem>> getAnime() async {
+    // Anime: Animation genre (16) + Japanese language (ja)
+    return _fetchItems(
+      '/3/discover/tv', 
+      extras: {
+        'with_genres': '16',
+        'original_language': 'ja',
+        'sort_by': 'popularity.desc',
+      }
+    );
+  }
+
+  Future<List<TmdbItem>> _fetchItems(String path, {Map<String, String>? extras}) async {
     final key = _key;
     if (key == null) return [];
-    
-    final uri = Uri.https(_baseHost, '/3/trending/all/day', {
+
+    final uri = Uri.https(_baseHost, path, {
       'api_key': key,
       'language': 'en-US',
+      ...?extras,
     });
 
     try {
@@ -295,16 +316,19 @@ class TmdbService {
         final results = (data['results'] as List).map((e) => TmdbItem.fromMap(
           e,
           imageBase: _imageBase,
-          defaultType: TmdbMediaType.movie, // Fallback, usually media_type is present
+          defaultType: TmdbMediaType.movie, // Fallback
         )).toList();
         
-        // Filter out people
         return results.where((i) => i.type == TmdbMediaType.movie || i.type == TmdbMediaType.tv).toList();
       }
     } catch (e) {
-      debugPrint('Error getting trending: $e');
+      debugPrint('Error fetching items from $path: $e');
     }
     return [];
+  }
+
+  Future<List<TmdbItem>> getTrending() async {
+    return _fetchItems('/3/trending/all/day');
   }
 
   Future<List<TmdbItem>> searchMulti(String query) async {

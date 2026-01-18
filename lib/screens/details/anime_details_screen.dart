@@ -248,7 +248,10 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> with SingleTick
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: _current.posterUrl != null 
-                    ? SafeNetworkImage(url: _current.posterUrl, fit: BoxFit.cover)
+                    ? Hero(
+                        tag: 'poster_${_current.id}',
+                        child: SafeNetworkImage(url: _current.posterUrl, fit: BoxFit.cover),
+                      )
                     : Container(color: Colors.grey[900], child: const Icon(Icons.movie, size: 50, color: Colors.white24)),
                 ),
                 const SizedBox(height: 24),
@@ -397,7 +400,10 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> with SingleTick
               ),
               clipBehavior: Clip.antiAlias,
               child: _current.posterUrl != null 
-                  ? SafeNetworkImage(url: _current.posterUrl, fit: BoxFit.cover)
+                  ? Hero(
+                      tag: 'poster_${_current.id}',
+                      child: SafeNetworkImage(url: _current.posterUrl, fit: BoxFit.cover),
+                    )
                   : Container(color: Colors.grey[800]),
             ),
             const SizedBox(width: 16),

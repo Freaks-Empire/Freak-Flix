@@ -103,6 +103,7 @@ class SettingsProvider extends ChangeNotifier {
     }
     
     primaryBackupAccountId = data['primaryBackupAccountId'] as String?;
+    autoBackupEnabled = data['autoBackupEnabled'] as bool? ?? false;
 
     enableAdultContent = data['enableAdultContent'] as bool? ?? false;
     requirePerformerMatch = data['requirePerformerMatch'] as bool? ?? false;
@@ -187,6 +188,7 @@ class SettingsProvider extends ChangeNotifier {
         'migrated_profiles': _hasMigratedProfiles,
         'isSetupCompleted': _isSetupCompleted,
         'primaryBackupAccountId': primaryBackupAccountId,
+        'autoBackupEnabled': autoBackupEnabled,
     };
     await PersistenceService.instance.saveString(_storageFile, jsonEncode(data));
     
@@ -353,6 +355,17 @@ class SettingsProvider extends ChangeNotifier {
     if (data.containsKey('primaryBackupAccountId')) {
       primaryBackupAccountId = data['primaryBackupAccountId'];
     }
+    if (data.containsKey('autoBackupEnabled')) {
+      autoBackupEnabled = data['autoBackupEnabled'] ?? false;
+    }
+    await save();
+    notifyListeners();
+  }
+
+  bool autoBackupEnabled = false;
+
+  Future<void> toggleAutoBackup(bool value) async {
+    autoBackupEnabled = value;
     await save();
     notifyListeners();
   }

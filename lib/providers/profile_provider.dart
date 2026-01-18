@@ -143,10 +143,16 @@ class ProfileProvider extends ChangeNotifier {
 
   void updateProgress(String mediaId, int positionSeconds, {bool isWatched = false}) {
     final now = DateTime.now();
+    
+    // Preserve existing isWatched status if already true
+    final existingData = _userData[mediaId];
+    final wasWatched = existingData?.isWatched ?? false;
+    final shouldBeWatched = isWatched || wasWatched;
+    
     _userData[mediaId] = UserMediaData(
       mediaId: mediaId,
       positionSeconds: positionSeconds,
-      isWatched: isWatched,
+      isWatched: shouldBeWatched,
       lastUpdated: now,
     );
     _saveUserData(); // Fire and forget save

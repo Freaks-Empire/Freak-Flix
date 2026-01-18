@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -34,6 +35,9 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
     });
   }
 
+  // Check if running on Windows desktop
+  bool get _isWindowsDesktop => !kIsWeb && Platform.isWindows;
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
@@ -47,7 +51,8 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
 
     return Column(
       children: [
-        // CLOUD SYNC
+        // CLOUD SYNC (Firebase-based - Hidden on Windows)
+        if (!_isWindowsDesktop)
         SettingsGroup(
           title: 'Cloud Snapshots & Live Sync',
           children: [
@@ -131,6 +136,84 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
                 ],
               ),
             )
+          ],
+        ),
+
+        // ONEDRIVE BACKUP (Windows-specific, works without Firebase)
+        if (_isWindowsDesktop)
+        SettingsGroup(
+          title: 'OneDrive Backup',
+          children: [
+            SettingsTile(
+              icon: LucideIcons.cloud,
+              title: primaryAccount?.displayName ?? 'Select Backup Account',
+              subtitle: primaryAccount?.userPrincipalName ?? 'Choose a OneDrive account for backups',
+              trailing: Icon(
+                  primaryAccount != null
+                      ? LucideIcons.check
+                      : LucideIcons.chevronRight,
+                  size: 16,
+                  color: AppColors.textSub),
+              onTap: () => _showAccountPicker(context, settings),
+            ),
+            const Divider(height: 1, color: AppColors.border),
+            if (primaryAccount != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                color: AppColors.surface.withOpacity(0.5),
+                child: Row(children: [
+                  Icon(Icons.circle, size: 8, color: Colors.blue.shade400),
+                  const SizedBox(width: 8),
+                  Text('Backup to: ${primaryAccount.displayName}',
+                      style: TextStyle(
+                          color: Colors.blue.shade400,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold)),
+                ]),
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlinedButton.icon(
+                    icon: const Icon(LucideIcons.download, size: 16),
+                    label: const Text('Restore from OneDrive'),
+                    onPressed: (_isProcessing || primaryAccount == null)
+                        ? null
+                        : () => _restoreFromOneDrive(context, settings, primaryAccount),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF0078D4), // OneDrive blue
+                    ),
+                    icon: _isProcessing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(LucideIcons.uploadCloud, size: 16),
+                    label: const Text('Backup to OneDrive'),
+                    onPressed: (_isProcessing || primaryAccount == null)
+                        ? null
+                        : () => _backupToOneDrive(context, settings, primaryAccount),
+                  ),
+                ],
+              ),
+            ),
+            if (primaryAccount != null) ...[
+                const Divider(height: 1, color: AppColors.border),
+                SwitchListTile(
+                   title: const Text('Auto Backup', style: TextStyle(color: AppColors.textMain, fontWeight: FontWeight.normal, fontSize: 16)),
+                   subtitle: const Text('Backup to OneDrive every 30 mins.', style: TextStyle(color: AppColors.textSub, fontSize: 12)),
+                   tileColor: Colors.transparent, 
+                   activeColor: const Color(0xFF0078D4),
+                   value: settings.autoBackupEnabled,
+                   onChanged: (val) => settings.toggleAutoBackup(val),
+                ),
+            ],
           ],
         ),
 
@@ -474,5 +557,104 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
                     child: const Text('Import')),
               ],
             ));
+  }
+
+  /// Backup data to OneDrive (for Windows)
+  Future<void> _backupToOneDrive(BuildContext context, SettingsProvider settings, GraphAccount account) async {
+    setState(() => _isProcessing = true);
+    final messenger = ScaffoldMessenger.of(context);
+    
+    try {
+      messenger.showSnackBar(const SnackBar(content: Text('Creating backup...')));
+      
+      final backupService = DataBackupService(
+        settings: settings,
+        library: Provider.of<LibraryProvider>(context, listen: false),
+        profiles: Provider.of<ProfileProvider>(context, listen: false),
+      );
+      
+      messenger.clearSnackBars();
+      messenger.showSnackBar(const SnackBar(content: Text('Uploading to OneDrive...')));
+
+      await backupService.backupToOneDrive(account.id);
+      
+      messenger.clearSnackBars();
+      messenger.showSnackBar(const SnackBar(content: Text('✅ Backup saved to OneDrive!')));
+    } catch (e) {
+      messenger.clearSnackBars();
+      messenger.showSnackBar(SnackBar(content: Text('Backup failed: $e')));
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  /// Restore data from OneDrive (for Windows)
+  Future<void> _restoreFromOneDrive(BuildContext context, SettingsProvider settings, GraphAccount account) async {
+    setState(() => _isProcessing = true);
+    final messenger = ScaffoldMessenger.of(context);
+    
+    try {
+      messenger.showSnackBar(const SnackBar(content: Text('Finding backups on OneDrive...')));
+      
+      // List backup files in OneDrive App folder
+      final backups = await _graphAuth.listBackupFiles(account.id, 'freakflix_backups');
+      
+      messenger.clearSnackBars();
+      
+      if (backups.isEmpty) {
+        messenger.showSnackBar(const SnackBar(content: Text('No backups found on OneDrive')));
+        return;
+      }
+      
+      // Show picker dialog
+      final selectedBackup = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (ctx) => SimpleDialog(
+          backgroundColor: AppColors.surface,
+          title: const Text('Select Backup to Restore', style: TextStyle(color: AppColors.textMain)),
+          children: backups.map((backup) {
+            final name = backup['name'] as String? ?? 'Unknown';
+            final size = backup['size'] as int? ?? 0;
+            final sizeStr = size < 1024 * 1024 
+                ? '${(size / 1024).toStringAsFixed(1)} KB'
+                : '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+            return SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, backup),
+              child: ListTile(
+                leading: const Icon(LucideIcons.file, color: AppColors.textSub),
+                title: Text(name, style: const TextStyle(color: AppColors.textMain)),
+                subtitle: Text(sizeStr, style: const TextStyle(color: AppColors.textSub)),
+              ),
+            );
+          }).toList(),
+        ),
+      );
+      
+      if (selectedBackup == null) return;
+      
+      // Download and restore
+      messenger.showSnackBar(const SnackBar(content: Text('Downloading backup...')));
+      
+      final itemId = selectedBackup['id'] as String;
+      final bytes = await _graphAuth.downloadFile(account.id, itemId);
+      final jsonStr = utf8.decode(bytes);
+      
+      // Restore
+      final backupService = DataBackupService(
+        settings: settings,
+        library: Provider.of<LibraryProvider>(context, listen: false),
+        profiles: Provider.of<ProfileProvider>(context, listen: false),
+      );
+      await backupService.restoreBackup(jsonStr);
+      
+      messenger.clearSnackBars();
+      messenger.showSnackBar(const SnackBar(content: Text('✅ Restored from OneDrive!')));
+      if (mounted) setState(() {});
+    } catch (e) {
+      messenger.clearSnackBars();
+      messenger.showSnackBar(SnackBar(content: Text('Restore failed: $e')));
+    } finally {
+      setState(() => _isProcessing = false);
+    }
   }
 }

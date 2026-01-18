@@ -769,19 +769,84 @@ class GraphAuthService {
     }
   }
 
+  /// Uploads bytes to a specific path
+  Future<void> uploadFileBytes(String accountId, String path, List<int> bytes) async {
+    final token = await getFreshAccessToken(accountId);
+    final url = Uri.parse('$graphBaseUrl/me/drive/root:/$path:/content');
+    
+    final res = await http.put(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/octet-stream',
+      },
+      body: bytes,
+    );
+
+    if (res.statusCode != 201 && res.statusCode != 200) {
+      throw Exception('Upload failed: ${res.statusCode} ${res.body}');
+    }
+  }
+
+  /// List backup files in a specific folder
+  Future<List<Map<String, dynamic>>> listBackupFiles(String accountId, String folderName) async {
+    final token = await getFreshAccessToken(accountId);
+    // Expand children to get file details
+    final url = Uri.parse('$graphBaseUrl/me/drive/root:/$folderName:/children?\$select=id,name,size,createdDateTime,file');
+    
+    final res = await http.get(url, headers: {'Authorization': 'Bearer $token'});
+    
+    if (res.statusCode == 404) {
+      return []; // Folder doesn't exist
+    }
+
+    if (res.statusCode != 200) {
+      throw Exception('List files failed: ${res.statusCode} ${res.body}');
+    }
+
+    final data = jsonDecode(res.body);
+    final List<dynamic> value = data['value'] ?? [];
+    
+    return value.map((item) => item as Map<String, dynamic>).toList();
+  }
+
+  /// Download a file by ID
+  Future<List<int>> downloadFile(String accountId, String itemId) async {
+     final token = await getFreshAccessToken(accountId);
+     final url = Uri.parse('$graphBaseUrl/me/drive/items/$itemId/content');
+
+     final res = await http.get(url, headers: {'Authorization': 'Bearer $token'});
+
+     if (res.statusCode == 302) {
+       // Follow redirect
+       final location = res.headers['location'];
+       if (location != null) {
+         final res2 = await http.get(Uri.parse(location));
+         if (res2.statusCode != 200) throw Exception('Download failed after redirect: ${res2.statusCode}');
+         return res2.bodyBytes;
+       }
+     }
+
+     if (res.statusCode != 200) {
+       throw Exception('Download failed: ${res.statusCode} ${res.body}');
+     }
+     
+     return res.bodyBytes;
+  }
+
   /// Downloads a file's content as string from the root of the user's Drive
   Future<String> downloadFileContent(String accountId, String fileName) async {
     final token = await getFreshAccessToken(accountId);
     final url = Uri.parse('$graphBaseUrl/me/drive/root:/$fileName:/content');
     
     final res = await http.get(
-      url, 
-      headers: {'Authorization': 'Bearer $token'}
+      url,
+      headers: {'Authorization': 'Bearer $token'},
     );
 
     if (res.statusCode != 200) {
-      throw Exception('Download failed: ${res.statusCode} ${res.body}');
+       throw Exception('Download failed: ${res.statusCode} ${res.body}');
     }
-    return res.body;
+    return res.body; 
   }
 }

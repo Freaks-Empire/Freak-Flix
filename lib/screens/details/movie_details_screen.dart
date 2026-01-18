@@ -371,7 +371,10 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: SafeNetworkImage(url: _current.posterUrl, fit: BoxFit.cover),
+      child: Hero(
+        tag: 'poster_${_current.id}',
+        child: SafeNetworkImage(url: _current.posterUrl, fit: BoxFit.cover),
+      ),
     );
   }
 

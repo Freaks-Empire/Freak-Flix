@@ -407,7 +407,57 @@ class StashDbService {
     }
   ''';
 
+  static const String _queryRecentScenes = r'''
+    query RecentScenes($limit: Int!) {
+      findScenes(
+        scene_filter: {}
+        filter: {
+          sort: "date"
+          direction: DESC
+          per_page: $limit
+          page: 1
+        }
+      ) {
+        scenes {
+          id
+          title
+          details
+          date
+          tags { name }
+          images { url }
+          files { duration }
+          studio { name }
+        }
+      }
+    }
+  ''';
+
   // --- Public Methods ---
+
+  /// Fetch recently added scenes (Adult Trending)
+  Future<List<MediaItem>> getRecentScenes(List<StashEndpoint> endpoints, {int limit = 10}) async {
+    for (final ep in endpoints) {
+      if (!ep.enabled) continue;
+
+      try {
+        final data = await _executeQuery(
+          query: _queryRecentScenes,
+          operationName: 'RecentScenes',
+          variables: {'limit': limit},
+          apiKey: ep.apiKey,
+          baseUrl: ep.url,
+        );
+
+        final scenes = data?['findScenes']?['scenes'] as List?;
+        if (scenes != null && scenes.isNotEmpty) {
+           return scenes.map((s) => _mapSceneToMediaItem(s, s['title'] ?? 'Unknown')).toList();
+        }
+      } catch (e) {
+        debugPrint('StashDB [${ep.name}]: Fetch Recent Scenes failed: $e');
+      }
+    }
+    return [];
+  }
 
   /// Tests the connection to StashDB using the provided API key.
   Future<bool> testConnection(String apiKey, String baseUrl) async {

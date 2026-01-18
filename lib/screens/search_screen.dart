@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/tmdb_item.dart';
 import '../services/tmdb_service.dart';
+import '../services/stash_db_service.dart';
+import '../providers/settings_provider.dart';
 import '../widgets/search_widgets.dart'; // New widgets
 import '../widgets/settings_widgets.dart'; // Reuse AppColors
 
@@ -258,23 +260,76 @@ class _SearchScreenState extends State<SearchScreen> {
 
               const SliverToBoxAdapter(
                   child: SectionHeader(title: "Browse by Genre")),
-              SliverPadding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                sliver: SliverToBoxAdapter(child: GenreCloud(
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              
+              SliverToBoxAdapter(
+                child: GenreCloud(
                   onGenreSelected: (genre) {
                     _controller.text = genre;
                     _performSearch(genre);
                   },
-                )),
+                ),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-              // TRENDING
+              // TRENDING MOVIES
               const SliverToBoxAdapter(
-                  child: SectionHeader(title: "Trending Today")),
+                  child: SectionHeader(title: "Trending Movies")),
               const SliverToBoxAdapter(child: SizedBox(height: 12)),
-              const SliverToBoxAdapter(child: TrendingHorizontalList()),
+              SliverToBoxAdapter(
+                child: Consumer<TmdbService>(
+                  builder: (context, tmdb, _) => ContentRow(future: tmdb.getTrendingMovies()),
+                )
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+
+              // TRENDING TV SHOWS
+              const SliverToBoxAdapter(
+                  child: SectionHeader(title: "Trending TV Shows")),
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+               SliverToBoxAdapter(
+                child: Consumer<TmdbService>(
+                  builder: (context, tmdb, _) => ContentRow(future: tmdb.getTrendingTv()),
+                )
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+
+              // ANIME
+              const SliverToBoxAdapter(
+                  child: SectionHeader(title: "Popular Anime")),
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+               SliverToBoxAdapter(
+                child: Consumer<TmdbService>(
+                  builder: (context, tmdb, _) => ContentRow(future: tmdb.getAnime()),
+                )
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+
+              // ADULT TRENDING (Stash Updates)
+              Consumer<SettingsProvider>(
+                builder: (context, settings, _) {
+                  if (!settings.enableAdultContent) return const SliverToBoxAdapter();
+                  
+                  return SliverMainAxisGroup(
+                    slivers: [
+                      const SliverToBoxAdapter(
+                          child: SectionHeader(title: "Stash Updates", action: "Manage",)), 
+                      const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                      SliverToBoxAdapter(
+                        child: Consumer<StashDbService>(
+                          builder: (context, stash, _) => ContentRow(
+                            future: stash.getRecentScenes(settings.stashEndpoints),
+                            isPortrait: false, // Scenes are usually landscape
+                          ),
+                        )
+                      ),
+                      const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                    ],
+                  );
+                },
+              ),
+
               const SliverToBoxAdapter(
                   child: SizedBox(height: 40)), // Bottom padding
             ] else ...[

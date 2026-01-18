@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
@@ -55,7 +56,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.only(bottom: 20, top: 20),
                 child: IconButton(
                   icon: const Icon(LucideIcons.arrowLeft, color: AppColors.textMain),
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () => context.go('/discover'),
                 ),
               ),
               

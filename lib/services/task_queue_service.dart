@@ -61,7 +61,24 @@ class TaskQueueService extends ChangeNotifier {
 
   void _enforceLogLimit() {
     if (_tasks.length > 50) {
-      _tasks.removeRange(50, _tasks.length);
+      // Prioritize keeping running tasks.
+      // Remove completed/failed tasks that are pushing us over the limit (from the bottom/oldest).
+      
+      // 1. Identify tasks to keep: All running tasks + up to 50 completed ones
+      final running = _tasks.where((t) => t.state == TaskState.running).toList();
+      final content = _tasks.where((t) => t.state != TaskState.running).take(50).toList();
+      
+      if (running.length + content.length < _tasks.length) {
+         // Rebuild list if we are trimming
+         _tasks.clear();
+         _tasks.addAll(running);
+         _tasks.addAll(content);
+         
+         // Sort by start time desc to maintain order? 
+         // Originally insert(0) makes it new->old.
+         // running tasks are likely new? Not necessarily.
+         _tasks.sort((a, b) => b.startTime.compareTo(a.startTime));
+      }
     }
   }
 

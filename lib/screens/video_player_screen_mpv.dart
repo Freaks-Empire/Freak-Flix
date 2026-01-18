@@ -11,6 +11,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../models/media_item.dart';
 import '../../providers/playback_provider.dart';
 import '../../widgets/video_player/netflix_video_controls.dart';
+import '../../services/graph_auth_service.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
   final MediaItem item;
@@ -54,12 +55,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   Future<void> _initPlayer() async {
-    // Determine URL. If it's a web/http stream, use it. If local, file.
+    // Determine URL. 
     String url = widget.item.filePath;
-    if (widget.item.streamUrl != null) {
+    
+    // If it's a OneDrive item, we MUST refresh the download URL because it expires.
+    if (widget.item.id.startsWith('onedrive_')) {
+      final parts = widget.item.id.split('_');
+      if (parts.length >= 3) {
+        // Format: onedrive_{accountId}_{itemId}
+        // Note: itemId might contain underscores? Usually Graph IDs are alphanumeric but let's be safe.
+        // Actually, let's parse carefully.
+        // The accountId is UUID (36 chars) usually? 
+        // Let's rely on split.
+        final accountId = parts[1]; 
+        final itemId = parts.sublist(2).join('_'); // Join back just in case itemId has underscores
+        
+        debugPrint('VideoPlayer: Refreshing OneDrive URL for $itemId (Account: $accountId)...');
+        final freshUrl = await GraphAuthService().getDownloadUrl(accountId, itemId);
+        
+        if (freshUrl != null) {
+          url = freshUrl;
+          debugPrint('VideoPlayer: Got fresh URL');
+        } else {
+           debugPrint('VideoPlayer: Failed to refresh URL, trying fallback.');
+           if (widget.item.streamUrl != null) url = widget.item.streamUrl!;
+        }
+      }
+    } else if (widget.item.streamUrl != null) {
+      // Normal fallback for other stream types (web?)
       url = widget.item.streamUrl!;
     }
-
+    
     // Open paused to ensure seek happens before playback starts
     await _player.open(Media(url), play: false);
 

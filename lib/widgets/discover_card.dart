@@ -10,7 +10,15 @@ import '../screens/details_screen.dart';
 
 class DiscoverCard extends StatelessWidget {
   final TmdbItem item;
-  const DiscoverCard({super.key, required this.item});
+  final bool showOverlays;
+  final bool showTitle;
+
+  const DiscoverCard({
+    super.key, 
+    required this.item,
+    this.showOverlays = true,
+    this.showTitle = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -57,23 +65,30 @@ class DiscoverCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     if (item.posterUrl != null)
-                      CachedNetworkImage(
-                        imageUrl: item.posterUrl!,
-                        fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => _PosterFallback(type: item.type),
-                        placeholder: (_, __) => Container(
-                          color: Colors.grey[900],
-                          child: const Center(
-                            child: SizedBox(
-                              width: 20, 
-                              height: 20, 
-                              child: CircularProgressIndicator(strokeWidth: 2)
-                            )
+                      Hero(
+                        tag: 'poster_${item.id}',
+                        child: CachedNetworkImage(
+                          imageUrl: item.posterUrl!,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => _PosterFallback(type: item.type),
+                          placeholder: (_, __) => Container(
+                            color: Colors.grey[900],
+                            child: const Center(
+                              child: SizedBox(
+                                width: 20, 
+                                height: 20, 
+                                child: CircularProgressIndicator(strokeWidth: 2)
+                              )
+                            ),
                           ),
                         ),
                       )
                     else
-                      _PosterFallback(type: item.type),
+                      Hero(
+                        tag: 'poster_${item.id}',
+                        child: _PosterFallback(type: item.type),
+                      ),
+                    if (showOverlays)
                     Positioned(
                       top: 6,
                       right: 6,
@@ -88,6 +103,7 @@ class DiscoverCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                      if (showOverlays)
                       Positioned(
                         top: 6,
                         left: 6,
@@ -139,13 +155,15 @@ class DiscoverCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              item.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
-            ),
+            if (showTitle) ...[
+              const SizedBox(height: 8),
+              Text(
+                item.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
           ],
         ),
       ),

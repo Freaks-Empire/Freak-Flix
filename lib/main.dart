@@ -1,15 +1,4 @@
 /// lib/main.dart
-// Freak-Flix quick start:
-// 1) flutter pub get
-// 2) Desktop: flutter run -d windows|macos|linux (enable desktop support in SDK)
-//    Android: flutter run -d android (emulator or device)
-// 3) Configure Trakt Client ID in lib/services/trakt_service.dart (const _traktClientId)
-// 4) AniList uses the public endpoint; adjust query in lib/services/anilist_service.dart
-// 5) Add new providers in lib/services/metadata_service.dart if you integrate more sources.
-//
-// Notes:
-// - This sample uses shared_preferences for persistence and simple in-memory caches.
-// - Playback now uses flutter_mpv (MPV); for advanced engines replace MpvController via FFI later.
 
 import 'package:flutter/material.dart';
 import 'services/monitoring/monitoring.dart';
@@ -36,6 +25,7 @@ import 'services/metadata_service.dart';
 import 'services/tmdb_service.dart';
 import 'services/graph_auth_service.dart';
 import 'services/tmdb_discover_service.dart';
+import 'services/auto_backup_manager.dart';
 
 import 'models/discover_filter.dart';
 
@@ -48,7 +38,7 @@ void main() async {
     usePathUrlStrategy();
 
     try {
-      await dotenv.load(fileName: '.env'); 
+      await dotenv.load(fileName: '.env');
     } catch (e) {
       debugPrint('Warning: dotenv.load failed: $e');
     }
@@ -56,46 +46,50 @@ void main() async {
     // Monitoring
     // Config moved to service
     // New Relic Config - Logic moved to MonitoringService
-         
 
-    // 1. Initialize Firebase
-    // Only init Firebase on supported platforms if needed, or just guard Crashlytics
-    try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      
-      // 2. Set up Crashlytics (Mobile only usually)
-      if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-         FlutterError.onError = (errorDetails) {
-           debugPrint('Caught Flutter Error: ${errorDetails.exception}');
-           try {
-             FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
-           } catch (e) {
-             debugPrint('Failed to report to Crashlytics: $e');
-           }
-         };
-         
-         PlatformDispatcher.instance.onError = (error, stack) {
-           debugPrint('Caught Platform Error: $error');
-           try {
-             FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-           } catch (e) {
+    // 1. Initialize Firebase (Skip on Windows - not supported)
+    final bool isWindowsDesktop = !kIsWeb && Platform.isWindows;
+    if (!isWindowsDesktop) {
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+
+        // 2. Set up Crashlytics (Mobile only usually)
+        if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+          FlutterError.onError = (errorDetails) {
+            debugPrint('Caught Flutter Error: ${errorDetails.exception}');
+            try {
+              FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
+            } catch (e) {
               debugPrint('Failed to report to Crashlytics: $e');
-           }
-           return true;
-         };
-      } else {
-         debugPrint('Firebase Crashlytics disabled on this platform.');
+            }
+          };
+
+          PlatformDispatcher.instance.onError = (error, stack) {
+            debugPrint('Caught Platform Error: $error');
+            try {
+              FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+            } catch (e) {
+              debugPrint('Failed to report to Crashlytics: $e');
+            }
+            return true;
+          };
+        } else {
+          debugPrint('Firebase Crashlytics disabled on this platform.');
+        }
+      } catch (e) {
+        debugPrint(
+            'Firebase Init Failed (Likely due to missing configuration): $e');
       }
-    } catch (e) {
-      debugPrint('Firebase Init Failed (Likely due to missing configuration): $e');
+    } else {
+      debugPrint('Firebase disabled on Windows desktop.');
     }
 
     await MonitoringService.initialize();
-    
+
     MediaKit.ensureInitialized();
-  
+
     GraphAuthService.instance.configureFromEnv();
     await GraphAuthService.instance.loadFromPrefs();
 
@@ -104,17 +98,17 @@ void main() async {
 
     // Wire Sync logic after Settings & Auth are ready
     void updateSyncState() {
-       final userId = GraphAuthService.instance.activeAccountId;
-       if (userId != null) {
-          debugPrint('Main: Activating Sync for user $userId');
-          SyncService().init(userId, (data) {
-             settingsProvider.importSettings(data);
-          });
-       } else {
-          SyncService().dispose();
-       }
+      final userId = GraphAuthService.instance.activeAccountId;
+      if (userId != null) {
+        debugPrint('Main: Activating Sync for user $userId');
+        SyncService().init(userId, (data) {
+          settingsProvider.importSettings(data);
+        });
+      } else {
+        SyncService().dispose();
+      }
     }
-    
+
     // Set listener
     GraphAuthService.instance.onStateChanged = updateSyncState;
     // Initial check
@@ -122,35 +116,39 @@ void main() async {
 
     final profileProvider = ProfileProvider();
     await profileProvider.load();
-    
+
     final tmdbService = TmdbService(settingsProvider);
     final tmdbDiscoverService = TmdbDiscoverService(settingsProvider);
     final libraryProvider = LibraryProvider(settingsProvider);
     await libraryProvider.loadLibrary();
-    
+
     // One-time Migration: Import legacy history to Default profile
     if (!settingsProvider.hasMigratedProfiles) {
-        debugPrint('Main: Performing one-time profile migration...');
-        if (profileProvider.activeProfile == null && profileProvider.profiles.isNotEmpty) {
-            // Try 'default', fallback to first
-            await profileProvider.selectProfile('default');
+      debugPrint('Main: Performing one-time profile migration...');
+      if (profileProvider.activeProfile == null &&
+          profileProvider.profiles.isNotEmpty) {
+        // Try 'default', fallback to first
+        await profileProvider.selectProfile('default');
+      }
+
+      if (profileProvider.activeProfile != null) {
+        final history = libraryProvider.extractLegacyHistory();
+        if (history.isNotEmpty) {
+          debugPrint(
+              'Main: Importing ${history.length} items to Default profile.');
+          await profileProvider.importUserData(history);
         }
-        
-        if (profileProvider.activeProfile != null) {
-            final history = libraryProvider.extractLegacyHistory();
-            if (history.isNotEmpty) {
-                debugPrint('Main: Importing ${history.length} items to Default profile.');
-                await profileProvider.importUserData(history);
-            }
-            await settingsProvider.setHasMigratedProfiles(true);
-            profileProvider.deselectProfile();
-        }
+        await settingsProvider.setHasMigratedProfiles(true);
+        profileProvider.deselectProfile();
+      }
     }
-    
+
     // Connect Profile -> Library (Filter & User Data)
     void syncProfileToLibrary() {
-      libraryProvider.updateProfile(profileProvider.activeProfile, profileProvider.userData);
+      libraryProvider.updateProfile(
+          profileProvider.activeProfile, profileProvider.userData);
     }
+
     profileProvider.addListener(syncProfileToLibrary);
     // Initial sync
     syncProfileToLibrary();
@@ -158,6 +156,16 @@ void main() async {
     final metadataService = MetadataService(settingsProvider, tmdbService);
     final playbackProvider = PlaybackProvider(libraryProvider, profileProvider);
     
+    // Auto Backup Manager (Windows)
+    if (isWindowsDesktop) {
+       final autoBackupManager = AutoBackupManager(
+          settings: settingsProvider, 
+          library: libraryProvider, 
+          profiles: profileProvider
+       );
+       autoBackupManager.init();
+    }
+
     runApp(
       MultiProvider(
         providers: [
@@ -166,8 +174,6 @@ void main() async {
           ChangeNotifierProvider(create: (_) => libraryProvider),
           ChangeNotifierProvider(create: (_) => playbackProvider),
           ChangeNotifierProvider(create: (_) => DiscoverFilterNotifier()),
-
-
           Provider<TmdbService>.value(value: tmdbService),
           Provider<TmdbDiscoverService>.value(value: tmdbDiscoverService),
           Provider<MetadataService>.value(value: metadataService),

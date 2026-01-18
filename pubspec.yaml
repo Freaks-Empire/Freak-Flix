@@ -43,6 +43,10 @@ dependencies:
   firebase_performance: ^0.11.1
   cloud_firestore: ^6.1.1
   flutter_animate: ^4.5.2
+  dartssh2: ^2.8.2              # SFTP over SSH
+  ftpconnect: ^2.0.10           # FTP client
+  webdav_client: ^1.2.2         # WebDAV client
+  flutter_secure_storage: ^9.0.0 # Secure credential storage
 
 dev_dependencies:
   flutter_test:

@@ -24,6 +24,10 @@ import '../services/tmdb_discover_service.dart';
 import '../services/metadata_service.dart';
 import '../services/sidecar_service.dart';
 import '../services/task_queue_service.dart';
+import '../services/remote_storage_service.dart';
+import '../services/sftp_client.dart';
+import '../services/ftp_client_wrapper.dart';
+import '../services/webdav_client_wrapper.dart';
 
 import 'settings_provider.dart';
 import '../utils/filename_parser.dart';
@@ -73,6 +77,89 @@ class LibraryProvider extends ChangeNotifier {
     }).toList()
       ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
   }
+
+  // --- Profile Statistics ---
+  
+  /// Total watch time in seconds across all watched content
+  int get totalWatchTimeSeconds {
+    int total = 0;
+    for (final item in _filteredItems) {
+      if (item.isWatched && item.runtimeMinutes != null) {
+        total += item.runtimeMinutes! * 60;
+      } else if (item.lastPositionSeconds > 0) {
+        total += item.lastPositionSeconds;
+      }
+    }
+    return total;
+  }
+
+  /// Count of fully watched movies
+  int get watchedMoviesCount => _filteredItems
+      .where((i) => i.type == MediaType.movie && i.isWatched).length;
+
+  /// Count of fully watched TV episodes  
+  int get watchedEpisodesCount => _filteredItems
+      .where((i) => i.type == MediaType.tv && i.isWatched).length;
+
+  /// Genre breakdown map {genre: count}
+  Map<String, int> get genreBreakdown {
+    final map = <String, int>{};
+    for (final item in _filteredItems.where((i) => i.isWatched || i.lastPositionSeconds > 0)) {
+      for (final genre in item.genres) {
+        map[genre] = (map[genre] ?? 0) + 1;
+      }
+    }
+    return map;
+  }
+
+  /// Top genres sorted by count, limited to top N
+  List<MapEntry<String, int>> topGenres([int limit = 5]) {
+    final sorted = genreBreakdown.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return sorted.take(limit).toList();
+  }
+
+  /// Recent activity (items with any watch progress, sorted by lastModified)
+  List<MediaItem> get recentActivity => _filteredItems
+      .where((i) => i.lastPositionSeconds > 0 || i.isWatched)
+      .toList()
+    ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+
+  /// Watch activity by day for last 7 days {dayName: minutes}
+  Map<String, int> get watchActivityByDay {
+    final now = DateTime.now();
+    final dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    final activity = <String, int>{};
+    
+    // Initialize all days with 0 - order from 6 days ago to today
+    for (int i = 6; i >= 0; i--) {
+      final day = now.subtract(Duration(days: i));
+      activity[dayNames[day.weekday % 7]] = 0;
+    }
+    
+    // Aggregate watch time per day using actual watch dates from user data
+    for (final entry in _currentUserData.entries) {
+      final userData = entry.value;
+      if (userData.positionSeconds > 0 || userData.isWatched) {
+        final watchDate = userData.lastUpdated;
+        final dayDiff = now.difference(watchDate).inDays;
+        
+        if (dayDiff >= 0 && dayDiff < 7) {
+          final dayName = dayNames[watchDate.weekday % 7];
+          // Use position seconds as watch time in minutes
+          final minutes = userData.positionSeconds > 0 
+              ? userData.positionSeconds ~/ 60 
+              : 0;
+          activity[dayName] = (activity[dayName] ?? 0) + (minutes > 0 ? minutes : 30); // Default 30 min if watched but no position
+        }
+      }
+    }
+    
+    return activity;
+  }
+
+  /// Total number of items in library
+  int get totalLibraryCount => _allItems.length;
 
   List<LibraryFolder> libraryFolders = [];
   bool isLoading = false;
@@ -556,6 +643,18 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateLibraryFolder(LibraryFolder folder) async {
+    final index = libraryFolders.indexWhere(
+      (f) => f.id == folder.id && f.accountId == folder.accountId,
+    );
+    if (index != -1) {
+      libraryFolders[index] = folder;
+      await _saveLibraryFolders();
+      _configChangedController.add(null);
+      notifyListeners();
+    }
+  }
+
   Future<void> removeLibraryFolder(LibraryFolder folder) async {
     libraryFolders.removeWhere(
       (f) => f.id == folder.id && f.accountId == folder.accountId,
@@ -615,6 +714,14 @@ class LibraryProvider extends ChangeNotifier {
     isLoading = true;
     notifyListeners();
     try {
+      // Check for remote storage protocols (SFTP, FTP, WebDAV)
+      if (folder.path.startsWith('sftp:') ||
+          folder.path.startsWith('ftp:') ||
+          folder.path.startsWith('webdav:')) {
+        await _scanRemoteFolder(folder, metadata: metadata);
+        return;
+      }
+
       if (folder.accountId.isNotEmpty) {
         await rescanOneDriveFolder(
             auth: auth, folder: folder, metadata: metadata);
@@ -895,7 +1002,7 @@ class LibraryProvider extends ChangeNotifier {
 
   /// Manually runs the Sidecar Write & Auto-Rename logic on ALL current items.
   void enforceSidecarsAndNaming() {
-    _setScanStatus('Enforcing metadata & naming rules...');
+    _setScanStatus('Generating NFO files...');
     notifyListeners();
 
     int processed = 0;
@@ -906,9 +1013,14 @@ class LibraryProvider extends ChangeNotifier {
     }
 
     // We don't await the queue here, just the scheduling.
-    Future.delayed(const Duration(seconds: 1), () {
-      _setScanStatus(''); // Clear status
+    Future.delayed(const Duration(seconds: 3), () {
+      _setScanStatus('Queued $processed items for generation.'); // Clear status
       notifyListeners();
+      
+      Future.delayed(const Duration(seconds: 2), () {
+         _setScanStatus('');
+         notifyListeners();
+      });
     });
   }
 
@@ -953,29 +1065,7 @@ class LibraryProvider extends ChangeNotifier {
       });
     }
 
-    // 2. Rename SCENES (Adult) if needed
-    if (enriched.type == MediaType.scene && enriched.title != null) {
-      final yearPart = enriched.year != null ? ' (${enriched.year})' : '';
-      final ext = p.extension(enriched.fileName);
-      final expectedName = '${enriched.title}$yearPart$ext';
 
-      final safeName = expectedName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '');
-
-      if (enriched.fileName != safeName) {
-        TaskQueueService.instance
-            .run('Renaming: ${enriched.fileName} -> $safeName', () async {
-          final ok = await graph_auth.GraphAuthService.instance.renameItem(
-              accountId: accountId, itemId: itemId, newName: safeName);
-          if (ok) {
-            final idx = _allItems.indexWhere((e) => e.id == enriched.id);
-            if (idx != -1) {
-              _allItems[idx] = enriched.copyWith(fileName: safeName);
-              notifyListeners();
-            }
-          }
-        });
-      }
-    }
   }
 
   /// Refetch metadata only for items inside a specific library folder.
@@ -1570,6 +1660,268 @@ class LibraryProvider extends ChangeNotifier {
       await saveLibrary();
       _configChangedController.add(null);
     }
+  }
+
+  /// Scan a remote storage folder (SFTP, FTP, WebDAV)
+  Future<void> _scanRemoteFolder(LibraryFolder folder,
+      {MetadataService? metadata}) async {
+    final sourceLabel = 'Remote: ${folder.displayName}';
+    beginScan(sourceLabel: sourceLabel);
+
+    try {
+      // Parse protocol and account ID from path
+      // Format: sftp:accountId/path or ftp:accountId/path or webdav:accountId/path
+      final pathParts = folder.path.split(':');
+      if (pathParts.length < 2) {
+        throw Exception('Invalid remote path format: ${folder.path}');
+      }
+      
+      final protocol = pathParts[0];
+      final remainder = pathParts.sublist(1).join(':');
+      final accountId = folder.accountId;
+      
+      // Extract the actual remote path (after accountId prefix)
+      String remotePath = '/';
+      if (remainder.startsWith(accountId)) {
+        remotePath = remainder.substring(accountId.length);
+        if (remotePath.isEmpty) remotePath = '/';
+      } else {
+        // Path might just be the full path after protocol:
+        remotePath = remainder.startsWith('/') ? remainder : '/$remainder';
+      }
+
+      // Get the account
+      final account = RemoteStorageService.instance.getAccount(accountId);
+      if (account == null) {
+        throw Exception('Remote account not found: $accountId');
+      }
+
+      // Get password
+      final password = await RemoteStorageService.instance.getPassword(accountId);
+      if (password == null) {
+        throw Exception('No credentials found for account');
+      }
+
+      _setScanStatus('Connecting to ${account.host}...');
+      notifyListeners();
+
+      // Convert protocol to type
+      RemoteStorageType type;
+      switch (protocol) {
+        case 'sftp':
+          type = RemoteStorageType.sftp;
+          break;
+        case 'ftp':
+          type = RemoteStorageType.ftp;
+          break;
+        case 'webdav':
+          type = RemoteStorageType.webdav;
+          break;
+        default:
+          throw Exception('Unknown protocol: $protocol');
+      }
+
+      // Scan based on protocol type
+      final scannedItems = <MediaItem>[];
+      
+      switch (type) {
+        case RemoteStorageType.sftp:
+          final client = SftpClient(account);
+          if (await client.connect(password)) {
+            await _scanSftpDirectory(client, remotePath, folder, scannedItems, sourceLabel);
+            client.disconnect();
+          } else {
+            throw Exception('Failed to connect to SFTP server');
+          }
+          break;
+          
+        case RemoteStorageType.ftp:
+          final client = FtpClientWrapper(account);
+          if (await client.connect(password)) {
+            await _scanFtpDirectory(client, remotePath, folder, scannedItems, sourceLabel);
+            await client.disconnect();
+          } else {
+            throw Exception('Failed to connect to FTP server');
+          }
+          break;
+          
+        case RemoteStorageType.webdav:
+          final client = WebDavClientWrapper(account);
+          if (await client.connect(password)) {
+            await _scanWebDavDirectory(client, remotePath, folder, scannedItems, sourceLabel);
+            client.disconnect();
+          } else {
+            throw Exception('Failed to connect to WebDAV server');
+          }
+          break;
+      }
+
+      // Apply library type classifications
+      for (var i = 0; i < scannedItems.length; i++) {
+        final item = scannedItems[i];
+        if (folder.type == LibraryType.adult) {
+          scannedItems[i] = item.copyWith(isAdult: true, type: MediaType.scene);
+        } else if (folder.type == LibraryType.anime) {
+          scannedItems[i] = item.copyWith(isAnime: true);
+        }
+      }
+
+      await _ingestItems(scannedItems, metadata);
+      
+    } catch (e) {
+      error = e.toString();
+      debugPrint('Remote scan error: $e');
+    } finally {
+      finishScan();
+      await saveLibrary();
+      _configChangedController.add(null);
+    }
+  }
+
+  /// Recursively scan SFTP directory
+  Future<void> _scanSftpDirectory(
+    SftpClient client,
+    String path,
+    LibraryFolder folder,
+    List<MediaItem> items,
+    String sourceLabel,
+  ) async {
+    try {
+      final files = await client.listDirectory(path);
+      
+      for (final file in files) {
+        if (_cancelScanRequested) break;
+        
+        if (file.isDirectory) {
+          // Recursively scan subdirectories
+          await _scanSftpDirectory(client, file.path, folder, items, sourceLabel);
+        } else if (_isMediaFile(file.name)) {
+          reportScanProgress(sourceLabel: sourceLabel, currentItem: file.name);
+          
+          // Create MediaItem for this file
+          final item = _createRemoteMediaItem(file, folder);
+          items.add(item);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error scanning SFTP directory $path: $e');
+    }
+  }
+
+  /// Recursively scan FTP directory
+  Future<void> _scanFtpDirectory(
+    FtpClientWrapper client,
+    String path,
+    LibraryFolder folder,
+    List<MediaItem> items,
+    String sourceLabel,
+  ) async {
+    try {
+      final files = await client.listDirectory(path);
+      
+      for (final file in files) {
+        if (_cancelScanRequested) break;
+        
+        if (file.isDirectory) {
+          await _scanFtpDirectory(client, file.path, folder, items, sourceLabel);
+        } else if (_isMediaFile(file.name)) {
+          reportScanProgress(sourceLabel: sourceLabel, currentItem: file.name);
+          
+          final item = _createRemoteMediaItem(file, folder);
+          items.add(item);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error scanning FTP directory $path: $e');
+    }
+  }
+
+  /// Recursively scan WebDAV directory
+  Future<void> _scanWebDavDirectory(
+    WebDavClientWrapper client,
+    String path,
+    LibraryFolder folder,
+    List<MediaItem> items,
+    String sourceLabel,
+  ) async {
+    try {
+      final files = await client.listDirectory(path);
+      
+      for (final file in files) {
+        if (_cancelScanRequested) break;
+        
+        if (file.isDirectory) {
+          await _scanWebDavDirectory(client, file.path, folder, items, sourceLabel);
+        } else if (_isMediaFile(file.name)) {
+          reportScanProgress(sourceLabel: sourceLabel, currentItem: file.name);
+          
+          final item = _createRemoteMediaItem(file, folder);
+          items.add(item);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error scanning WebDAV directory $path: $e');
+    }
+  }
+
+  /// Create a MediaItem from a remote file
+  MediaItem _createRemoteMediaItem(RemoteFile file, LibraryFolder folder) {
+    // Parse title from filename
+    final parsed = FilenameParser.parse(file.name);
+    
+    // Determine media type from folder type
+    MediaType type;
+    switch (folder.type) {
+      case LibraryType.movies:
+        type = MediaType.movie;
+        break;
+      case LibraryType.tv:
+        type = MediaType.tv;
+        break;
+      case LibraryType.anime:
+        type = MediaType.tv;
+        break;
+      case LibraryType.adult:
+        type = MediaType.scene;
+        break;
+      case LibraryType.other:
+        type = MediaType.movie;
+        break;
+    }
+
+    // Create unique ID: protocol:accountId:path
+    final itemId = '${folder.path.split(':').first}:${folder.accountId}:${file.path}';
+    
+    // Extract folder path from file path
+    final folderPathFromFile = file.path.contains('/') 
+        ? file.path.substring(0, file.path.lastIndexOf('/'))
+        : '/';
+
+    return MediaItem(
+      id: itemId,
+      title: parsed.movieTitle ?? file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
+      year: parsed.year,
+      type: type,
+      filePath: file.path,
+      fileName: file.name,
+      folderPath: folderPathFromFile,
+      sizeBytes: file.size ?? 0,
+      lastModified: file.modifiedTime ?? DateTime.now(),
+      season: parsed.season,
+      episode: parsed.episode,
+      isAdult: folder.type == LibraryType.adult,
+      isAnime: folder.type == LibraryType.anime,
+    );
+  }
+
+  /// Check if a file is a media file based on extension
+  bool _isMediaFile(String filename) {
+    final ext = filename.toLowerCase().split('.').lastOrNull ?? '';
+    const videoExtensions = [
+      'mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v',
+      'mpg', 'mpeg', 'ts', 'm2ts', 'vob', 'divx', 'xvid', '3gp'
+    ];
+    return videoExtensions.contains(ext);
   }
 
   Map<String, dynamic> exportState() {

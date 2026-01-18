@@ -336,33 +336,41 @@ class TmdbDiscoverService {
     }
 
     // 3. Network Fetch
-    final res = await _client.get(uri);
-    if (res.statusCode != 200) return [];
-    final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-    final results = decoded['results'] as List<dynamic>?;
-    if (results == null) return [];
-    
-    final items = results
-        .whereType<Map<String, dynamic>>()
-        .map(
-          (m) => TmdbItem.fromMap(
-            m,
-            imageBase: _imageBase,
-            defaultType: defaultType,
-          ),
-        )
-        .where((item) => item.title.isNotEmpty)
-        .toList();
+    try {
+      final res = await _client.get(uri);
+      if (res.statusCode != 200) {
+        debugPrint('TMDB Fetch Failed: ${res.statusCode} for $uri');
+        return [];
+      }
+      final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+      final results = decoded['results'] as List<dynamic>?;
+      if (results == null) return [];
+      
+      final items = results
+          .whereType<Map<String, dynamic>>()
+          .map(
+            (m) => TmdbItem.fromMap(
+              m,
+              imageBase: _imageBase,
+              defaultType: defaultType,
+            ),
+          )
+          .where((item) => item.title.isNotEmpty)
+          .toList();
 
-    // 4. Save to Cache
-    final entry = _CacheEntry(items, DateTime.now());
-    _cache[cacheKey] = entry;
-    
-    // Async save to prefs to not block UI?
-    // We want to avoid race conditions but for cache it's fine.
-    _saveToPersistentCache(prefs, cacheKey, entry);
+      // 4. Save to Cache
+      final entry = _CacheEntry(items, DateTime.now());
+      _cache[cacheKey] = entry;
+      
+      // Async save to prefs to not block UI?
+      // We want to avoid race conditions but for cache it's fine.
+      _saveToPersistentCache(prefs, cacheKey, entry);
 
-    return items;
+      return items;
+    } catch (e) {
+      debugPrint('TMDB Network Error for $uri: $e');
+      return [];
+    }
   }
   
   String _generateCacheKey(Uri uri) {
