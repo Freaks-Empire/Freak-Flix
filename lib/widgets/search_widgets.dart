@@ -235,7 +235,13 @@ class ContentRow extends StatelessWidget {
 
               return SizedBox(
                 width: isPortrait ? 140 : 220, 
-                child: DiscoverCard(item: tmdbItem, showOverlays: false, showTitle: true),
+                child: DiscoverCard(
+                  item: tmdbItem, 
+                  showOverlays: false, 
+                  showTitle: true,
+                  width: isPortrait ? 140 : 220,
+                  aspectRatio: isPortrait ? 2/3 : 16/9,
+                ),
               ).animate().fade().slideX(begin: 0.2, end: 0, delay: Duration(milliseconds: 50 * index), duration: 400.ms, curve: Curves.easeOut);
             },
           );

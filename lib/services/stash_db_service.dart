@@ -426,6 +426,7 @@ class StashDbService {
           tags { name }
           images { url }
           files { duration }
+          paths { screenshot }
           studio { name }
         }
       }
@@ -450,7 +451,7 @@ class StashDbService {
 
         final scenes = data?['findScenes']?['scenes'] as List?;
         if (scenes != null && scenes.isNotEmpty) {
-           return scenes.map((s) => _mapSceneToMediaItem(s, s['title'] ?? 'Unknown')).toList();
+           return scenes.map((s) => _mapSceneToMediaItem(s, s['title'] ?? 'Unknown', baseUrl: ep.url)).toList();
         }
       } catch (e) {
         debugPrint('StashDB [${ep.name}]: Fetch Recent Scenes failed: $e');
@@ -497,7 +498,7 @@ class StashDbService {
 
         final sceneData = data?['findScene'];
         if (sceneData != null) {
-            return _mapSceneToMediaItem(sceneData, 'Unknown');
+            return _mapSceneToMediaItem(sceneData, 'Unknown', baseUrl: ep.url);
         } else if (isStashBox) {
           // Fallback: Check if it's a Movie (TPDB often distinguishes strictly)
           debugPrint('StashDB [${ep.name}]: Scene not found, trying Movie...');
@@ -510,7 +511,7 @@ class StashDbService {
           );
           final movie = movieData?['findMovie'];
           if (movie != null) {
-             return _mapSceneToMediaItem(movie, 'Unknown', type: MediaType.movie);
+             return _mapSceneToMediaItem(movie, 'Unknown', type: MediaType.movie, baseUrl: ep.url);
           }
         }
       } catch (e) {
@@ -555,7 +556,8 @@ class StashDbService {
             return _mapSceneToMediaItem(
                 results.first, 
                 title, 
-                type: isMovie ? MediaType.movie : MediaType.scene
+                type: isMovie ? MediaType.movie : MediaType.scene,
+                baseUrl: ep.url
             );
           }
         } catch (e) {
@@ -709,7 +711,7 @@ class StashDbService {
         if (scenes != null && scenes.isNotEmpty) {
           debugPrint('[stash-fetch] performer=$performerId endpoint=${ep.name} page=$page perPage=$perPage count=${scenes.length}');
           return scenes
-            .map((s) => _mapSceneToMediaItem(s, s['title'] ?? 'Unknown'))
+            .map((s) => _mapSceneToMediaItem(s, s['title'] ?? 'Unknown', baseUrl: ep.url))
             .toList();
         }
       } catch (e) {
@@ -877,9 +879,22 @@ class StashDbService {
     return cleaned;
   }
 
-  MediaItem _mapSceneToMediaItem(dynamic sceneData, String originalFileName, {MediaType type = MediaType.scene}) {
+  MediaItem _mapSceneToMediaItem(dynamic sceneData, String originalFileName, {MediaType type = MediaType.scene, String? baseUrl}) {
     final scene = sceneData as Map<String, dynamic>;
     
+    // Helper to fix URLs
+    String? fixUrl(String? u) {
+      if (u == null) return null;
+      if (u.startsWith('http')) return u;
+      if (baseUrl != null) {
+        // Handle Stash relative paths
+         return baseUrl.endsWith('/') 
+           ? '$baseUrl${u.startsWith('/') ? u.substring(1) : u}' 
+           : '$baseUrl${u.startsWith('/') ? u : '/$u'}';
+      }
+      return u;
+    }
+
     // Extract Poster
     String? poster;
     final images = scene['images'] as List?;
@@ -889,18 +904,15 @@ class StashDbService {
       poster = scene['front_image']['url'];
     }
 
+    // Fix poster URL
+    poster = fixUrl(poster);
+
     // Extract Cast
-    final rawPerformers = scene['performers'] as List?;
-    debugPrint('StashDB: Parsing performers. Count: ${rawPerformers?.length}');
-    
+    final rawPerformers = scene['performers'] as List?;    
     final cast = rawPerformers?.map((p) {
         final perf = p['performer'];
-        if (perf == null) {
-          debugPrint('StashDB: Performer object is null');
-          return null;
-        }
+        if (perf == null) return null;
         
-        // Handle both Stash App (image_path) and Stash Box (images list)
         String? profileUrl;
         if (perf['image_path'] != null) {
           profileUrl = perf['image_path'];
@@ -912,11 +924,10 @@ class StashDbService {
           id: perf['id'] as String? ?? '',
           name: perf['name'] as String? ?? 'Unknown',
           character: 'Performer', 
-          profileUrl: profileUrl,
+          profileUrl: fixUrl(profileUrl),
           source: CastSource.stashDb,
         );
     }).whereType<CastMember>().toList() ?? [];
-    debugPrint('StashDB: Extracted ${cast.length} cast members');
 
     // Extract Tags/Genres
     final tags = (scene['tags'] as List?)
@@ -927,36 +938,32 @@ class StashDbService {
     // Construct Overview
     String overview = scene['details'] ?? '';
     final studio = scene['studio']?['name'];
+    if (studio != null) overview = 'Studio: $studio\n\n$overview';
     
-    if (studio != null) {
-      overview = 'Studio: $studio\n\n$overview';
-    }
-
-    // StashDB dates are YYYY-MM-DD
     final date = DateTime.tryParse(scene['date'] ?? '');
 
     // Extract Backdrop (Priority: paths.screenshot -> paths.preview -> poster)
     String? backdrop;
     final paths = scene['paths'] as Map<String, dynamic>?;
-    if (paths != null) {
-      if (paths['screenshot'] != null && (paths['screenshot'] as String).isNotEmpty) {
-        backdrop = paths['screenshot'];
-      }
+    if (paths != null && paths['screenshot'] != null) {
+         backdrop = paths['screenshot'];
     } else if (scene['back_image'] != null) {
        backdrop = scene['back_image']['url'];
     }
-    // Fallback to primary poster if no specific backdrop for now
+    
+    backdrop = fixUrl(backdrop);
+    
+    // Fallback logic
     backdrop ??= poster;
+    poster ??= backdrop; // Use screenshot as poster if no cover
 
     // Extract Duration
     int? durationSeconds;
-    // 1. Scene direct duration (Box)
     if (scene['duration'] != null) {
        final d = scene['duration'];
        if (d is num) durationSeconds = d.toInt();
        else if (d is String) durationSeconds = int.tryParse(d);
     }
-    // 2. File duration (Stash App)
     if (durationSeconds == null || durationSeconds == 0) {
        final files = scene['files'] as List?;
        if (files != null && files.isNotEmpty) {
@@ -972,8 +979,8 @@ class StashDbService {
       stashId: scene['id'] as String?,
       title: scene['title'] ?? originalFileName,
       fileName: originalFileName,
-      filePath: '', // Populated by LibraryProvider
-      folderPath: '', // Populated by LibraryProvider
+      filePath: '', 
+      folderPath: '', 
       sizeBytes: 0, 
       lastModified: date ?? DateTime.now(),
       year: date?.year,

@@ -13,12 +13,16 @@ class DiscoverCard extends StatelessWidget {
   final TmdbItem item;
   final bool showOverlays;
   final bool showTitle;
+  final double? width;
+  final double aspectRatio;
 
   const DiscoverCard({
     super.key, 
     required this.item,
     this.showOverlays = true,
     this.showTitle = true,
+    this.width,
+    this.aspectRatio = 2 / 3,
   });
 
   @override
@@ -54,14 +58,14 @@ class DiscoverCard extends StatelessWidget {
         }
       },
       child: SizedBox(
-        width: 136,
+        width: width ?? 136,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: AspectRatio(
-                aspectRatio: 2 / 3,
+                aspectRatio: aspectRatio,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
