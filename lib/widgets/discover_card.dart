@@ -15,6 +15,7 @@ class DiscoverCard extends StatelessWidget {
   final bool showTitle;
   final double? width;
   final double aspectRatio;
+  final MediaItem? sourceItem;
 
   const DiscoverCard({
     super.key, 
@@ -23,13 +24,21 @@ class DiscoverCard extends StatelessWidget {
     this.showTitle = true,
     this.width,
     this.aspectRatio = 2 / 3,
+    this.sourceItem,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final heroTag = 'poster_${sourceItem?.id ?? item.id}';
+
     return GestureDetector(
       onTap: () {
+        if (sourceItem != null) {
+          context.push('/media/${sourceItem!.id}', extra: sourceItem);
+          return;
+        }
+
         final library = context.read<LibraryProvider>();
         final local = library.findByTmdbId(item.id);
         if (local != null) {
@@ -71,7 +80,7 @@ class DiscoverCard extends StatelessWidget {
                   children: [
                     if (item.posterUrl != null)
                       Hero(
-                        tag: 'poster_${item.id}',
+                        tag: heroTag,
                         child: SafeNetworkImage(
                           url: item.posterUrl,
                           fit: BoxFit.cover,
@@ -80,7 +89,7 @@ class DiscoverCard extends StatelessWidget {
                       )
                     else
                       Hero(
-                        tag: 'poster_${item.id}',
+                        tag: heroTag,
                         child: _PosterFallback(type: item.type),
                       ),
                     if (showOverlays)

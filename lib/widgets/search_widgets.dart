@@ -241,6 +241,7 @@ class ContentRow extends StatelessWidget {
                   showTitle: true,
                   width: isPortrait ? 140 : 220,
                   aspectRatio: isPortrait ? 2/3 : 16/9,
+                  sourceItem: item is MediaItem ? item : null,
                 ),
               ).animate().fade().slideX(begin: 0.2, end: 0, delay: Duration(milliseconds: 50 * index), duration: 400.ms, curve: Curves.easeOut);
             },
