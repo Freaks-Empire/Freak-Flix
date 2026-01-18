@@ -280,11 +280,11 @@ class TmdbService {
 
 
   Future<List<TmdbItem>> getTrendingMovies() async {
-    return _fetchItems('/3/trending/movie/day');
+    return _fetchItems('/3/trending/movie/day', defaultType: TmdbMediaType.movie);
   }
 
   Future<List<TmdbItem>> getTrendingTv() async {
-    return _fetchItems('/3/trending/tv/day');
+    return _fetchItems('/3/trending/tv/day', defaultType: TmdbMediaType.tv);
   }
 
   Future<List<TmdbItem>> getAnime() async {
@@ -295,11 +295,12 @@ class TmdbService {
         'with_genres': '16',
         'original_language': 'ja',
         'sort_by': 'popularity.desc',
-      }
+      },
+      defaultType: TmdbMediaType.tv,
     );
   }
 
-  Future<List<TmdbItem>> _fetchItems(String path, {Map<String, String>? extras}) async {
+  Future<List<TmdbItem>> _fetchItems(String path, {Map<String, String>? extras, TmdbMediaType defaultType = TmdbMediaType.movie}) async {
     final key = _key;
     if (key == null) return [];
 
@@ -316,7 +317,7 @@ class TmdbService {
         final results = (data['results'] as List).map((e) => TmdbItem.fromMap(
           e,
           imageBase: _imageBase,
-          defaultType: TmdbMediaType.movie, // Fallback
+          defaultType: defaultType, 
         )).toList();
         
         return results.where((i) => i.type == TmdbMediaType.movie || i.type == TmdbMediaType.tv).toList();

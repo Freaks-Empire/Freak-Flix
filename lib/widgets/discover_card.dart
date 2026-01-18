@@ -1,7 +1,8 @@
 /// lib/widgets/discover_card.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cached_network_image/cached_network_image.dart'; 
+import 'safe_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../models/tmdb_item.dart';
 import '../models/media_item.dart';
@@ -67,20 +68,10 @@ class DiscoverCard extends StatelessWidget {
                     if (item.posterUrl != null)
                       Hero(
                         tag: 'poster_${item.id}',
-                        child: CachedNetworkImage(
-                          imageUrl: item.posterUrl!,
+                        child: SafeNetworkImage(
+                          url: item.posterUrl,
                           fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => _PosterFallback(type: item.type),
-                          placeholder: (_, __) => Container(
-                            color: Colors.grey[900],
-                            child: const Center(
-                              child: SizedBox(
-                                width: 20, 
-                                height: 20, 
-                                child: CircularProgressIndicator(strokeWidth: 2)
-                              )
-                            ),
-                          ),
+                          errorBuilder: (_, __, ___) => _PosterFallback(type: item.type),
                         ),
                       )
                     else
