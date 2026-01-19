@@ -63,8 +63,8 @@ flutter:
     - assets/
 
 msix_config:
-  display_name: Freak-Flix [13c733a]
+  display_name: Freak-Flix [6484d20]
   identity_name: FreaksEmpire.FreakFlix
   publisher: CN=MNDL
-  msix_version: 1.0.366.0
-  store: true
+  msix_version: 1.0.397.0
+  store: false

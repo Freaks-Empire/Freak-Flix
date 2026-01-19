@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <AppInstaller
         xmlns="http://schemas.microsoft.com/appx/appinstaller/2018"
-        Version="1.0.364.0"
+        Version="1.0.397.0"
         Uri="https://freaks-empire.github.io/Freak-Flix/FreakFlix.appinstaller">
     <MainPackage
         Name="FreaksEmpire.FreakFlix"
-        Publisher="CN=MNDL"
-        Version="1.0.364.0"
+    Publisher="CN=FreakFlix Dev"
+        Version="1.0.397.0"
         ProcessorArchitecture="x64"
-        Uri="https://freaks-empire.github.io/Freak-Flix/FreakFlix_1.0.364.0.msix" />
+        Uri="https://freaks-empire.github.io/Freak-Flix/FreakFlix_1.0.397.0.msix" />
     <UpdateSettings>
         <OnLaunch HoursBetweenUpdateChecks="0" />
     </UpdateSettings>
