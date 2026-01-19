@@ -51,8 +51,7 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
 
     return Column(
       children: [
-        // CLOUD SYNC (Firebase-based - Hidden on Windows)
-        if (!_isWindowsDesktop)
+        // CLOUD SYNC (Firebase-based)
         SettingsGroup(
           title: 'Cloud Snapshots & Live Sync',
           children: [
@@ -136,11 +135,9 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
                 ],
               ),
             )
-          ],
         ),
 
-        // ONEDRIVE BACKUP (Windows-specific, works without Firebase)
-        if (_isWindowsDesktop)
+        // ONEDRIVE BACKUP (Works on all platforms via Microsoft Graph)
         SettingsGroup(
           title: 'OneDrive Backup',
           children: [
