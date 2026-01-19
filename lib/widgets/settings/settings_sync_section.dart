@@ -9,10 +9,8 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/settings_provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/data_backup_service.dart';
 import '../../services/graph_auth_service.dart';
-import '../../services/sync_service.dart';
 import '../../utils/downloader/downloader.dart'; // For downloadJson on web
 import '../settings_widgets.dart';
 
@@ -41,7 +39,6 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final syncActive = SyncService().isActive;
     final primaryAccount = settings.primaryBackupAccountId == null
         ? null
         : _graphAuth.accounts.cast<GraphAccount?>().firstWhere(
@@ -51,93 +48,6 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
 
     return Column(
       children: [
-        // CLOUD SYNC (Firebase-based)
-        SettingsGroup(
-          title: 'Cloud Snapshots & Live Sync',
-          children: [
-            SettingsTile(
-              icon: LucideIcons.cloud,
-              title: primaryAccount?.displayName ?? 'Select Backup Account',
-              subtitle: primaryAccount?.userPrincipalName ?? 'Tap to configure',
-              trailing: Icon(
-                  primaryAccount != null
-                      ? LucideIcons.check
-                      : LucideIcons.chevronRight,
-                  size: 16,
-                  color: AppColors.textSub),
-              onTap: () => _showAccountPicker(context, settings),
-            ),
-            const Divider(height: 1, color: AppColors.border),
-            if (primaryAccount != null && syncActive)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                color: AppColors.surface.withOpacity(0.5),
-                child: const Row(children: [
-                  Icon(Icons.circle, size: 8, color: Colors.greenAccent),
-                  SizedBox(width: 8),
-                  Text('Live Sync Active',
-                      style: TextStyle(
-                          color: Colors.greenAccent,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold)),
-                ]),
-              ),
-            if (primaryAccount != null && !syncActive)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                color: AppColors.surface.withOpacity(0.5),
-                child: const Row(children: [
-                  Icon(Icons.warning_amber_rounded,
-                      size: 16, color: Colors.orangeAccent),
-                  SizedBox(width: 8),
-                  Flexible(
-                      child: Text('Cloud sync is unavailable on this platform.',
-                          style: TextStyle(
-                              color: Colors.orangeAccent,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold))),
-                ]),
-              ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  OutlinedButton.icon(
-                    icon: const Icon(LucideIcons.history, size: 16),
-                    label: const Text('View Version History'),
-                    onPressed: (_isProcessing || primaryAccount == null || !syncActive)
-                        ? null
-                        : () => _showVersionHistory(
-                            context, settings, primaryAccount),
-                  ),
-                  const SizedBox(width: 12),
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                    ),
-                    icon: _isProcessing
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
-                        : const Icon(LucideIcons.save, size: 16),
-                    label: const Text('Create Restore Point'),
-                    onPressed:
-                        (_isProcessing || primaryAccount == null || !syncActive)
-                            ? null
-                            : () => _createRestorePoint(
-                                context, settings, primaryAccount),
-                  ),
-                ],
-              ),
-            )
-          ],
-        ),
-
         // ONEDRIVE BACKUP (Works on all platforms via Microsoft Graph)
         SettingsGroup(
           title: 'OneDrive Backup',
