@@ -1,4 +1,5 @@
 /// lib/screens/details/scene_details_screen.dart
+import 'dart:async';
 import 'dart:ui';
 import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
@@ -465,15 +466,54 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
     final meta = context.read<MetadataService>();
     final controller = TextEditingController(text: _current.stashId);
     
+
     // State for the dialog
     List<MediaItem> results = [];
     bool isSearching = false;
     String? statusMessage;
+    Timer? _debounce;
 
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setState) {
+          
+          Future<void> performSearch(String query) async {
+            if (query.isEmpty) {
+              if (mounted) {
+                 setState(() {
+                   results = [];
+                   statusMessage = null;
+                   isSearching = false;
+                 });
+              }
+              return;
+            }
+
+            setState(() {
+              isSearching = true;
+              statusMessage = null;
+            });
+
+            try {
+              final items = await meta.searchManual(query);
+              if (context.mounted) { // Check if dialog is still open
+                setState(() {
+                  results = items;
+                  if (items.isEmpty) statusMessage = 'No results found.';
+                });
+              }
+            } catch (e) {
+              if (context.mounted) {
+                setState(() => statusMessage = 'Error: $e');
+              }
+            } finally {
+              if (context.mounted) {
+                setState(() => isSearching = false);
+              }
+            }
+          }
+
           return AlertDialog(
             title: const Text('Edit Scene Details'),
             content: SizedBox(
@@ -481,60 +521,35 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Enter StashDB Scene ID, URL or Name to search.'),
+                  const Text('Type a name or ID to auto-search StashDB.'),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: controller,
-                          decoration: const InputDecoration(
-                            labelText: 'StashDB ID / URL / Search Name',
-                            border: OutlineInputBorder(),
-                            hintText: 'e.g. 019b... or Name',
-                          ),
-                          autofocus: true,
-                          onSubmitted: (_) {
-                             // Trigger search on Enter
-                             if (controller.text.isNotEmpty) {
-                                // Simulate Search Button press
-                                // (Logic copied below)
-                             }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton.tonalIcon(
-                        onPressed: isSearching ? null : () async {
-                          final query = controller.text.trim();
-                          if (query.isEmpty) return;
-
-                          setState(() {
-                            isSearching = true;
-                            statusMessage = null;
-                            results = [];
-                          });
-
-                          try {
-                            // Detect if ID/URL first -> if so, just behave like "Save" but maybe verify?
-                            // Actually, let's keep "Search" for searching.
-                            final items = await meta.searchManual(query);
-                            setState(() {
-                              results = items;
-                              if (items.isEmpty) statusMessage = 'No results found.';
-                            });
-                          } catch (e) {
-                            setState(() => statusMessage = 'Error: $e');
-                          } finally {
-                            setState(() => isSearching = false);
-                          }
-                        },
-                        icon: isSearching 
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.search),
-                        label: const Text('Search'),
-                      ),
-                    ],
+                  TextField(
+                    controller: controller,
+                    decoration: InputDecoration(
+                      labelText: 'Search Query',
+                      border: const OutlineInputBorder(),
+                      hintText: 'Start typing to search...',
+                      suffixIcon: isSearching 
+                          ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                          : (controller.text.isNotEmpty 
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear), 
+                                  onPressed: () {
+                                    controller.clear();
+                                    setState(() {
+                                      results = [];
+                                      statusMessage = null;
+                                    });
+                                  }) 
+                              : const Icon(Icons.search)),
+                    ),
+                    autofocus: true,
+                    onChanged: (text) {
+                      if (_debounce?.isActive ?? false) _debounce!.cancel();
+                      _debounce = Timer(const Duration(milliseconds: 500), () {
+                        performSearch(text.trim());
+                      });
+                    },
                   ),
                   if (statusMessage != null)
                     Padding(
@@ -544,7 +559,7 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                   const SizedBox(height: 16),
                   if (results.isNotEmpty) ...[
                     const Divider(),
-                    const Text('Select a result to apply:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('Results (Tap to select):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                     const SizedBox(height: 8),
                     Flexible(
                       child: SizedBox(
@@ -556,10 +571,11 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                           itemBuilder: (context, index) {
                             final item = results[index];
                             return ListTile(
+                              dense: true,
                               leading: item.posterUrl != null 
                                 ? SafeNetworkImage(
                                     url: item.posterUrl!, 
-                                    width: 40, 
+                                    width: 30, 
                                     height: 40, 
                                     fit: BoxFit.cover
                                   )
@@ -570,12 +586,10 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                                 maxLines: 1, 
                                 overflow: TextOverflow.ellipsis
                               ),
-                              trailing: const Icon(Icons.check_circle_outline),
                               onTap: () async {
                                 Navigator.of(ctx).pop(); // Close dialog
                                 
                                 // Apply Selected Item
-                                // Use key Stash ID if available
                                 final stashId = item.stashId ?? item.id.replaceFirst('stashdb:', ''); 
                                 
                                 if (stashId.isNotEmpty) {
@@ -603,14 +617,11 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                 onPressed: () => Navigator.of(ctx).pop(),
                 child: const Text('Cancel'),
               ),
-              // "Save & Rescan" - fallback for manual ID pasting or name forcing
               TextButton(
                  onPressed: () async {
                     Navigator.of(ctx).pop();
-                    // ... Existing Manual Save logic ...
-                    // (Simplified for brevity as "Search" is preferred now, but we keep fallback)
                     String input = controller.text.trim();
-                    // ... (Same UUID/Name logic as before) ...
+                    // Fallback manual save logic
                     String? newStashId;
                     String? newFileName;
                     final uuidRegex = RegExp(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', caseSensitive: false);
@@ -630,9 +641,14 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                           updated = updated.copyWith(fileName: newFileName, stashId: null);
                        }
                        await library.rescanSingleItem(updated, meta);
+                       if (mounted) {
+                         ScaffoldMessenger.of(context).showSnackBar(
+                           const SnackBar(content: Text('Applying manual change...')),
+                         );
+                       }
                     }
                  },
-                 child: const Text('Manual Save (ID/Name)'),
+                 child: const Text('Manual Save'),
               ),
             ],
           );
