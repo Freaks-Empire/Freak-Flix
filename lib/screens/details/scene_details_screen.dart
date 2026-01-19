@@ -472,14 +472,14 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Enter StashDB Scene ID or URL to manually link metadata.'),
+            const Text('Enter StashDB Scene ID, URL or Name to search.'),
             const SizedBox(height: 16),
             TextField(
               controller: controller,
               decoration: const InputDecoration(
-                labelText: 'StashDB ID / URL',
+                labelText: 'StashDB ID / URL / Search Name',
                 border: OutlineInputBorder(),
-                hintText: 'e.g. 019b36f4-b90d... or https://stashdb.org/scenes/...',
+                hintText: 'e.g. 019b... or Name of Scene',
               ),
               autofocus: true,
             ),
@@ -494,30 +494,58 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
             onPressed: () async {
               Navigator.of(ctx).pop();
               String input = controller.text.trim();
+              String? newStashId;
+              String? newFileName;
               
               // Basic logic to extract UUID if full URL pasted
-              // 1. Try extracting UUID
               final uuidRegex = RegExp(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', caseSensitive: false);
               final uuidMatch = uuidRegex.firstMatch(input);
+              
               if (uuidMatch != null) {
-                input = uuidMatch.group(0)!;
+                // Case 1: UUID found (ID or URL containing ID)
+                newStashId = uuidMatch.group(0)!;
               } else if (input.startsWith('http')) {
-                // 2. If it's a URL but no UUID, assume the last segment is the ID/Slug (e.g. TPDB slug)
-                // Example: https://theporndb.net/movies/some-slug-name
-                final uri = Uri.tryParse(input);
-                if (uri != null && uri.pathSegments.isNotEmpty) {
-                  input = uri.pathSegments.last;
-                }
+                // Case 2: URL but no UUID found (e.g. some other site link?)
+                // Just try to use last segment? Or fail?
+                // For now, if no UUID in URL, we assume it's not a valid StashDB URL we handle.
+                // But let's treat it as a name search if it's not a stash link?
+                // Actually, if user types a name "http something", rare.
+                // Let's assume if it starts with http and no UUID, we ignore or treat as name?
+                // Safest: Treat as name if not matching Stash ID pattern.
+                newFileName = input;
+              } else {
+                 // Case 3: Plain text -> Treat as Manual Search Query
+                 // We achieve this by overriding the fileName temporarily, 
+                 // which MetadataService uses to parse the title.
+                 if (input.isNotEmpty) {
+                    newFileName = input;
+                    // Reset stashId so strict ID check doesn't block title search
+                    newStashId = ''; // Empty string or null to clear
+                 }
               }
               
               if (input.isNotEmpty) {
-                 final updated = _current.copyWith(stashId: input);
+                 MediaItem updated = _current;
+                 
+                 if (newStashId != null && newStashId.isNotEmpty) {
+                    updated = updated.copyWith(stashId: newStashId);
+                 } else if (newFileName != null) {
+                    // Update fileName to force title-based search
+                    updated = updated.copyWith(
+                      fileName: newFileName,
+                      stashId: null, // Clear explicit ID to allow fallback search
+                    );
+                 } else if (newStashId == '') {
+                    // Clearly clearing ID
+                    updated = updated.copyWith(stashId: null);
+                 }
+                 
                  // Trigger rescan which will use this new ID
                  await library.rescanSingleItem(updated, meta);
                  
                  if (mounted) {
                    ScaffoldMessenger.of(context).showSnackBar(
-                     const SnackBar(content: Text('Updating with new ID...')),
+                     SnackBar(content: Text('Searching: $input...')),
                    );
                  }
               }
