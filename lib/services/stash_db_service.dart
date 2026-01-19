@@ -529,15 +529,37 @@ class StashDbService {
 
   /// Searches for scenes by title and returns a list of matches.
   Future<List<MediaItem>> searchScenesList(String title, List<StashEndpoint> endpoints, {bool useRaw = false}) async {
+    // 1. Raw Search (Exact)
     if (useRaw) {
       final results = await _executeSearchStrategy(title.trim(), endpoints);
       if (results.isNotEmpty) return results;
-      debugPrint('StashDB: Raw search empty, falling back to cleaned search...');
+      debugPrint('StashDB: Raw search empty, falling back to cleaned...');
     }
-    return _executeSearchStrategy(_cleanTitle(title), endpoints);
+
+    // 2. Cleaned Search (No punctuation/accents)
+    final cleanTitle = _cleanTitle(title);
+    var results = await _executeSearchStrategy(cleanTitle, endpoints);
+    if (results.isNotEmpty) return results;
+
+    // 3. Truncated Search (First 6 words)
+    // Avoids mismatches in long titles (e.g. "Friends" vs "Friend's" at the end)
+    final truncated = _truncateToWords(cleanTitle, 6);
+    if (truncated != cleanTitle && truncated.length > 5) {
+       debugPrint('StashDB: Clean search empty, falling back to truncated: "$truncated"');
+       results = await _executeSearchStrategy(truncated, endpoints);
+    }
+    
+    return results;
+  }
+  
+  String _truncateToWords(String text, int count) {
+    final words = text.split(' ');
+    if (words.length <= count) return text;
+    return words.take(count).join(' ');
   }
 
   Future<List<MediaItem>> _executeSearchStrategy(String query, List<StashEndpoint> endpoints) async {
+    // ... (existing implementation)
     for (final ep in endpoints) {
       if (!ep.enabled) continue; 
       
