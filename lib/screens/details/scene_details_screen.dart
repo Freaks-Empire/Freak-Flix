@@ -1,5 +1,4 @@
 /// lib/screens/details/scene_details_screen.dart
-import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
@@ -225,30 +224,7 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                       expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _buildInfoRow(context, "File Name", _current.fileName),
-                        _buildInfoRow(
-                          context, 
-                          "Full Path", 
-                          _current.filePath, 
-                          allowCopy: true,
-                          actionIcon: Icons.folder_open,
-                          onAction: () async {
-                             // Windows-specific explorer open
-                             if (Platform.isWindows) {
-                               try {
-                                 await Process.run('explorer', ['/select,', _current.filePath]);
-                               } catch (e) {
-                                 debugPrint('Error opening folder: $e');
-                                 if (context.mounted) {
-                                   ScaffoldMessenger.of(context).showSnackBar(
-                                     SnackBar(content: Text('Error opening folder: $e')),
-                                   );
-                                 }
-                               }
-                             } else {
-                               debugPrint('Open folder not supported on this platform yet');
-                             }
-                          } 
-                        ),
+                        _buildInfoRow(context, "Full Path", _current.filePath, allowCopy: true),
                         _buildInfoRow(context, "Size", _formatBytes(_current.sizeBytes)),
                         _buildInfoRow(context, "Container", _current.filePath.split('.').last.toUpperCase()),
                         if (_current.streamUrl != null)
