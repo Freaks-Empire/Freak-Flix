@@ -220,7 +220,7 @@ class _HeroBanner extends StatelessWidget {
     final imageUrl = item.backdropUrl ?? item.posterUrl;
 
     return GestureDetector(
-      onTap: () => context.push('/media/${item.id}', extra: item),
+      onTap: () => context.push('/media/${Uri.encodeComponent(item.id)}', extra: item),
       child: Container(
         height: 280,
         margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -303,7 +303,7 @@ class _HeroBanner extends StatelessWidget {
                     ),
                   const SizedBox(height: 12),
                   ElevatedButton.icon(
-                    onPressed: () => context.push('/media/${item.id}', extra: item),
+                    onPressed: () => context.push('/media/${Uri.encodeComponent(item.id)}', extra: item),
                     icon: const Icon(Icons.play_arrow, size: 20),
                     label: const Text('View Details'),
                     style: ElevatedButton.styleFrom(
@@ -384,7 +384,7 @@ class _SectionCard extends StatelessWidget {
     final imageUrl = item.backdropUrl ?? item.posterUrl;
 
     return GestureDetector(
-      onTap: () => context.push('/media/${item.id}', extra: item),
+      onTap: () => context.push('/media/${Uri.encodeComponent(item.id)}', extra: item),
       child: Container(
         width: 240,
         decoration: BoxDecoration(
@@ -464,7 +464,7 @@ class _SceneCard extends StatelessWidget {
     final imageUrl = item.backdropUrl ?? item.posterUrl;
 
     return GestureDetector(
-      onTap: () => context.push('/media/${item.id}', extra: item),
+      onTap: () => context.push('/media/${Uri.encodeComponent(item.id)}', extra: item),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),

@@ -190,10 +190,10 @@ GoRouter createRouter(
         path: '/media/:id',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
-           final id = state.pathParameters['id']!;
+           // URL-decode the ID to handle SFTP and other special characters
+           final rawId = state.pathParameters['id']!;
+           final id = Uri.decodeComponent(rawId);
            final extra = _parseMediaItemExtra(state.extra);
-           // TODO: If extra is null, we need to fetch generic media by ID (StashDB or TMDB)?
-           // For now, this assumes we have the item or the screen handles partial data/fetching.
            return DetailsScreen(item: extra, itemId: id);
         },
       ),

@@ -252,6 +252,64 @@ class ContentRow extends StatelessWidget {
   }
 }
 
+// 5b. CACHED CONTENT ROW (Pre-loaded data, no Future)
+class CachedContentRow extends StatelessWidget {
+  final List<dynamic> items; // Accepts TmdbItem or MediaItem
+  final bool isPortrait;
+  
+  const CachedContentRow({
+    Key? key, 
+    required this.items, 
+    this.isPortrait = true,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox();
+    
+    return SizedBox(
+      height: isPortrait ? 250 : 180, 
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          final item = items[index];
+          
+          TmdbItem tmdbItem;
+          if (item is MediaItem) {
+             tmdbItem = TmdbItem(
+               id: int.tryParse(item.tmdbId?.toString() ?? '0') ?? 0, 
+               title: item.title ?? 'Unknown',
+               overview: item.overview ?? '',
+               posterUrl: item.posterUrl ?? item.filePath,
+               backdropUrl: item.backdropUrl,
+               voteAverage: item.rating,
+               releaseYear: item.year,
+               type: item.type == MediaType.movie ? TmdbMediaType.movie : TmdbMediaType.tv,
+             );
+          } else {
+            tmdbItem = item as TmdbItem;
+          }
+
+          return SizedBox(
+            width: isPortrait ? 140 : 220, 
+            child: DiscoverCard(
+              item: tmdbItem, 
+              showOverlays: false, 
+              showTitle: true,
+              width: isPortrait ? 140 : 220,
+              aspectRatio: isPortrait ? 2/3 : 16/9,
+              sourceItem: item is MediaItem ? item : null,
+            ),
+          ).animate().fade().slideX(begin: 0.2, end: 0, delay: Duration(milliseconds: 50 * index), duration: 400.ms, curve: Curves.easeOut);
+        },
+      ),
+    );
+  }
+}
+
 // 6. SEARCH RESULTS GRID
 class SearchResultsGrid extends StatelessWidget {
   final List<TmdbItem> results;

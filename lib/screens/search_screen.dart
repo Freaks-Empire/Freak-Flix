@@ -4,11 +4,12 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/tmdb_item.dart';
+import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
 import '../services/stash_db_service.dart';
 import '../providers/settings_provider.dart';
-import '../widgets/search_widgets.dart'; // New widgets
-import '../widgets/settings_widgets.dart'; // Reuse AppColors
+import '../widgets/search_widgets.dart';
+import '../widgets/settings_widgets.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({Key? key}) : super(key: key);
@@ -25,67 +26,33 @@ class _SearchScreenState extends State<SearchScreen> {
   Timer? _debounce;
   List<String> _recentSearches = [];
 
-  // Lightweight diacritic folding for common Latin characters so searches stay ASCII-only.
+  // Cached Data
+  List<TmdbItem> _trendingMovies = [];
+  List<TmdbItem> _trendingTv = [];
+  List<TmdbItem> _anime = [];
+  List<MediaItem> _stashUpdates = [];
+  
+  bool _loadingTrending = true;
+  String? _trendingError;
+
   static const Map<String, String> _folding = {
-    'á': 'a',
-    'à': 'a',
-    'â': 'a',
-    'ä': 'a',
-    'ã': 'a',
-    'å': 'a',
-    'ç': 'c',
-    'é': 'e',
-    'è': 'e',
-    'ê': 'e',
-    'ë': 'e',
-    'í': 'i',
-    'ì': 'i',
-    'î': 'i',
-    'ï': 'i',
-    'ñ': 'n',
-    'ó': 'o',
-    'ò': 'o',
-    'ô': 'o',
-    'ö': 'o',
-    'õ': 'o',
-    'ú': 'u',
-    'ù': 'u',
-    'û': 'u',
-    'ü': 'u',
-    'ý': 'y',
-    'ÿ': 'y',
-    'Á': 'a',
-    'À': 'a',
-    'Â': 'a',
-    'Ä': 'a',
-    'Ã': 'a',
-    'Å': 'a',
-    'Ç': 'c',
-    'É': 'e',
-    'È': 'e',
-    'Ê': 'e',
-    'Ë': 'e',
-    'Í': 'i',
-    'Ì': 'i',
-    'Î': 'i',
-    'Ï': 'i',
-    'Ñ': 'n',
-    'Ó': 'o',
-    'Ò': 'o',
-    'Ô': 'o',
-    'Ö': 'o',
-    'Õ': 'o',
-    'Ú': 'u',
-    'Ù': 'u',
-    'Û': 'u',
-    'Ü': 'u',
-    'Ý': 'y',
+    'á': 'a', 'à': 'a', 'â': 'a', 'ä': 'a', 'ã': 'a', 'å': 'a',
+    'ç': 'c', 'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+    'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i', 'ñ': 'n',
+    'ó': 'o', 'ò': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o',
+    'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u', 'ý': 'y', 'ÿ': 'y',
+    'Á': 'a', 'À': 'a', 'Â': 'a', 'Ä': 'a', 'Ã': 'a', 'Å': 'a',
+    'Ç': 'c', 'É': 'e', 'È': 'e', 'Ê': 'e', 'Ë': 'e',
+    'Í': 'i', 'Ì': 'i', 'Î': 'i', 'Ï': 'i', 'Ñ': 'n',
+    'Ó': 'o', 'Ò': 'o', 'Ô': 'o', 'Ö': 'o', 'Õ': 'o',
+    'Ú': 'u', 'Ù': 'u', 'Û': 'u', 'Ü': 'u', 'Ý': 'y',
   };
 
   @override
   void initState() {
     super.initState();
     _loadRecents();
+    _loadTrendingData();
   }
 
   @override
@@ -93,6 +60,46 @@ class _SearchScreenState extends State<SearchScreen> {
     _controller.dispose();
     _debounce?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadTrendingData() async {
+    setState(() {
+      _loadingTrending = true;
+      _trendingError = null;
+    });
+
+    try {
+      final tmdb = context.read<TmdbService>();
+      final settings = context.read<SettingsProvider>();
+
+      // Fetch all data in parallel
+      final results = await Future.wait([
+        tmdb.getTrendingMovies(),
+        tmdb.getTrendingTv(),
+        tmdb.getAnime(),
+        if (settings.enableAdultContent && settings.stashEndpoints.isNotEmpty)
+          context.read<StashDbService>().getRecentScenes(settings.stashEndpoints)
+        else
+          Future.value(<MediaItem>[]),
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _trendingMovies = results[0] as List<TmdbItem>;
+          _trendingTv = results[1] as List<TmdbItem>;
+          _anime = results[2] as List<TmdbItem>;
+          _stashUpdates = results[3] as List<MediaItem>;
+          _loadingTrending = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _trendingError = e.toString();
+          _loadingTrending = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadRecents() async {
@@ -170,15 +177,13 @@ class _SearchScreenState extends State<SearchScreen> {
   List<TmdbItem> _filterResults(List<TmdbItem> items, String query) {
     final q = _normalizeText(query);
     if (q.isEmpty) return items;
-    final tokens =
-        q.split(' ').where((token) => token.isNotEmpty).toList(growable: false);
+    final tokens = q.split(' ').where((token) => token.isNotEmpty).toList(growable: false);
     if (tokens.isEmpty) return items;
 
     bool matches(TmdbItem item) {
       final title = _normalizeText(item.title);
       final overview = _normalizeText(item.overview ?? '');
       final haystack = '$title $overview';
-      // Require every token to appear somewhere in the title or overview.
       return tokens.every((t) => haystack.contains(t));
     }
 
@@ -194,15 +199,16 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            // 1. SPACER (Fix for Nav Dock overlap)
             const SliverToBoxAdapter(child: SizedBox(height: 80)),
 
-            // 2. STICKY SEARCH HEADER
+            // SEARCH HEADER
             SliverPersistentHeader(
               pinned: true,
               floating: true,
@@ -222,15 +228,10 @@ class _SearchScreenState extends State<SearchScreen> {
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.only(top: 100),
-                  child: Center(
-                      child:
-                          CircularProgressIndicator(color: AppColors.accent)),
+                  child: Center(child: CircularProgressIndicator(color: AppColors.accent)),
                 ),
               )
-
-            // 2. CONTENT SWITCHER
             else if (!_isSearching) ...[
-              // ZERO STATE (Discovery)
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
               // RECENT SEARCHES
@@ -258,10 +259,8 @@ class _SearchScreenState extends State<SearchScreen> {
                 const SliverToBoxAdapter(child: SizedBox(height: 32)),
               ],
 
-              const SliverToBoxAdapter(
-                  child: SectionHeader(title: "Browse by Genre")),
+              const SliverToBoxAdapter(child: SectionHeader(title: "Browse by Genre")),
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
-              
               SliverToBoxAdapter(
                 child: GenreCloud(
                   onGenreSelected: (genre) {
@@ -270,70 +269,70 @@ class _SearchScreenState extends State<SearchScreen> {
                   },
                 ),
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-              // TRENDING MOVIES
-              const SliverToBoxAdapter(
-                  child: SectionHeader(title: "Trending Movies")),
-              const SliverToBoxAdapter(child: SizedBox(height: 12)),
-              SliverToBoxAdapter(
-                child: Consumer<TmdbService>(
-                  builder: (context, tmdb, _) => ContentRow(future: tmdb.getTrendingMovies()),
+              // ERROR STATE
+              if (_trendingError != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                        const SizedBox(height: 8),
+                        Text('Failed to load trending content', style: TextStyle(color: AppColors.textSub)),
+                        const SizedBox(height: 8),
+                        FilledButton(onPressed: _loadTrendingData, child: const Text('Retry')),
+                      ],
+                    ),
+                  ),
                 )
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 32)),
-
-              // TRENDING TV SHOWS
-              const SliverToBoxAdapter(
-                  child: SectionHeader(title: "Trending TV Shows")),
-              const SliverToBoxAdapter(child: SizedBox(height: 12)),
-               SliverToBoxAdapter(
-                child: Consumer<TmdbService>(
-                  builder: (context, tmdb, _) => ContentRow(future: tmdb.getTrendingTv()),
+              // LOADING STATE
+              else if (_loadingTrending)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 60),
+                    child: Center(child: CircularProgressIndicator(color: AppColors.accent)),
+                  ),
                 )
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+              // CONTENT
+              else ...[
+                // TRENDING MOVIES
+                if (_trendingMovies.isNotEmpty) ...[
+                  const SliverToBoxAdapter(child: SectionHeader(title: "Trending Movies")),
+                  const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                  SliverToBoxAdapter(child: CachedContentRow(items: _trendingMovies)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                ],
 
-              // ANIME
-              const SliverToBoxAdapter(
-                  child: SectionHeader(title: "Popular Anime")),
-              const SliverToBoxAdapter(child: SizedBox(height: 12)),
-               SliverToBoxAdapter(
-                child: Consumer<TmdbService>(
-                  builder: (context, tmdb, _) => ContentRow(future: tmdb.getAnime()),
-                )
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                // TRENDING TV
+                if (_trendingTv.isNotEmpty) ...[
+                  const SliverToBoxAdapter(child: SectionHeader(title: "Trending TV Shows")),
+                  const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                  SliverToBoxAdapter(child: CachedContentRow(items: _trendingTv)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                ],
 
-              // ADULT TRENDING (Stash Updates)
-              Consumer<SettingsProvider>(
-                builder: (context, settings, _) {
-                  if (!settings.enableAdultContent) return const SliverToBoxAdapter();
-                  
-                  return SliverMainAxisGroup(
-                    slivers: [
-                      const SliverToBoxAdapter(
-                          child: SectionHeader(title: "Stash Updates", action: "Manage",)), 
-                      const SliverToBoxAdapter(child: SizedBox(height: 12)),
-                      SliverToBoxAdapter(
-                        child: Consumer<StashDbService>(
-                          builder: (context, stash, _) => ContentRow(
-                            future: stash.getRecentScenes(settings.stashEndpoints),
-                            isPortrait: false, // Scenes are usually landscape
-                          ),
-                        )
-                      ),
-                      const SliverToBoxAdapter(child: SizedBox(height: 32)),
-                    ],
-                  );
-                },
-              ),
+                // ANIME
+                if (_anime.isNotEmpty) ...[
+                  const SliverToBoxAdapter(child: SectionHeader(title: "Popular Anime")),
+                  const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                  SliverToBoxAdapter(child: CachedContentRow(items: _anime)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                ],
 
-              const SliverToBoxAdapter(
-                  child: SizedBox(height: 40)), // Bottom padding
+                // STASH UPDATES (Adult)
+                if (settings.enableAdultContent && _stashUpdates.isNotEmpty) ...[
+                  const SliverToBoxAdapter(child: SectionHeader(title: "Stash Updates", action: "Manage")),
+                  const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                  SliverToBoxAdapter(child: CachedContentRow(items: _stashUpdates, isPortrait: false)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                ],
+              ],
+
+              const SliverToBoxAdapter(child: SizedBox(height: 40)),
             ] else ...[
-              // ACTIVE SEARCH RESULTS GRID
+              // SEARCH RESULTS
               SliverPadding(
                 padding: const EdgeInsets.all(16),
                 sliver: SearchResultsGrid(results: _results),

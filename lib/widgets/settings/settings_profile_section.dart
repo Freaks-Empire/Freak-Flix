@@ -563,7 +563,7 @@ class SettingsProfileSection extends StatelessWidget {
     final posterUrl = item.posterUrl;
     
     return GestureDetector(
-      onTap: () => context.push('/media/${item.id}', extra: item),
+      onTap: () => context.push('/media/${Uri.encodeComponent(item.id)}', extra: item),
       child: SizedBox(
         width: 110,
         child: Column(

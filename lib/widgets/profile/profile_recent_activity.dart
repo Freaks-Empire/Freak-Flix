@@ -93,7 +93,7 @@ class ProfileRecentActivity extends StatelessWidget {
         if (onItemTap != null) {
           onItemTap!(item);
         } else {
-          context.push('/media/${item.id}', extra: item);
+          context.push('/media/${Uri.encodeComponent(item.id)}', extra: item);
         }
       },
       child: MouseRegion(

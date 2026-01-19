@@ -559,7 +559,7 @@ class _SceneCard extends StatelessWidget {
             final rawId = item.id.replaceFirst('stashdb:', '');
             context.push('/scene/$rawId', extra: item);
          } else {
-            context.push('/media/${item.id}', extra: item);
+            context.push('/media/${Uri.encodeComponent(item.id)}', extra: item);
          }
       },
       child: SizedBox(
