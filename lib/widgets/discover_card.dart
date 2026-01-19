@@ -161,11 +161,13 @@ class DiscoverCard extends StatelessWidget {
             ),
             if (showTitle) ...[
               const SizedBox(height: 8),
-              Text(
-                item.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+              Flexible(
+                child: Text(
+                  item.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+                ),
               ),
             ],
           ],
