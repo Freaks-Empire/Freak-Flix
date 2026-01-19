@@ -21,12 +21,18 @@ class SftpStreamingService {
   final Map<String, String> _downloadedFiles = {};
 
   /// Get a playable local path for an SFTP file
-  /// Returns null if download fails
+  /// Returns null if download fails or on web platform
   Future<String?> getPlayablePath({
     required String accountId,
     required String remotePath,
     ProgressCallback? onProgress,
   }) async {
+    // SFTP is not supported on web (no dart:io, no SSH sockets)
+    if (kIsWeb) {
+      debugPrint('SftpStreaming: Not supported on web platform');
+      return null;
+    }
+    
     // Check cache first
     final cacheKey = '$accountId:$remotePath';
     if (_downloadedFiles.containsKey(cacheKey)) {
