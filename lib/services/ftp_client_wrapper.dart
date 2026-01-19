@@ -50,7 +50,10 @@ class FtpClientWrapper {
     final items = await _ftpClient!.listDirectoryContent();
     
     return items.map((item) {
-      final isDir = item.type == FTPEntryType.dir;
+      // Use string comparison for compatibility across ftpconnect versions
+      // Older versions may use different enum values
+      final typeStr = item.type.toString().toLowerCase();
+      final isDir = typeStr.contains('dir') || typeStr.contains('directory');
       return RemoteFile(
         name: item.name,
         path: path.endsWith('/') ? '$path${item.name}' : '$path/${item.name}',
