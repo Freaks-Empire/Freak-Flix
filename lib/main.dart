@@ -15,7 +15,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'firebase_options.dart';
 import 'services/analytics_service.dart';
-import 'services/sync_service.dart';
+
 
 import 'package:flutter/foundation.dart'; // For PlatformDispatcher
 
@@ -100,23 +100,7 @@ void main() async {
     final settingsProvider = SettingsProvider();
     await settingsProvider.load();
 
-    // Wire Sync logic after Settings & Auth are ready
-    void updateSyncState() {
-      final userId = GraphAuthService.instance.activeAccountId;
-      if (userId != null) {
-        debugPrint('Main: Activating Sync for user $userId');
-        SyncService().init(userId, (data) {
-          settingsProvider.importSettings(data);
-        });
-      } else {
-        SyncService().dispose();
-      }
-    }
 
-    // Set listener
-    GraphAuthService.instance.onStateChanged = updateSyncState;
-    // Initial check
-    updateSyncState();
 
     final profileProvider = ProfileProvider();
     await profileProvider.load();
