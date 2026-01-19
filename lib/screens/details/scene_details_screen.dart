@@ -1,5 +1,6 @@
 /// lib/screens/details/scene_details_screen.dart
 import 'dart:ui';
+import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -224,7 +225,24 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                       expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _buildInfoRow(context, "File Name", _current.fileName),
-                        _buildInfoRow(context, "Full Path", _current.filePath, allowCopy: true),
+                        // Construct absolute/full path if filePath seems to be just a filename
+                        Builder(
+                          builder: (context) {
+                            String displayPath = _current.filePath;
+                            // Check if it looks like just a filename (no separators)
+                            final justName = !displayPath.contains('/') && !displayPath.contains('\\');
+                            
+                            if (justName && _current.folderPath.isNotEmpty) {
+                               if (_current.folderPath.contains('onedrive:')) {
+                                  displayPath = '${_current.folderPath}/${_current.fileName}';
+                               } else {
+                                  displayPath = p.join(_current.folderPath, _current.fileName);
+                               }
+                            }
+                            
+                            return _buildInfoRow(context, "Full Path", displayPath, allowCopy: true);
+                          }
+                        ),
                         _buildInfoRow(context, "Size", _formatBytes(_current.sizeBytes)),
                         _buildInfoRow(context, "Container", _current.filePath.split('.').last.toUpperCase()),
                         if (_current.streamUrl != null)
