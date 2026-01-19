@@ -44,7 +44,7 @@ dependencies:
   cloud_firestore: ^6.1.1
   flutter_animate: ^4.5.2
   dartssh2: ^2.8.2              # SFTP over SSH
-  ftpconnect: ^2.0.10           # FTP client
+  ftpconnect: ^2.0.7           # FTP client (pinned to fix path dep conflict)
   webdav_client: ^1.2.2         # WebDAV client
   flutter_secure_storage: ^9.0.0 # Secure credential storage
 
