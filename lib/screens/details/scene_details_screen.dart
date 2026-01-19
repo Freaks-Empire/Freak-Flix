@@ -1,4 +1,5 @@
 /// lib/screens/details/scene_details_screen.dart
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
@@ -224,7 +225,30 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                       expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _buildInfoRow(context, "File Name", _current.fileName),
-                        _buildInfoRow(context, "Location", _current.filePath, allowCopy: true),
+                        _buildInfoRow(
+                          context, 
+                          "Full Path", 
+                          _current.filePath, 
+                          allowCopy: true,
+                          actionIcon: Icons.folder_open,
+                          onAction: () async {
+                             // Windows-specific explorer open
+                             if (Platform.isWindows) {
+                               try {
+                                 await Process.run('explorer', ['/select,', _current.filePath]);
+                               } catch (e) {
+                                 debugPrint('Error opening folder: $e');
+                                 if (context.mounted) {
+                                   ScaffoldMessenger.of(context).showSnackBar(
+                                     SnackBar(content: Text('Error opening folder: $e')),
+                                   );
+                                 }
+                               }
+                             } else {
+                               debugPrint('Open folder not supported on this platform yet');
+                             }
+                          } 
+                        ),
                         _buildInfoRow(context, "Size", _formatBytes(_current.sizeBytes)),
                         _buildInfoRow(context, "Container", _current.filePath.split('.').last.toUpperCase()),
                         if (_current.streamUrl != null)
@@ -510,7 +534,7 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
       ),
     );
   }
-  Widget _buildInfoRow(BuildContext context, String label, String value, {bool allowCopy = false}) {
+  Widget _buildInfoRow(BuildContext context, String label, String value, {bool allowCopy = false, IconData? actionIcon, VoidCallback? onAction}) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -531,11 +555,23 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
+                  child: SelectableText( // Changed to SelectableText for better UX
                     value,
                     style: theme.textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'),
                   ),
                 ),
+                if (actionIcon != null && onAction != null)
+                   SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      iconSize: 16,
+                      icon: Icon(actionIcon),
+                      onPressed: onAction,
+                      tooltip: 'Open',
+                    ),
+                  ),
                 if (allowCopy)
                   SizedBox(
                     height: 24,
