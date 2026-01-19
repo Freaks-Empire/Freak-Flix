@@ -241,6 +241,6 @@ class MetadataService {
   }
   /// Manual search for StashDB scenes (for Edit Dialog)
   Future<List<MediaItem>> searchManual(String query) async {
-    return _stash.searchScenesList(query, settings.stashEndpoints);
+    return _stash.searchScenesList(query, settings.stashEndpoints, useRaw: true);
   }
 }

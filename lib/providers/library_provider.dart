@@ -2052,6 +2052,61 @@ class LibraryProvider extends ChangeNotifier {
       _configChangedController.add(null);
     }
   }
+
+  /// Removes items from the library that no longer exist on the local filesystem.
+  /// Returns the number of items removed.
+  Future<int> cleanLibrary() async {
+    int removedCount = 0;
+    final List<MediaItem> toRemove = [];
+
+    // Run in Isolate or simple async loop?
+    // Using simple async loop for now as checking file existence is fast enough 
+    // for typical libraries, but we should yield to UI.
+    
+    // We iterate a copy to avoid concurrent modification issues
+    final List<MediaItem> candidates = List.from(_allItems);
+    
+    for (final item in candidates) {
+      // Skip cloud items
+      bool isLocal = true;
+      if (item.filePath.startsWith('http') || 
+          item.folderPath.startsWith('onedrive:') ||
+          item.folderPath.startsWith('sftp:') || 
+          item.folderPath.startsWith('ftp:') || 
+          item.folderPath.startsWith('webdav:')) {
+        isLocal = false;
+      }
+      
+      if (isLocal) {
+        final file = File(item.filePath);
+        if (!file.existsSync()) {
+          // Double check: if filePath is relative? 
+          if (p.isAbsolute(item.filePath)) {
+             toRemove.add(item);
+          }
+        }
+      }
+      
+      // Yield to event loop every 100 items to prevent UI freeze
+      if (candidates.indexOf(item) % 100 == 0) {
+        await Future.delayed(Duration.zero);
+      }
+    }
+
+    if (toRemove.isNotEmpty) {
+      _allItems.removeWhere((item) => toRemove.contains(item));
+      
+      // Update filtered items (reset to all items for now to ensure consistency)
+      _filteredItems = List.from(_allItems)
+        ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+        
+      await saveLibrary();
+      removedCount = toRemove.length;
+      notifyListeners();
+    }
+    
+    return removedCount;
+  }
 }
 
 MediaType _inferTypeFromPath(MediaItem item) {
@@ -2290,3 +2345,5 @@ Future<void> _scanDirectoryInIsolate(_ScanRequest request) async {
     sendPort.send(true);
   }
 }
+
+

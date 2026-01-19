@@ -116,8 +116,76 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
           color: const Color(0xFFF97316),
         ),
         const SizedBox(height: 12),
-        _buildMaintenanceSection(library, metadata),
+        _buildMaintenanceSection(library, metadata, context),
       ],
+    );
+  }
+
+  Widget _buildMaintenanceSection(LibraryProvider library, MetadataService metadata, BuildContext context) {
+    return Column(
+      children: [
+        _buildSettingsTile(
+          icon: LucideIcons.eraser,
+          title: 'Clean Unavailable Media',
+          subtitle: 'Remove metadata for files that no longer exist locally',
+          onTap: () async {
+             // Show confirmation
+             final confirm = await showDialog<bool>(
+               context: context, 
+               builder: (ctx) => AlertDialog(
+                 title: const Text('Clean Library?'),
+                 content: const Text('This will remove all items from your library that cannot be found on this device. Cloud items are ignored.'),
+                 actions: [
+                   TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                   FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Clean')),
+                 ],
+               )
+             );
+             
+             if (confirm == true) {
+                if (mounted) {
+                   ScaffoldMessenger.of(context).showSnackBar(
+                     const SnackBar(content: Text('Cleaning library...')),
+                   );
+                }
+                
+                final count = await library.cleanLibrary();
+                
+                if (mounted) {
+                   ScaffoldMessenger.of(context).showSnackBar(
+                     SnackBar(content: Text('Removed $count items.')),
+                   );
+                }
+             }
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSettingsTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: AppColors.surface,
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.bg,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 20, color: AppColors.textMain),
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
+        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.textSub)),
+        onTap: onTap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: AppColors.border)),
+      ),
     );
   }
 
@@ -1602,59 +1670,7 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
     );
   }
 
-  Widget _buildMaintenanceSection(LibraryProvider library, MetadataService metadata) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        children: [
-          _buildMaintenanceTile(
-            icon: LucideIcons.refreshCw,
-            title: 'Rescan All Libraries',
-            subtitle: 'Scan all folders for changes',
-            trailing: library.isLoading
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(LucideIcons.play, size: 16, color: AppColors.accent),
-            onTap: library.isLoading ? null : () async {
-              await library.rescanAll(auth: _graphAuth, metadata: metadata);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Scan started')),
-                );
-              }
-            },
-          ),
-          const Divider(height: 1, color: AppColors.border),
-          _buildMaintenanceTile(
-            icon: LucideIcons.fileCheck,
-            title: 'Enforce Metadata',
-            subtitle: 'Generate NFO metadata files',
-            trailing: const Icon(LucideIcons.checkSquare, size: 16, color: AppColors.textSub),
-            onTap: library.isLoading ? null : () {
-              library.enforceSidecarsAndNaming();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Generating NFO files...')),
-                );
-              }
-            },
-          ),
-          const Divider(height: 1, color: AppColors.border),
-          _buildMaintenanceTile(
-            icon: LucideIcons.search,
-            title: 'Refresh Metadata',
-            subtitle: 'Re-fetch details for all items',
-            trailing: const Icon(LucideIcons.downloadCloud, size: 16, color: AppColors.textSub),
-            onTap: library.isLoading ? null : () => _showRefreshMetadataDialog(library, metadata),
-            isLast: true,
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildMaintenanceTile({
     required IconData icon,

@@ -528,8 +528,8 @@ class StashDbService {
   }
 
   /// Searches for scenes by title and returns a list of matches.
-  Future<List<MediaItem>> searchScenesList(String title, List<StashEndpoint> endpoints) async {
-    final cleanTitle = _cleanTitle(title);
+  Future<List<MediaItem>> searchScenesList(String title, List<StashEndpoint> endpoints, {bool useRaw = false}) async {
+    final cleanTitle = useRaw ? title.trim() : _cleanTitle(title);
     
     for (final ep in endpoints) {
       if (!ep.enabled) continue; 
