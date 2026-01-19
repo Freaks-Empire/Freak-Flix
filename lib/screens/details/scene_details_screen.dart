@@ -16,6 +16,8 @@ import '../../models/cast_member.dart';
 import '../../services/metadata_service.dart'; // Import MetadataService
 import 'package:go_router/go_router.dart';
 
+import 'package:flutter/services.dart'; // For Clipboard
+
 class SceneDetailsScreen extends StatefulWidget {
   final MediaItem item;
   const SceneDetailsScreen({super.key, required this.item});
@@ -206,6 +208,30 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                        return const SizedBox.shrink();
                     }
                   ),
+
+                  const SizedBox(height: 48),
+                  
+                  // Technical Details / File Info
+                  if (_current.filePath.isNotEmpty)
+                    ExpansionTile(
+                      title: const Text("File Information"),
+                      subtitle: const Text("Path, Size, Container"),
+                      leading: const Icon(Icons.folder_open),
+                      shape: const Border(), // Remove borders
+                      collapsedShape: const Border(),
+                      tilePadding: EdgeInsets.zero,
+                      childrenPadding: const EdgeInsets.only(bottom: 24),
+                      expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildInfoRow(context, "File Name", _current.fileName),
+                        _buildInfoRow(context, "Location", _current.filePath, allowCopy: true),
+                        _buildInfoRow(context, "Size", _formatBytes(_current.sizeBytes)),
+                        _buildInfoRow(context, "Container", _current.filePath.split('.').last.toUpperCase()),
+                        if (_current.streamUrl != null)
+                           _buildInfoRow(context, "Stream URL", _current.streamUrl!, allowCopy: true),
+                      ],
+                    ),
+
                 ],
               ),
             ),
@@ -483,6 +509,63 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
         ],
       ),
     );
+  }
+  Widget _buildInfoRow(BuildContext context, String label, String value, {bool allowCopy = false}) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    value,
+                    style: theme.textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'),
+                  ),
+                ),
+                if (allowCopy)
+                  SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      iconSize: 16,
+                      icon: const Icon(Icons.copy),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: value));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 1)),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatBytes(int bytes, [int decimals = 2]) {
+    if (bytes <= 0) return "0 B";
+    if(bytes < 1024) return "$bytes B";
+    if(bytes < 1024*1024) return "${(bytes/1024).toStringAsFixed(decimals)} KB";
+    if(bytes < 1024*1024*1024) return "${(bytes/(1024*1024)).toStringAsFixed(decimals)} MB";
+    return "${(bytes/(1024*1024*1024)).toStringAsFixed(decimals)} GB";
   }
 }
 
