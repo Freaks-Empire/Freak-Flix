@@ -3,8 +3,6 @@
   publish = "build/web"
   [build.environment]
     FAIL_BUILD_ON_PLUGIN_ERROR = "false"
-    SKIP_PRE_BUILD_EVENT = "true"
-    SKIP_ERROR_EVENT = "true"
 
 # Route all paths to the SPA entry so client-side routing works.
 [[redirects]]
