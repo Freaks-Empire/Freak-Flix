@@ -25,6 +25,7 @@ import 'services/metadata_service.dart';
 import 'services/tmdb_service.dart';
 import 'services/graph_auth_service.dart';
 import 'services/tmdb_discover_service.dart';
+import 'services/stash_db_service.dart';
 import 'services/auto_backup_manager.dart';
 
 import 'models/discover_filter.dart';
@@ -179,6 +180,7 @@ void main() async {
           ChangeNotifierProvider(create: (_) => DiscoverFilterNotifier()),
           Provider<TmdbService>.value(value: tmdbService),
           Provider<TmdbDiscoverService>.value(value: tmdbDiscoverService),
+          Provider<StashDbService>(create: (_) => StashDbService()),
           Provider<MetadataService>.value(value: metadataService),
           Provider<AnalyticsService>.value(value: AnalyticsService()),
         ],
