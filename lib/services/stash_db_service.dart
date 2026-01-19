@@ -523,16 +523,22 @@ class StashDbService {
 
   /// Searches for a scene by title across all endpoints. Returns first match.
   Future<MediaItem?> searchScene(String title, List<StashEndpoint> endpoints) async {
+    final results = await searchScenesList(title, endpoints);
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  /// Searches for scenes by title and returns a list of matches.
+  Future<List<MediaItem>> searchScenesList(String title, List<StashEndpoint> endpoints) async {
     final cleanTitle = _cleanTitle(title);
     
     for (final ep in endpoints) {
-      if (!ep.enabled) continue; // Allow empty API key (local stash often no auth)
+      if (!ep.enabled) continue; 
       
-      debugPrint('StashDB [${ep.name}]: Searching for "$cleanTitle"');
+      debugPrint('StashDB [${ep.name}]: Searching List for "$cleanTitle"');
       final isStashBox = _isBox(ep.url);
 
       // Helper to execute and parse scene search
-      Future<MediaItem?> trySearch(String query, String opName, bool isBox, {bool isMovie = false}) async {
+      Future<List<MediaItem>> trySearch(String query, String opName, bool isBox, {bool isMovie = false}) async {
         try {
            final data = await _executeQuery(
             query: query,
@@ -552,44 +558,35 @@ class StashDbService {
           }
 
           if (results != null && results.isNotEmpty) {
-            debugPrint('StashDB [${ep.name}]: Found match via $opName');
-            return _mapSceneToMediaItem(
-                results.first, 
+            debugPrint('StashDB [${ep.name}]: Found ${results.length} matches via $opName');
+            return results.map((r) => _mapSceneToMediaItem(
+                r, 
                 title, 
                 type: isMovie ? MediaType.movie : MediaType.scene,
                 baseUrl: ep.url
-            );
+            )).toList();
           }
         } catch (e) {
-          // Ignore specific query errors to allow fallbacks
-          if (e.toString().contains('Cannot query field')) {
-             debugPrint('StashDB [${ep.name}]: $opName not supported by schema.');
-          } else {
-             debugPrint('StashDB [${ep.name}]: Search error ($opName): $e');
-          }
+           debugPrint('StashDB [${ep.name}]: Search List error ($opName): $e');
         }
-        return null;
+        return [];
       }
 
-      // 1. Try Primary Scene Search (Box or App based on URL hint)
-      MediaItem? result;
+      // 1. Try Primary Scene Search
+      List<MediaItem> results = [];
       if (isStashBox) {
-        result = await trySearch(_queryFindScenesBox, 'QueryScenes', true);
-        // 2. Fallback: Try App Search if Box failed (maybe URL is Box but running App?)
-        if (result == null) result = await trySearch(_queryFindScenes, 'FindScenes', false);
-        // 3. Fallback: Try Movie Search (TPDB distinguishes Movies vs Scenes)
-        if (result == null) result = await trySearch(_queryQueryMoviesBox, 'QueryMoviesBox', true, isMovie: true);
+        results = await trySearch(_queryFindScenesBox, 'QueryScenes', true);
+        if (results.isEmpty) results = await trySearch(_queryFindScenes, 'FindScenes', false);
+        if (results.isEmpty) results = await trySearch(_queryQueryMoviesBox, 'QueryMoviesBox', true, isMovie: true);
       } else {
-        result = await trySearch(_queryFindScenes, 'FindScenes', false);
-        // Fallback: Try Box Search if App failed
-        if (result == null) result = await trySearch(_queryFindScenesBox, 'QueryScenes', true);
+        results = await trySearch(_queryFindScenes, 'FindScenes', false);
+        if (results.isEmpty) results = await trySearch(_queryFindScenesBox, 'QueryScenes', true);
       }
 
-      if (result != null) return result;
-
+      if (results.isNotEmpty) return results;
     }
 
-    return null;
+    return [];
   }
 
   /// Performer-first search: find performer ID by name, then filter that performer's scenes by title.
