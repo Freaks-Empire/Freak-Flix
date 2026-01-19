@@ -135,6 +135,7 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
                 ],
               ),
             )
+          ],
         ),
 
         // ONEDRIVE BACKUP (Works on all platforms via Microsoft Graph)
