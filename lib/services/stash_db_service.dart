@@ -863,7 +863,8 @@ class StashDbService {
     
     // 2. Remove dots, underscores, hyphens
     cleaned = cleaned.replaceAll(RegExp(r'[._-]'), ' ');
-    cleaned = cleaned.replaceAll("'", "");
+    // Remove all forms of apostrophes/quotes
+    cleaned = cleaned.replaceAll(RegExp(r"['’‘`´]"), "");
 
     // 3. Remove common release junk (Case insensitive)
     // "XXX", "P2P", "PRT" (Private?), "SD", "HD", "4K", "1080p", etc.
