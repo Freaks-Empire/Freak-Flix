@@ -12,6 +12,7 @@ import '../../models/media_item.dart';
 import '../../providers/playback_provider.dart';
 import '../../widgets/video_player/netflix_video_controls.dart';
 import '../../services/graph_auth_service.dart';
+import '../../services/sftp_streaming_service.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
   final MediaItem item;
@@ -42,6 +43,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   bool _isDisposed = false;
   int _lastSavedPosition = 0; // Throttle progress persistence
 
+  // SFTP Download State
+  bool _isDownloadingSftp = false;
+  double _sftpDownloadProgress = 0.0;
+  String? _sftpError;
+
   @override
   void initState() {
     super.initState();
@@ -58,8 +64,46 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     // Determine URL. 
     String url = widget.item.filePath;
     
+    // Check if this is an SFTP file
+    final sftpParsed = SftpStreamingService.parseSftpPath(widget.item.filePath);
+    if (sftpParsed != null) {
+      final (accountId, remotePath) = sftpParsed;
+      debugPrint('VideoPlayer: Detected SFTP file - Account: $accountId, Path: $remotePath');
+      
+      setState(() {
+        _isDownloadingSftp = true;
+        _sftpDownloadProgress = 0.0;
+        _sftpError = null;
+      });
+      
+      final localPath = await SftpStreamingService.instance.getPlayablePath(
+        accountId: accountId,
+        remotePath: remotePath,
+        onProgress: (progress) {
+          if (mounted) {
+            setState(() => _sftpDownloadProgress = progress);
+          }
+        },
+      );
+      
+      if (localPath == null) {
+        if (mounted) {
+          setState(() {
+            _isDownloadingSftp = false;
+            _sftpError = 'Failed to download file from SFTP server';
+          });
+        }
+        return;
+      }
+      
+      url = localPath;
+      if (mounted) {
+        setState(() => _isDownloadingSftp = false);
+      }
+      debugPrint('VideoPlayer: Using downloaded SFTP file: $url');
+    }
     // If it's a OneDrive item, we MUST refresh the download URL because it expires.
-    if (widget.item.id.startsWith('onedrive_')) {
+    else if (widget.item.id.startsWith('onedrive_')) {
       final parts = widget.item.id.split('_');
       if (parts.length >= 3) {
         // Format: onedrive_{accountId}_{itemId}
@@ -240,6 +284,65 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
           child: Stack(
             fit: StackFit.expand,
             children: [
+              // 0. SFTP Download Progress Overlay
+              if (_isDownloadingSftp)
+                Container(
+                  color: Colors.black,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(LucideIcons.download, color: Colors.white, size: 48),
+                        const SizedBox(height: 24),
+                        const Text(
+                          'Preparing video...',
+                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: 200,
+                          child: LinearProgressIndicator(
+                            value: _sftpDownloadProgress,
+                            backgroundColor: Colors.white24,
+                            color: Colors.redAccent,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${(_sftpDownloadProgress * 100).toStringAsFixed(0)}%',
+                          style: const TextStyle(color: Colors.white70, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              
+              // 0b. SFTP Error Overlay
+              if (_sftpError != null)
+                Container(
+                  color: Colors.black,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(LucideIcons.alertCircle, color: Colors.redAccent, size: 48),
+                        const SizedBox(height: 24),
+                        Text(
+                          _sftpError!,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        FilledButton.icon(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(LucideIcons.arrowLeft),
+                          label: const Text('Go Back'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
               // 1. Video Layer
               Video(
                 controller: _controller, 
