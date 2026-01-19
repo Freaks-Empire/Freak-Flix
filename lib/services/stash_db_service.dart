@@ -529,21 +529,28 @@ class StashDbService {
 
   /// Searches for scenes by title and returns a list of matches.
   Future<List<MediaItem>> searchScenesList(String title, List<StashEndpoint> endpoints, {bool useRaw = false}) async {
-    final cleanTitle = useRaw ? title.trim() : _cleanTitle(title);
-    
+    if (useRaw) {
+      final results = await _executeSearchStrategy(title.trim(), endpoints);
+      if (results.isNotEmpty) return results;
+      debugPrint('StashDB: Raw search empty, falling back to cleaned search...');
+    }
+    return _executeSearchStrategy(_cleanTitle(title), endpoints);
+  }
+
+  Future<List<MediaItem>> _executeSearchStrategy(String query, List<StashEndpoint> endpoints) async {
     for (final ep in endpoints) {
       if (!ep.enabled) continue; 
       
-      debugPrint('StashDB [${ep.name}]: Searching List for "$cleanTitle"');
+      debugPrint('StashDB [${ep.name}]: Searching List for "$query"');
       final isStashBox = _isBox(ep.url);
 
       // Helper to execute and parse scene search
-      Future<List<MediaItem>> trySearch(String query, String opName, bool isBox, {bool isMovie = false}) async {
+      Future<List<MediaItem>> trySearch(String q, String opName, bool isBox, {bool isMovie = false}) async {
         try {
            final data = await _executeQuery(
-            query: query,
+            query: q,
             operationName: opName,
-            variables: {'title': cleanTitle},
+            variables: {'title': query},
             apiKey: ep.apiKey,
             baseUrl: ep.url,
           );
@@ -561,7 +568,7 @@ class StashDbService {
             debugPrint('StashDB [${ep.name}]: Found ${results.length} matches via $opName');
             return results.map((r) => _mapSceneToMediaItem(
                 r, 
-                title, 
+                query, 
                 type: isMovie ? MediaType.movie : MediaType.scene,
                 baseUrl: ep.url
             )).toList();
@@ -585,7 +592,6 @@ class StashDbService {
 
       if (results.isNotEmpty) return results;
     }
-
     return [];
   }
 
@@ -857,6 +863,7 @@ class StashDbService {
     
     // 2. Remove dots, underscores, hyphens
     cleaned = cleaned.replaceAll(RegExp(r'[._-]'), ' ');
+    cleaned = cleaned.replaceAll("'", "");
 
     // 3. Remove common release junk (Case insensitive)
     // "XXX", "P2P", "PRT" (Private?), "SD", "HD", "4K", "1080p", etc.
