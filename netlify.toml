@@ -1,10 +1,11 @@
 [build]
   command = "bash ./netlify/build.sh"
   publish = "build/web"
+  [build.environment]
+    FAIL_BUILD_ON_PLUGIN_ERROR = "false"
 
 # Route all paths to the SPA entry so client-side routing works.
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-
