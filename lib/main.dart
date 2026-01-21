@@ -36,9 +36,7 @@ import 'dart:io';
 void main() async {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
-    if (kDebugMode) {
-      HttpOverrides.global = DevHttpOverrides();
-    }
+
     usePathUrlStrategy();
 
     try {
@@ -195,10 +193,4 @@ void _runErrorApp(String message) {
   );
 }
 
-class DevHttpOverrides extends HttpOverrides {
-  @override
-  HttpClient createHttpClient(SecurityContext? context) {
-    return super.createHttpClient(context)
-      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
-  }
-}
+
