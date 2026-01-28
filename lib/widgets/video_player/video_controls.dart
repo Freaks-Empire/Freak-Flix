@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../../models/media_item.dart';
+import 'custom_track_shape.dart';
 
 class VideoControls extends StatefulWidget {
   final Player player;
@@ -168,10 +169,7 @@ class _VideoControlsState extends State<VideoControls> {
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 
-  Future<void> _showTracksDialog() async {
-     // TODO: Implement tracks dialog (reused from old impl if needed, but keeping this concise for now)
-     // Use a customized glassmorphism dialog for consistency
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -276,11 +274,7 @@ class _VideoControlsState extends State<VideoControls> {
                            ],
                          ),
                        ),
-                       // Top Right Settings
-                       IconButton(
-                         icon: const Icon(Icons.settings, color: Colors.white70),
-                         onPressed: _showTracksDialog,
-                       ),
+
                     ],
                   ),
                 ),
@@ -406,7 +400,7 @@ class _VideoControlsState extends State<VideoControls> {
             inactiveTrackColor: Colors.white24,
             thumbColor: Colors.redAccent,
             overlayColor: Colors.redAccent.withOpacity(0.2),
-            trackShape: _CustomTrackShape(), // Custom track to ensure full width
+            trackShape: CustomTrackShape(), // Custom track to ensure full width
           ),
           child: Slider(
             value: _position.inSeconds.toDouble().clamp(0, _duration.inSeconds.toDouble()),
@@ -420,22 +414,5 @@ class _VideoControlsState extends State<VideoControls> {
           ),
        ),
      );
-  }
-}
-
-class _CustomTrackShape extends RoundedRectSliderTrackShape {
-  @override
-  Rect getPreferredRect({
-    required RenderBox parentBox,
-    Offset offset = Offset.zero,
-    required SliderThemeData sliderTheme,
-    bool isEnabled = false,
-    bool isDiscrete = false,
-  }) {
-    final double trackHeight = sliderTheme.trackHeight!;
-    final double trackLeft = offset.dx;
-    final double trackTop = offset.dy + (parentBox.size.height - trackHeight) / 2;
-    final double trackWidth = parentBox.size.width;
-    return Rect.fromLTWH(trackLeft, trackTop, trackWidth, trackHeight);
   }
 }

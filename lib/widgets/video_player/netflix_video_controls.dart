@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
+import 'custom_track_shape.dart';
 
 class NetflixControls extends StatefulWidget {
   final Player player;
@@ -24,11 +25,6 @@ class NetflixControls extends StatefulWidget {
 class _NetflixControlsState extends State<NetflixControls> {
   // Use a transparent-to-black gradient for the bottom area
   final Color _netflixRed = const Color(0xFFE50914);
-
-  void _onFullscreen() {
-    // Basic toggle - implementation depends on window manager but we can try generic logic
-    // or just leave it as a visual placeholder if no global handler is passed
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -64,7 +60,7 @@ class _NetflixControlsState extends State<NetflixControls> {
                       activeTrackColor: _netflixRed,
                       inactiveTrackColor: Colors.white24,
                       thumbColor: _netflixRed,
-                      trackShape: _CustomTrackShape(), // Removes default padding
+                      trackShape: CustomTrackShape(), // Removes default padding
                     ),
                     child: Slider(
                       value: pos.inSeconds.toDouble().clamp(0, total.inSeconds.toDouble()),
@@ -141,7 +137,7 @@ class _NetflixControlsState extends State<NetflixControls> {
                   _ControlIcon(icon: Icons.settings_outlined, onTap: () {}),
                   const SizedBox(width: 8),
                   // Fullscreen (Corners icon)
-                  _ControlIcon(icon: Icons.fullscreen_rounded, onTap: _onFullscreen),
+                  _ControlIcon(icon: Icons.fullscreen_rounded, onTap: () {}),
                 ],
               ),
             ),
@@ -165,23 +161,5 @@ class _ControlIcon extends StatelessWidget {
       onPressed: onTap,
       splashRadius: 20,
     );
-  }
-}
-
-// Removes the default padding at the ends of the slider
-class _CustomTrackShape extends RoundedRectSliderTrackShape {
-  @override
-  Rect getPreferredRect({
-    required RenderBox parentBox,
-    Offset offset = Offset.zero,
-    required SliderThemeData sliderTheme,
-    bool isEnabled = false,
-    bool isDiscrete = false,
-  }) {
-    final double trackHeight = sliderTheme.trackHeight!;
-    final double trackLeft = offset.dx;
-    final double trackTop = offset.dy + (parentBox.size.height - trackHeight) / 2;
-    final double trackWidth = parentBox.size.width;
-    return Rect.fromLTWH(trackLeft, trackTop, trackWidth, trackHeight);
   }
 }

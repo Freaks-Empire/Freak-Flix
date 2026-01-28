@@ -108,6 +108,7 @@ class HomeSectionRow extends StatelessWidget {
   final Widget Function(MediaItem item) cardBuilder;
 
   const HomeSectionRow({
+    super.key,
     required this.title,
     required this.items,
     required this.cardBuilder,

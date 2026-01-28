@@ -9,12 +9,12 @@ class MovieCard extends StatelessWidget {
   final VoidCallback onTap;
 
   const MovieCard({
-    Key? key,
+    super.key,
     required this.title,
     required this.year,
     this.posterUrl,
     required this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +82,7 @@ class MovieCard extends StatelessWidget {
 }
 
 class _FallbackPoster extends StatelessWidget {
-  const _FallbackPoster({Key? key}) : super(key: key);
+  const _FallbackPoster();
 
   @override
   Widget build(BuildContext context) {
