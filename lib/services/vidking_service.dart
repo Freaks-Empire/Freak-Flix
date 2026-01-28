@@ -12,6 +12,9 @@ class VidkingConfig {
   /// Auto-start playback
   final bool autoplay;
   
+  /// Start muted (required for browser autoplay)
+  final bool muted;
+  
   /// Show episode selector for TV shows
   final bool showEpisodeSelector;
   
@@ -25,6 +28,7 @@ class VidkingConfig {
     this.primaryColor,
     this.secondaryColor,
     this.autoplay = true,
+    this.muted = true, // Required for browser autoplay
     this.showEpisodeSelector = true,
     this.showNextButton = true,
     this.keyboardControls = true,
@@ -36,6 +40,7 @@ class VidkingConfig {
     if (primaryColor != null) params['color'] = primaryColor!;
     if (secondaryColor != null) params['secondary'] = secondaryColor!;
     if (autoplay) params['autoplay'] = '1';
+    if (muted) params['muted'] = '1';
     if (showEpisodeSelector) params['episodes'] = '1';
     if (showNextButton) params['next'] = '1';
     if (keyboardControls) params['keyboard'] = '1';
