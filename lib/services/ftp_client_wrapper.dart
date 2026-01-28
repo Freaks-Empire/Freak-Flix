@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:ftpconnect/ftpconnect.dart';
 import 'remote_storage_service.dart';
+import '../utils/input_validation.dart';
 
 /// FTP client for browsing and streaming files
 class FtpClientWrapper {
@@ -16,6 +17,12 @@ class FtpClientWrapper {
 
   /// Connect to the FTP server
   Future<bool> connect(String password) async {
+    // Log security warning with sanitized hostname
+    debugPrint('⚠️  FTP SECURITY WARNING: Using insecure FTP protocol');
+    debugPrint('⚠️  Host: ${InputValidation.sanitizeForLogging(account.host)}');
+    debugPrint('⚠️  Port: ${InputValidation.sanitizeForLogging(account.port.toString())}');
+    debugPrint('⚠️  Credentials and data will be transmitted in plaintext');
+    
     try {
       _ftpClient = FTPConnect(
         account.host,
@@ -27,7 +34,8 @@ class FtpClientWrapper {
       
       final connected = await _ftpClient!.connect();
       if (connected) {
-        debugPrint('FTP: Connected to ${account.host}');
+        debugPrint('FTP: Connected to ${InputValidation.sanitizeForLogging(account.host)} (INSECURE)');
+        debugPrint('🔒 TIP: Consider using SFTP or WebDAV for secure connections');
       }
       return connected;
     } catch (e) {
@@ -40,6 +48,12 @@ class FtpClientWrapper {
   Future<List<RemoteFile>> listDirectory(String path) async {
     if (_ftpClient == null) {
       throw Exception('Not connected');
+    }
+
+    // Validate path for directory traversal
+    final pathValidation = InputValidation.validateFilePath(path);
+    if (pathValidation != null) {
+      throw Exception('Invalid path: $pathValidation');
     }
 
     // Change to the directory first

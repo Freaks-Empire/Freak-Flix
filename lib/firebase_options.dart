@@ -3,6 +3,7 @@
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// Default [FirebaseOptions] for use with your Firebase apps.
 ///
@@ -46,31 +47,37 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDuOD2FjwWJ2dqy5XlQPtncFMHK_miExJw',
-    appId: '1:134067109224:web:d0cc1fb1737e38cf2d2add',
-    messagingSenderId: '134067109224',
-    projectId: 'freak-flix-601a0',
-    authDomain: 'freak-flix-601a0.firebaseapp.com',
-    storageBucket: 'freak-flix-601a0.firebasestorage.app',
-    measurementId: 'G-1KX6X9PD2B',
-  );
+  static FirebaseOptions get web {
+    return FirebaseOptions(
+      apiKey: dotenv.env['FIREBASE_API_KEY'] ?? 'missing_api_key',
+      appId: dotenv.env['FIREBASE_APP_ID'] ?? 'missing_app_id',
+      messagingSenderId: dotenv.env['FIREBASE_MESSAGING_SENDER_ID'] ?? '134067109224',
+      projectId: dotenv.env['FIREBASE_PROJECT_ID'] ?? 'freak-flix-601a0',
+      authDomain: dotenv.env['FIREBASE_AUTH_DOMAIN'] ?? 'freak-flix-601a0.firebaseapp.com',
+      storageBucket: dotenv.env['FIREBASE_STORAGE_BUCKET'] ?? 'freak-flix-601a0.firebasestorage.app',
+      measurementId: dotenv.env['FIREBASE_MEASUREMENT_ID'] ?? 'G-1KX6X9PD2B',
+    );
+  }
 
-  static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDl6kvpcKn0e3Uy6gqwujN4xSWSTRMWgXQ',
-    appId: '1:134067109224:android:2f476ae5cf7876ff2d2add',
-    messagingSenderId: '134067109224',
-    projectId: 'freak-flix-601a0',
-    storageBucket: 'freak-flix-601a0.firebasestorage.app',
-  );
+  static FirebaseOptions get android {
+    return FirebaseOptions(
+      apiKey: dotenv.env['FIREBASE_API_KEY'] ?? 'missing_api_key',
+      appId: dotenv.env['FIREBASE_APP_ID'] ?? 'missing_app_id',
+      messagingSenderId: dotenv.env['FIREBASE_MESSAGING_SENDER_ID'] ?? '134067109224',
+      projectId: dotenv.env['FIREBASE_PROJECT_ID'] ?? 'freak-flix-601a0',
+      storageBucket: dotenv.env['FIREBASE_STORAGE_BUCKET'] ?? 'freak-flix-601a0.firebasestorage.app',
+    );
+  }
 
-  static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyDuOD2FjwWJ2dqy5XlQPtncFMHK_miExJw',
-    appId: '1:134067109224:web:aeb7ebd31ab0228e2d2add',
-    messagingSenderId: '134067109224',
-    projectId: 'freak-flix-601a0',
-    authDomain: 'freak-flix-601a0.firebaseapp.com',
-    storageBucket: 'freak-flix-601a0.firebasestorage.app',
-    measurementId: 'G-HLGX7GRXSN',
-  );
+  static FirebaseOptions get windows {
+    return FirebaseOptions(
+      apiKey: dotenv.env['FIREBASE_API_KEY'] ?? 'missing_api_key',
+      appId: dotenv.env['FIREBASE_APP_ID'] ?? 'missing_app_id',
+      messagingSenderId: dotenv.env['FIREBASE_MESSAGING_SENDER_ID'] ?? '134067109224',
+      projectId: dotenv.env['FIREBASE_PROJECT_ID'] ?? 'freak-flix-601a0',
+      authDomain: dotenv.env['FIREBASE_AUTH_DOMAIN'] ?? 'freak-flix-601a0.firebaseapp.com',
+      storageBucket: dotenv.env['FIREBASE_STORAGE_BUCKET'] ?? 'freak-flix-601a0.firebasestorage.app',
+      measurementId: dotenv.env['FIREBASE_MEASUREMENT_ID'] ?? 'G-HLGX7GRXSN',
+    );
+  }
 }

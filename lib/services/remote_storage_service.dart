@@ -193,4 +193,24 @@ class RemoteStorageService extends ChangeNotifier {
     }
     return true;
   }
+
+  /// Check if a protocol is secure
+  static bool isProtocolSecure(RemoteStorageType type) {
+    switch (type) {
+      case RemoteStorageType.sftp:
+        return true; // SSH encrypted
+      case RemoteStorageType.webdav:
+        return true; // HTTPS encrypted
+      case RemoteStorageType.ftp:
+        return false; // Unencrypted credentials and data
+    }
+  }
+
+  /// Get security warning for protocol
+  static String? getSecurityWarning(RemoteStorageType type) {
+    if (!isProtocolSecure(type)) {
+      return 'FTP transmits credentials and data in plaintext. Consider using SFTP or WebDAV for secure connections.';
+    }
+    return null;
+  }
 }

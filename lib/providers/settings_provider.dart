@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/persistence_service.dart';
 import '../models/stash_endpoint.dart';
+import '../utils/logger.dart';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -50,11 +51,11 @@ class SettingsProvider extends ChangeNotifier {
   static const _storageFile = 'settings.json';
 
   Future<void> load() async {
-    debugPrint('SettingsProvider: Loading settings from file...');
+    AppLogger.d('Loading settings from file...', tag: 'SettingsProvider');
     try {
       final jsonStr = await PersistenceService.instance.loadString(_storageFile);
       if (jsonStr == null) {
-        debugPrint('SettingsProvider: No settings file. Checking legacy prefs...');
+        AppLogger.d('No settings file. Checking legacy prefs...', tag: 'SettingsProvider');
         await _migrateFromPrefs();
         // Even if migration happens, we fall through to defaults if needed or return
         // Ideally _migrateFromPrefs sets values.
@@ -69,9 +70,9 @@ class SettingsProvider extends ChangeNotifier {
 
       final data = jsonDecode(jsonStr) as Map<String, dynamic>;
       _loadFromMap(data);
-       debugPrint('SettingsProvider: Settings loaded from file.');
+       AppLogger.d('Settings loaded from file', tag: 'SettingsProvider');
     } catch (e) {
-      debugPrint('SettingsProvider: Error loading settings: $e');
+      AppLogger.e('Error loading settings: $e', error: e, tag: 'SettingsProvider');
       // basic fallback
       tmdbApiKey = dotenv.env['TMDB_API_KEY'] ?? 
                    const String.fromEnvironment('TMDB_API_KEY');
@@ -166,9 +167,9 @@ class SettingsProvider extends ChangeNotifier {
        final data = jsonDecode(raw) as Map<String, dynamic>;
        _loadFromMap(data);
        await save();
-       debugPrint('SettingsProvider: Migrated settings from SharedPreferences.');
+       AppLogger.d('Migrated settings from SharedPreferences', tag: 'SettingsProvider');
     } catch (e) {
-       debugPrint('SettingsProvider: Migration failed: $e');
+       AppLogger.e('Migration failed: $e', error: e, tag: 'SettingsProvider');
     }
   }
 

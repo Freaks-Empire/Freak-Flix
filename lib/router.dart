@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'providers/profile_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/library_provider.dart';
+import 'utils/logger.dart';
 
 // Screens
 // Screens
@@ -38,7 +39,7 @@ MediaItem? _parseMediaItemExtra(Object? extra) {
     try {
       return MediaItem.fromJson(extra);
     } catch (e) {
-      debugPrint('Error parsing MediaItem from extra: $e');
+      AppLogger.e('Error parsing MediaItem from extra: $e', error: e, tag: 'Router');
     }
   }
   return null;

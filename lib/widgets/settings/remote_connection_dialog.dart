@@ -10,6 +10,7 @@ import '../../services/sftp_client.dart';
 import '../../services/ftp_client_wrapper.dart';
 import '../../services/webdav_client_wrapper.dart';
 import '../settings_widgets.dart';
+import '../../utils/input_validation.dart';
 
 class RemoteConnectionDialog extends StatefulWidget {
   final RemoteStorageType type;
@@ -99,6 +100,27 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
 
+    // Additional validation for test connection
+    if (widget.type == RemoteStorageType.webdav) {
+      final urlValidation = InputValidation.validateWebDavUrl(host);
+      if (urlValidation != null) {
+        setState(() {
+          _testing = false;
+          _testResult = 'Invalid URL: $urlValidation';
+        });
+        return;
+      }
+    } else {
+      final hostValidation = InputValidation.validateHostname(host);
+      if (hostValidation != null) {
+        setState(() {
+          _testing = false;
+          _testResult = 'Invalid host: $hostValidation';
+        });
+        return;
+      }
+    }
+
     bool success = false;
     
     try {
@@ -142,6 +164,48 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     
+    // Additional validation before saving
+    final host = _hostController.text.trim();
+    final port = int.tryParse(_portController.text) ?? RemoteStorageAccount.defaultPort(widget.type);
+    
+    if (widget.type == RemoteStorageType.webdav) {
+      final urlValidation = InputValidation.validateWebDavUrl(host);
+      if (urlValidation != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Invalid URL: $urlValidation')),
+          );
+        }
+        return;
+      }
+    } else {
+      final hostValidation = InputValidation.validateHostname(host);
+      if (hostValidation != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Invalid host: $hostValidation')),
+          );
+        }
+        return;
+      }
+    }
+    
+    final portValidation = InputValidation.validatePort(_portController.text);
+    if (portValidation != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invalid port: $portValidation')),
+        );
+      }
+      return;
+    }
+    
+    // Show security warning for FTP
+    if (widget.type == RemoteStorageType.ftp) {
+      final confirmed = await _showFtpSecurityWarning();
+      if (!confirmed) return;
+    }
+    
     setState(() => _saving = true);
 
     final account = RemoteStorageAccount(
@@ -165,6 +229,56 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
     if (mounted) {
       Navigator.of(context).pop(account);
     }
+  }
+
+  Future<bool> _showFtpSecurityWarning() async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning, color: Colors.amber.shade600),
+            const SizedBox(width: 8),
+            const Text('Security Warning'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'FTP connections are not secure:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text('• Credentials are transmitted in plaintext'),
+            const Text('• Data is not encrypted during transfer'),
+            const Text('• Vulnerable to network interception'),
+            const SizedBox(height: 12),
+            const Text(
+              'Consider using SFTP or WebDAV for secure connections instead.',
+              style: TextStyle(color: Colors.green),
+            ),
+            const SizedBox(height: 8),
+            const Text('Do you want to continue with this insecure connection?'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.amber.shade600,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Continue Anyway'),
+          ),
+        ],
+      ),
+    ) ?? false;
   }
 
   @override
@@ -207,12 +321,20 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                             ),
                           ),
                           if (widget.type == RemoteStorageType.ftp)
-                            Text(
-                              'Warning: FTP is unencrypted',
-                              style: TextStyle(
-                                color: Colors.amber.shade600,
-                                fontSize: 12,
-                              ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.warning, color: Colors.amber.shade600, size: 16),
+                                const SizedBox(width: 4),
+                                const Text(
+                                  'Insecure Connection',
+                                  style: TextStyle(
+                                    color: Colors.amber,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
                         ],
                       ),
@@ -229,12 +351,14 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                 // Host
                 _buildTextField(
                   controller: _hostController,
-                  label: 'Host',
+                  label: widget.type == RemoteStorageType.webdav ? 'URL' : 'Host',
                   hint: widget.type == RemoteStorageType.webdav 
-                      ? 'cloud.example.com/remote.php/dav'
+                      ? 'https://cloud.example.com/remote.php/dav'
                       : 'server.example.com',
                   icon: LucideIcons.server,
-                  validator: (v) => v?.trim().isEmpty == true ? 'Required' : null,
+                  validator: widget.type == RemoteStorageType.webdav
+                      ? InputValidation.validateWebDavUrl
+                      : InputValidation.validateHostname,
                 ),
                 const SizedBox(height: 12),
 
@@ -245,6 +369,7 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                   hint: RemoteStorageAccount.defaultPort(widget.type).toString(),
                   icon: LucideIcons.hash,
                   keyboardType: TextInputType.number,
+                  validator: InputValidation.validatePort,
                 ),
                 const SizedBox(height: 12),
 
@@ -254,7 +379,7 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                   label: 'Username',
                   hint: 'username',
                   icon: LucideIcons.user,
-                  validator: (v) => v?.trim().isEmpty == true ? 'Required' : null,
+                  validator: InputValidation.validateUsername,
                 ),
                 const SizedBox(height: 12),
 
@@ -265,7 +390,7 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                   hint: '••••••••',
                   icon: LucideIcons.key,
                   obscure: _obscurePassword,
-                  validator: (v) => v?.isEmpty == true ? 'Required' : null,
+                  validator: InputValidation.validatePassword,
                   suffix: IconButton(
                     icon: Icon(
                       _obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff,
@@ -283,7 +408,58 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                   label: 'Display Name (optional)',
                   hint: 'My Server',
                   icon: LucideIcons.tag,
+                  validator: InputValidation.validateDisplayName,
                 ),
+
+                // Security warning for FTP
+                if (widget.type == RemoteStorageType.ftp) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.security, color: Colors.amber.shade600, size: 20),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Security Notice',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.amber,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'FTP transmits your username, password, and all data in plaintext over the network.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Anyone on the same network can intercept your credentials.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          '💡 Use SFTP (SSH) or WebDAV (HTTPS) for secure encrypted connections.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
 
                 // Test result
                 if (_testResult != null) ...[

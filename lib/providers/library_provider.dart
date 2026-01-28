@@ -33,6 +33,7 @@ import 'settings_provider.dart';
 import '../utils/filename_parser.dart';
 import 'package:collection/collection.dart';
 import 'package:archive/archive.dart';
+import '../utils/logger.dart';
 
 class LibraryProvider extends ChangeNotifier {
   static const _prefsKey = 'library_v1';
@@ -467,7 +468,7 @@ class LibraryProvider extends ChangeNotifier {
   static const _itemsFile = 'library_items.gz';
 
   Future<void> loadLibrary() async {
-    debugPrint('LibraryProvider: Loading library from file storage...');
+    AppLogger.d('Loading library from file storage...', tag: 'LibraryProvider');
 
     // 1. Load Folders
     try {
@@ -477,14 +478,13 @@ class LibraryProvider extends ChangeNotifier {
         libraryFolders = (jsonDecode(folderJson) as List<dynamic>)
             .map((e) => LibraryFolder.fromJson(e as Map<String, dynamic>))
             .toList();
-        debugPrint(
-            'LibraryProvider: Loaded ${libraryFolders.length} folders from file.');
+        AppLogger.d('Loaded ${libraryFolders.length} folders from file', tag: 'LibraryProvider');
       } else {
         // Migration check
         await _migrateFoldersFromPrefs();
       }
     } catch (e) {
-      debugPrint('LibraryProvider: Error loading folders: $e');
+      AppLogger.e('Error loading folders: $e', error: e, tag: 'LibraryProvider');
       libraryFolders = [];
     }
 
@@ -493,16 +493,15 @@ class LibraryProvider extends ChangeNotifier {
       final itemsJson =
           await PersistenceService.instance.loadCompressed(_itemsFile);
       if (itemsJson != null) {
-        debugPrint('LibraryProvider: Found compressed items file. Parsing...');
+        AppLogger.d('Found compressed items file. Parsing...', tag: 'LibraryProvider');
         _allItems = MediaItem.listFromJson(itemsJson);
-        debugPrint(
-            'LibraryProvider: Loaded ${_allItems.length} items from file.');
+        AppLogger.d('Loaded ${_allItems.length} items from file', tag: 'LibraryProvider');
       } else {
-        debugPrint('LibraryProvider: No items file found. Checking legacy...');
+        AppLogger.d('No items file found. Checking legacy...', tag: 'LibraryProvider');
         await _migrateItemsFromPrefs();
       }
     } catch (e) {
-      debugPrint('LibraryProvider: Error loading items: $e');
+      AppLogger.e('Error loading items: $e', error: e, tag: 'LibraryProvider');
       // items = []; // Keep empty?
     }
 
@@ -522,7 +521,7 @@ class LibraryProvider extends ChangeNotifier {
           .map((e) => LibraryFolder.fromJson(e as Map<String, dynamic>))
           .toList();
       await _saveLibraryFolders();
-      debugPrint('LibraryProvider: Migrated folders from SharedPreferences.');
+      AppLogger.d('Migrated folders from SharedPreferences', tag: 'LibraryProvider');
     } catch (_) {}
   }
 
@@ -541,7 +540,7 @@ class LibraryProvider extends ChangeNotifier {
         _allItems = MediaItem.listFromJson(jsonStr);
       }
       await saveLibrary();
-      debugPrint('LibraryProvider: Migrated items from SharedPreferences.');
+      AppLogger.d('Migrated items from SharedPreferences', tag: 'LibraryProvider');
     } catch (_) {}
   }
 
@@ -796,8 +795,7 @@ class LibraryProvider extends ChangeNotifier {
     });
 
     if (_allItems.length != before) {
-      debugPrint(
-          'LibraryProvider: Pruned ${before - _allItems.length} orphan items.');
+      AppLogger.d('Pruned ${before - _allItems.length} orphan items', tag: 'LibraryProvider');
       notifyListeners();
     }
   }
@@ -1193,7 +1191,7 @@ class LibraryProvider extends ChangeNotifier {
       await _ingestItems(foundItems, metadata);
     } catch (e) {
       error = 'Cloud scan failed: $e';
-      debugPrint('OneDrive Scan Error: $e');
+      AppLogger.e('OneDrive Scan Error: $e', error: e, tag: 'LibraryProvider');
     } finally {
       isLoading = false;
       _setScanStatus('');
@@ -1220,8 +1218,7 @@ class LibraryProvider extends ChangeNotifier {
         final response =
             await http.get(uri, headers: {'Authorization': 'Bearer $token'});
         if (response.statusCode != 200) {
-          debugPrint(
-              'Graph Walk Error: ${response.statusCode} - ${response.body}');
+          AppLogger.e('Graph Walk Error: ${response.statusCode} - ${response.body}', tag: 'LibraryProvider');
           return;
         }
 
@@ -1283,8 +1280,7 @@ class LibraryProvider extends ChangeNotifier {
                         year: nfoData['year'] as int? ?? newItem.year,
                       );
                       if (nfoData['stashId'] != null) {
-                        debugPrint(
-                            'LibraryProvider: Found stashid ${nfoData['stashId']} in NFO for $name');
+                        AppLogger.d('Found stashid ${nfoData['stashId']} in NFO for $name', tag: 'LibraryProvider');
                       }
                     }
                   }
@@ -1334,7 +1330,7 @@ class LibraryProvider extends ChangeNotifier {
 
         nextLink = map['@odata.nextLink'];
       } catch (e) {
-        debugPrint('Graph Walk Exception: $e');
+        AppLogger.e('Graph Walk Exception: $e', error: e, tag: 'LibraryProvider');
         nextLink = null;
       }
     }
@@ -1770,7 +1766,7 @@ class LibraryProvider extends ChangeNotifier {
       
     } catch (e) {
       error = e.toString();
-      debugPrint('Remote scan error: $e');
+      AppLogger.e('Remote scan error: $e', error: e, tag: 'LibraryProvider');
     } finally {
       finishScan();
       await saveLibrary();
@@ -1804,7 +1800,7 @@ class LibraryProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('Error scanning SFTP directory $path: $e');
+      AppLogger.e('Error scanning SFTP directory $path: $e', error: e, tag: 'LibraryProvider');
     }
   }
 
@@ -1832,7 +1828,7 @@ class LibraryProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('Error scanning FTP directory $path: $e');
+      AppLogger.e('Error scanning FTP directory $path: $e', error: e, tag: 'LibraryProvider');
     }
   }
 
@@ -1860,7 +1856,7 @@ class LibraryProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('Error scanning WebDAV directory $path: $e');
+      AppLogger.e('Error scanning WebDAV directory $path: $e', error: e, tag: 'LibraryProvider');
     }
   }
 
@@ -1972,13 +1968,12 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   Future<void> importState(Map<String, dynamic> data) async {
-    debugPrint('LibraryProvider: Importing library state...');
+    AppLogger.d('Importing library state...', tag: 'LibraryProvider');
 
     // 1. Import Folders
     final rawFolders = data['folders'] as List<dynamic>?;
     if (rawFolders != null) {
-      debugPrint(
-          'LibraryProvider: Processing ${rawFolders.length} folders from backup');
+AppLogger.d('Processing ${rawFolders.length} folders from backup', tag: 'LibraryProvider');
       final incomingFolders = rawFolders
           .map((e) => LibraryFolder.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -2012,8 +2007,7 @@ class LibraryProvider extends ChangeNotifier {
       }
 
       libraryFolders = mergedFolders;
-      debugPrint(
-          'LibraryProvider: Final folder count: ${libraryFolders.length}');
+AppLogger.d('Final folder count: ${libraryFolders.length}', tag: 'LibraryProvider');
 
       await _saveLibraryFolders();
       notifyListeners();
@@ -2034,8 +2028,7 @@ class LibraryProvider extends ChangeNotifier {
         cloudItems = MediaItem.listFromJson(rawItems);
       }
 
-      debugPrint(
-          'LibraryProvider: Processing ${cloudItems.length} items from backup');
+AppLogger.d('Processing ${cloudItems.length} items from backup', tag: 'LibraryProvider');
 
       final map = {for (var i in _allItems) i.id: i};
       for (final i in cloudItems) {
@@ -2045,7 +2038,7 @@ class LibraryProvider extends ChangeNotifier {
       _allItems = map.values.toList()
         ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
 
-      debugPrint('LibraryProvider: Final item count: ${_allItems.length}');
+      AppLogger.d('Final item count: ${_allItems.length}', tag: 'LibraryProvider');
 
       await saveLibrary();
       notifyListeners();
@@ -2245,10 +2238,10 @@ Future<void> _scanRecursive(
       return;
     }
 
-    // List non-recursively first
+// List non-recursively first
     await for (final fsEntity
         in dir.list(recursive: false, followLinks: false).handleError((e) {
-      debugPrint('Skip dir error: $e');
+      AppLogger.w('Skip dir error: $e', error: e, tag: 'LibraryProvider');
     })) {
       try {
         if (fsEntity is PlatformFile) {
@@ -2321,7 +2314,7 @@ Future<void> _scanDirectoryInIsolate(_ScanRequest request) async {
   final keywords = request.keywords;
   final sendPort = request.sendPort;
 
-  debugPrint('Isolate calling manual scan on: $root');
+  AppLogger.d('Isolate calling manual scan on: $root', tag: 'LibraryProvider');
 
   try {
     final dir = PlatformDirectory(root);
@@ -2341,7 +2334,7 @@ Future<void> _scanDirectoryInIsolate(_ScanRequest request) async {
 
     sendPort.send(true); // DONE signal
   } catch (e) {
-    debugPrint('Isolate Fatal Error: $e');
+    AppLogger.critical('Isolate Fatal Error: $e', error: e, tag: 'LibraryProvider');
     sendPort.send(true);
   }
 }

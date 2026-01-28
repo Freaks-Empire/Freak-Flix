@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:webdav_client/webdav_client.dart' as webdav;
 import 'remote_storage_service.dart';
+import '../utils/input_validation.dart';
 
 /// WebDAV client for browsing and streaming files
 class WebDavClientWrapper {
@@ -20,9 +21,24 @@ class WebDavClientWrapper {
     try {
       _password = password;
       
+      // Validate connection parameters
+      final urlValidation = InputValidation.validateWebDavUrl(account.host);
+      if (urlValidation != null) {
+        debugPrint('WebDAV: Invalid URL - $urlValidation');
+        return false;
+      }
+      
+      final portValidation = InputValidation.validatePort(account.port.toString());
+      if (portValidation != null) {
+        debugPrint('WebDAV: Invalid port - $portValidation');
+        return false;
+      }
+      
       // Build URL with proper scheme
       final scheme = account.port == 443 ? 'https' : 'http';
       final baseUrl = '$scheme://${account.host}:${account.port}';
+      
+      debugPrint('WebDAV: Connecting to ${InputValidation.sanitizeForLogging(baseUrl)}');
       
       _client = webdav.newClient(
         baseUrl,
@@ -33,7 +49,7 @@ class WebDavClientWrapper {
       
       // Test connection by reading root
       await _client!.readDir('/');
-      debugPrint('WebDAV: Connected to ${account.host}');
+      debugPrint('WebDAV: Connected to ${InputValidation.sanitizeForLogging(account.host)}');
       return true;
     } catch (e) {
       debugPrint('WebDAV Connection Error: $e');

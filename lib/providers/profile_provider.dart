@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/user_profile.dart';
 import '../services/persistence_service.dart';
+import '../utils/logger.dart';
 
 class ProfileProvider extends ChangeNotifier {
   static const _profilesFile = 'profiles.json';
@@ -38,7 +39,7 @@ class ProfileProvider extends ChangeNotifier {
         profiles = []; 
       }
     } catch (e) {
-      debugPrint('ProfileProvider: Error loading profiles: $e');
+      AppLogger.e('Error loading profiles: $e', error: e, tag: 'ProfileProvider');
       // Fallback
       profiles = [
         const UserProfile(
@@ -79,7 +80,7 @@ class ProfileProvider extends ChangeNotifier {
         _userData = map.map((key, value) => MapEntry(key, UserMediaData.fromJson(value)));
       }
     } catch (e) {
-      debugPrint('ProfileProvider: Error loading user data for $profileId: $e');
+      AppLogger.e('Error loading user data for $profileId: $e', error: e, tag: 'ProfileProvider');
     }
   }
 
@@ -90,7 +91,7 @@ class ProfileProvider extends ChangeNotifier {
       final jsonStr = jsonEncode(_userData.map((k, v) => MapEntry(k, v.toJson())));
       await PersistenceService.instance.saveString(fileName, jsonStr);
     } catch (e) {
-      debugPrint('ProfileProvider: Error saving user data: $e');
+      AppLogger.e('Error saving user data: $e', error: e, tag: 'ProfileProvider');
     }
   }
 
@@ -99,7 +100,7 @@ class ProfileProvider extends ChangeNotifier {
       final jsonStr = jsonEncode(profiles.map((p) => p.toJson()).toList());
       await PersistenceService.instance.saveString(_profilesFile, jsonStr);
     } catch (e) {
-      debugPrint('ProfileProvider: Error saving profiles: $e');
+      AppLogger.e('Error saving profiles: $e', error: e, tag: 'ProfileProvider');
     }
   }
 

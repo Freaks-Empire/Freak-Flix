@@ -18,6 +18,7 @@ import 'services/analytics_service.dart';
 
 
 import 'package:flutter/foundation.dart'; // For PlatformDispatcher
+import 'utils/logger.dart';
 
 import 'package:flutter_web_plugins/url_strategy.dart';
 
@@ -42,7 +43,7 @@ void main() async {
     try {
       await dotenv.load(fileName: '.env');
     } catch (e) {
-      debugPrint('Warning: dotenv.load failed: $e');
+      AppLogger.w('dotenv.load failed: $e', error: e, tag: 'Main');
     }
 
     // Monitoring
@@ -60,32 +61,31 @@ void main() async {
         // 2. Set up Crashlytics (Mobile only usually)
         if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
           FlutterError.onError = (errorDetails) {
-            debugPrint('Caught Flutter Error: ${errorDetails.exception}');
+            AppLogger.e('Caught Flutter Error: ${errorDetails.exception}', error: errorDetails.exception, stackTrace: errorDetails.stack, tag: 'Main');
             try {
               FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
             } catch (e) {
-              debugPrint('Failed to report to Crashlytics: $e');
+              AppLogger.e('Failed to report to Crashlytics: $e', error: e, tag: 'Main');
             }
           };
 
           PlatformDispatcher.instance.onError = (error, stack) {
-            debugPrint('Caught Platform Error: $error');
+            AppLogger.e('Caught Platform Error: $error', error: error, stackTrace: stack, tag: 'Main');
             try {
               FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
             } catch (e) {
-              debugPrint('Failed to report to Crashlytics: $e');
+              AppLogger.e('Failed to report to Crashlytics: $e', error: e, tag: 'Main');
             }
             return true;
           };
         } else {
-          debugPrint('Firebase Crashlytics disabled on this platform.');
+          AppLogger.config('Firebase Crashlytics', 'disabled on this platform', tag: 'Main');
         }
       } catch (e) {
-        debugPrint(
-            'Firebase Init Failed (Likely due to missing configuration): $e');
+        AppLogger.e('Firebase Init Failed (Likely due to missing configuration): $e', error: e, tag: 'Main');
       }
     } else {
-      debugPrint('Firebase disabled on Windows desktop.');
+      AppLogger.config('Firebase', 'disabled on Windows desktop', tag: 'Main');
     }
 
     await MonitoringService.initialize();
@@ -110,7 +110,7 @@ void main() async {
 
     // One-time Migration: Import legacy history to Default profile
     if (!settingsProvider.hasMigratedProfiles) {
-      debugPrint('Main: Performing one-time profile migration...');
+      AppLogger.d('Performing one-time profile migration...', tag: 'Main');
       if (profileProvider.activeProfile == null &&
           profileProvider.profiles.isNotEmpty) {
         // Try 'default', fallback to first
@@ -120,8 +120,7 @@ void main() async {
       if (profileProvider.activeProfile != null) {
         final history = libraryProvider.extractLegacyHistory();
         if (history.isNotEmpty) {
-          debugPrint(
-              'Main: Importing ${history.length} items to Default profile.');
+          AppLogger.d('Importing ${history.length} items to Default profile', tag: 'Main');
           await profileProvider.importUserData(history);
         }
         await settingsProvider.setHasMigratedProfiles(true);

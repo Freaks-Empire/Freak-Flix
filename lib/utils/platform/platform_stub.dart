@@ -29,4 +29,5 @@ abstract class PlatformDirectory implements PlatformFileSystemEntity {
   factory PlatformDirectory(String path) => throw UnimplementedError();
   bool existsSync();
   List<PlatformFileSystemEntity> listSync({bool recursive = false, bool followLinks = true});
+  Stream<PlatformFileSystemEntity> list({bool recursive = false, bool followLinks = true});
 }

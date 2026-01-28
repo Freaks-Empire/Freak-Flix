@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'remote_storage_service.dart';
+import '../utils/input_validation.dart';
 
 /// SFTP client for browsing and streaming files
 class SftpClient {
@@ -16,7 +17,21 @@ class SftpClient {
 
   /// Connect to the SFTP server
   Future<bool> connect(String password, {String? privateKey}) async {
+    // Validate connection parameters
+    final hostValidation = InputValidation.validateHostname(account.host);
+    if (hostValidation != null) {
+      debugPrint('SFTP: Invalid host - $hostValidation');
+      return false;
+    }
+    
+    final portValidation = InputValidation.validatePort(account.port.toString());
+    if (portValidation != null) {
+      debugPrint('SFTP: Invalid port - $portValidation');
+      return false;
+    }
+    
     try {
+      debugPrint('SFTP: Connecting to ${InputValidation.sanitizeForLogging(account.host)}:${InputValidation.sanitizeForLogging(account.port.toString())}');
       final socket = await SSHSocket.connect(account.host, account.port);
       
       _sshClient = SSHClient(
@@ -30,7 +45,7 @@ class SftpClient {
 
       // Wait for authentication
       await _sshClient!.authenticated;
-      debugPrint('SFTP: Connected to ${account.host}');
+      debugPrint('SFTP: Connected to ${InputValidation.sanitizeForLogging(account.host)}');
       return true;
     } catch (e) {
       debugPrint('SFTP Connection Error: $e');
