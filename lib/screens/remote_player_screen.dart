@@ -1,17 +1,18 @@
 /// lib/screens/remote_player_screen.dart
-/// Remote streaming player using Vidking embed with pre-roll ads.
+/// Remote streaming player using Vidking embed.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
 import '../models/media_item.dart';
-import '../services/ad_service.dart';
 import '../services/vidking_service.dart';
 
-/// Screen for playing remote content via Vidking with pre-roll ads.
-/// 
-/// On platforms where Google IMA is not supported (Windows), ads are skipped.
+// Conditional imports for web vs native
+import 'remote_player_stub.dart'
+    if (dart.library.html) 'remote_player_web.dart'
+    if (dart.library.io) 'remote_player_native.dart' as platform;
+
+/// Screen for playing remote content via Vidking embed.
 class RemotePlayerScreen extends StatefulWidget {
   /// The media item to play.
   final MediaItem item;
@@ -34,69 +35,16 @@ class RemotePlayerScreen extends StatefulWidget {
 }
 
 class _RemotePlayerScreenState extends State<RemotePlayerScreen> {
-  // State
-  bool _showingAd = true;
-  bool _webViewReady = false;
   String? _errorMessage;
-  
-  // Controllers
-  WebViewController? _webViewController;
-  
-  // Services
-  final AdService _adService = AdService.instance;
-  
+  String? _embedUrl;
+
   @override
   void initState() {
     super.initState();
-    _initializePlayer();
-  }
-  
-  void _initializePlayer() {
-    if (_adService.shouldShowAd()) {
-      // Show ad placeholder, then load content
-      // For now, we skip the ad (IMA requires more complex integration)
-      // TODO: Add proper IMA integration in future version
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) _skipToContent();
-      });
-    } else {
-      // No ads on this platform (Windows), go straight to content
-      _showingAd = false;
-      _initWebView();
+    _embedUrl = _getEmbedUrl();
+    if (_embedUrl == null) {
+      _errorMessage = 'Cannot stream: Missing TMDB ID';
     }
-  }
-  
-  void _skipToContent() {
-    if (mounted) {
-      setState(() {
-        _showingAd = false;
-      });
-      _initWebView();
-    }
-  }
-  
-  void _initWebView() {
-    final embedUrl = _getEmbedUrl();
-    if (embedUrl == null) {
-      setState(() {
-        _errorMessage = 'Cannot stream: Missing TMDB ID';
-      });
-      return;
-    }
-    
-    _webViewController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(NavigationDelegate(
-        onPageFinished: (_) {
-          if (mounted) setState(() => _webViewReady = true);
-        },
-        onWebResourceError: (error) {
-          debugPrint('WebView error: ${error.description}');
-        },
-      ))
-      ..loadRequest(Uri.parse(embedUrl));
-      
-    if (mounted) setState(() {});
   }
   
   String? _getEmbedUrl() {
@@ -112,11 +60,6 @@ class _RemotePlayerScreenState extends State<RemotePlayerScreen> {
       return VidkingService.getTvEmbedUrl(tmdbId, season, episode);
     }
   }
-  
-  @override
-  void dispose() {
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -127,10 +70,8 @@ class _RemotePlayerScreenState extends State<RemotePlayerScreen> {
           // Main content area
           if (_errorMessage != null)
             _buildErrorView()
-          else if (_showingAd && _adService.shouldShowAd())
-            _buildAdPlaceholder()
-          else if (_webViewController != null)
-            _buildWebView()
+          else if (_embedUrl != null)
+            platform.buildEmbedPlayer(_embedUrl!)
           else
             _buildLoadingView(),
           
@@ -149,42 +90,6 @@ class _RemotePlayerScreenState extends State<RemotePlayerScreen> {
           ),
         ],
       ),
-    );
-  }
-  
-  Widget _buildAdPlaceholder() {
-    // Placeholder for future IMA integration
-    // Shows a loading screen that simulates ad loading
-    return Container(
-      color: Colors.black,
-      child: const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(color: Colors.white),
-            SizedBox(height: 16),
-            Text(
-              'Loading...',
-              style: TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-  
-  Widget _buildWebView() {
-    return Stack(
-      children: [
-        WebViewWidget(controller: _webViewController!),
-        if (!_webViewReady)
-          Container(
-            color: Colors.black,
-            child: const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            ),
-          ),
-      ],
     );
   }
   
