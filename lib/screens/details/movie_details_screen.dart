@@ -18,10 +18,13 @@ import '../../services/metadata_service.dart';
 import '../../models/tmdb_extended_details.dart';
 import '../../widgets/discover_card.dart';
 import '../../widgets/safe_network_image.dart';
+import '../../utils/logger.dart';
 import '../video_player_screen.dart';
 import 'actor_details_screen.dart';
 import '../../models/cast_member.dart';
 import 'package:go_router/go_router.dart';
+import '../../services/vidking_service.dart';
+import '../remote_player_screen.dart';
 
 class MovieDetailsScreen extends StatefulWidget {
   final MediaItem item;
@@ -473,7 +476,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: _current.filePath.isNotEmpty ? () {
-                 debugPrint('MovieDetailsScreen: Play button pressed for ${_current.id}');
+                 AppLogger.userAction('Play button pressed', tag: 'MovieDetailsScreen', params: {'mediaId': _current.id});
                  playback.start(_current);
                  Navigator.of(context).push(
                    MaterialPageRoute(
@@ -484,6 +487,27 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
               icon: const Icon(Icons.play_arrow),
               label: Text(_current.filePath.isNotEmpty ? 'Play Now' : 'Not Available'),
             ),
+
+            // Stream Online Button (when no local file but has TMDB ID)
+            if (_current.filePath.isEmpty && VidkingService.isContentLikelyAvailable(_current.tmdbId))
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 22),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () {
+                  AppLogger.userAction('Stream Online pressed', tag: 'MovieDetailsScreen', params: {'mediaId': _current.id, 'tmdbId': _current.tmdbId?.toString() ?? ''});
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => RemotePlayerScreen(item: _current),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.cloud_download),
+                label: const Text('Stream Online'),
+              ),
 
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
