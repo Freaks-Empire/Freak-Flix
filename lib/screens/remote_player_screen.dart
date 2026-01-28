@@ -65,30 +65,46 @@ class _RemotePlayerScreenState extends State<RemotePlayerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // Main content area
-          if (_errorMessage != null)
-            _buildErrorView()
-          else if (_embedUrl != null)
-            platform.buildEmbedPlayer(_embedUrl!)
-          else
-            _buildLoadingView(),
-          
-          // Back button overlay
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.black54,
-                ),
-                onPressed: () => Navigator.of(context).pop(),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Top bar with back button - this stays OUTSIDE the iframe
+            Container(
+              color: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
+                    onPressed: () => Navigator.of(context).pop(),
+                    tooltip: 'Back',
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      widget.item.title ?? 'Streaming',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+            
+            // Main content area - the embed player
+            Expanded(
+              child: _errorMessage != null
+                  ? _buildErrorView()
+                  : _embedUrl != null
+                      ? platform.buildEmbedPlayer(_embedUrl!)
+                      : _buildLoadingView(),
+            ),
+          ],
+        ),
       ),
     );
   }
