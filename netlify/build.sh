@@ -11,8 +11,8 @@ GRAPH_CLIENT_ID=${GRAPH_CLIENT_ID:-}
 GRAPH_TENANT_ID=${GRAPH_TENANT_ID:-}
 TMDB_API_KEY=${TMDB_API_KEY:-}
 
-# Configure desired Flutter version
-FLUTTER_VERSION="3.24.3"
+# Configure desired Flutter version (3.27.4 includes Dart 3.6+ required by go_router)
+FLUTTER_VERSION="3.27.4"
 FLUTTER_TARBALL="https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
 
 # Download and extract Flutter SDK
