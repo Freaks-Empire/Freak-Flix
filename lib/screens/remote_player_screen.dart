@@ -1,5 +1,5 @@
 /// lib/screens/remote_player_screen.dart
-/// Remote streaming player using Vidking embed.
+/// Remote streaming player using Vidking embed with pre-roll ads.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -12,7 +12,7 @@ import 'remote_player_stub.dart'
     if (dart.library.html) 'remote_player_web.dart'
     if (dart.library.io) 'remote_player_native.dart' as platform;
 
-/// Screen for playing remote content via Vidking embed.
+/// Screen for playing remote content via Vidking embed with pre-roll ads.
 class RemotePlayerScreen extends StatefulWidget {
   /// The media item to play.
   final MediaItem item;
@@ -37,6 +37,11 @@ class RemotePlayerScreen extends StatefulWidget {
 class _RemotePlayerScreenState extends State<RemotePlayerScreen> {
   String? _errorMessage;
   String? _embedUrl;
+  
+  // Ad states
+  bool _showingAd = true;
+  bool _adFinished = false;
+  int _adCountdown = 5; // 5 second countdown for test ad simulation
 
   @override
   void initState() {
@@ -44,6 +49,34 @@ class _RemotePlayerScreenState extends State<RemotePlayerScreen> {
     _embedUrl = _getEmbedUrl();
     if (_embedUrl == null) {
       _errorMessage = 'Cannot stream: Missing TMDB ID';
+      _showingAd = false;
+    } else {
+      _startAdSimulation();
+    }
+  }
+  
+  /// Simulates a pre-roll ad with countdown
+  /// In production, replace with actual IMA ad loading
+  void _startAdSimulation() {
+    Future.delayed(const Duration(seconds: 1), _countdown);
+  }
+  
+  void _countdown() {
+    if (!mounted) return;
+    if (_adCountdown > 0) {
+      setState(() => _adCountdown--);
+      Future.delayed(const Duration(seconds: 1), _countdown);
+    } else {
+      _skipToContent();
+    }
+  }
+  
+  void _skipToContent() {
+    if (mounted) {
+      setState(() {
+        _showingAd = false;
+        _adFinished = true;
+      });
     }
   }
   
@@ -68,7 +101,7 @@ class _RemotePlayerScreenState extends State<RemotePlayerScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Top bar with back button - this stays OUTSIDE the iframe
+            // Top bar with back button
             Container(
               color: Colors.black,
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -95,14 +128,93 @@ class _RemotePlayerScreenState extends State<RemotePlayerScreen> {
               ),
             ),
             
-            // Main content area - the embed player
+            // Main content area
             Expanded(
               child: _errorMessage != null
                   ? _buildErrorView()
-                  : _embedUrl != null
-                      ? platform.buildEmbedPlayer(_embedUrl!)
-                      : _buildLoadingView(),
+                  : _showingAd
+                      ? _buildAdView()
+                      : _embedUrl != null
+                          ? platform.buildEmbedPlayer(_embedUrl!)
+                          : _buildLoadingView(),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildAdView() {
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Ad label
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.amber,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                'AD',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Ad placeholder
+            Container(
+              width: 300,
+              height: 200,
+              decoration: BoxDecoration(
+                color: Colors.grey[900],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[700]!),
+              ),
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.play_circle_outline, size: 64, color: Colors.white54),
+                  SizedBox(height: 12),
+                  Text(
+                    'Video Ad',
+                    style: TextStyle(color: Colors.white70, fontSize: 16),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '(Test Ad - Replace with IMA)',
+                    style: TextStyle(color: Colors.white38, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Countdown
+            Text(
+              'Content starts in $_adCountdown...',
+              style: const TextStyle(color: Colors.white54, fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            
+            // Skip button (appears after 2 seconds)
+            if (_adCountdown <= 3)
+              TextButton.icon(
+                onPressed: _skipToContent,
+                icon: const Icon(Icons.skip_next, color: Colors.white),
+                label: const Text('Skip Ad', style: TextStyle(color: Colors.white)),
+                style: TextButton.styleFrom(
+                  backgroundColor: Colors.white.withOpacity(0.1),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+              ),
           ],
         ),
       ),
