@@ -1,5 +1,7 @@
 /// lib/screens/details/scene_details_screen.dart
+import 'dart:async';
 import 'dart:ui';
+import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -15,6 +17,8 @@ import 'actor_details_screen.dart';
 import '../../models/cast_member.dart';
 import '../../services/metadata_service.dart'; // Import MetadataService
 import 'package:go_router/go_router.dart';
+
+import 'package:flutter/services.dart'; // For Clipboard
 
 class SceneDetailsScreen extends StatefulWidget {
   final MediaItem item;
@@ -206,6 +210,47 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
                        return const SizedBox.shrink();
                     }
                   ),
+
+                  const SizedBox(height: 48),
+                  
+                  // Technical Details / File Info
+                  if (_current.filePath.isNotEmpty)
+                    ExpansionTile(
+                      title: const Text("File Information"),
+                      subtitle: const Text("Path, Size, Container"),
+                      leading: const Icon(Icons.folder_open),
+                      shape: const Border(), // Remove borders
+                      collapsedShape: const Border(),
+                      tilePadding: EdgeInsets.zero,
+                      childrenPadding: const EdgeInsets.only(bottom: 24),
+                      expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildInfoRow(context, "File Name", _current.fileName),
+                        // Construct absolute/full path if filePath seems to be just a filename
+                        Builder(
+                          builder: (context) {
+                            String displayPath = _current.filePath;
+                            // Check if it looks like just a filename (no separators)
+                            final justName = !displayPath.contains('/') && !displayPath.contains('\\');
+                            
+                            if (justName && _current.folderPath.isNotEmpty) {
+                               if (_current.folderPath.contains('onedrive:')) {
+                                  displayPath = '${_current.folderPath}/${_current.fileName}';
+                               } else {
+                                  displayPath = p.join(_current.folderPath, _current.fileName);
+                               }
+                            }
+                            
+                            return _buildInfoRow(context, "Full Path", displayPath, allowCopy: true);
+                          }
+                        ),
+                        _buildInfoRow(context, "Size", _formatBytes(_current.sizeBytes)),
+                        _buildInfoRow(context, "Container", _current.filePath.split('.').last.toUpperCase()),
+                        if (_current.streamUrl != null)
+                           _buildInfoRow(context, "Stream URL", _current.streamUrl!, allowCopy: true),
+                      ],
+                    ),
+
                 ],
               ),
             ),
@@ -421,68 +466,264 @@ class _SceneDetailsScreenState extends State<SceneDetailsScreen> {
     final meta = context.read<MetadataService>();
     final controller = TextEditingController(text: _current.stashId);
     
+
+    // State for the dialog
+    List<MediaItem> results = [];
+    bool isSearching = false;
+    String? statusMessage;
+    Timer? _debounce;
+
     await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit Scene Details'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Enter StashDB Scene ID or URL to manually link metadata.'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                labelText: 'StashDB ID / URL',
-                border: OutlineInputBorder(),
-                hintText: 'e.g. 019b36f4-b90d... or https://stashdb.org/scenes/...',
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) {
+          
+          Future<void> performSearch(String query) async {
+            if (query.isEmpty) {
+              if (mounted) {
+                 setState(() {
+                   results = [];
+                   statusMessage = null;
+                   isSearching = false;
+                 });
+              }
+              return;
+            }
+
+            setState(() {
+              isSearching = true;
+              statusMessage = null;
+            });
+
+            try {
+              final items = await meta.searchManual(query);
+              if (context.mounted) { // Check if dialog is still open
+                setState(() {
+                  results = items;
+                  if (items.isEmpty) statusMessage = 'No results found.';
+                });
+              }
+            } catch (e) {
+              if (context.mounted) {
+                setState(() => statusMessage = 'Error: $e');
+              }
+            } finally {
+              if (context.mounted) {
+                setState(() => isSearching = false);
+              }
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Edit Scene Details'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Type a name or ID to auto-search StashDB.'),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    decoration: InputDecoration(
+                      labelText: 'Search Query',
+                      border: const OutlineInputBorder(),
+                      hintText: 'Start typing to search...',
+                      suffixIcon: isSearching 
+                          ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                          : (controller.text.isNotEmpty 
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear), 
+                                  onPressed: () {
+                                    controller.clear();
+                                    setState(() {
+                                      results = [];
+                                      statusMessage = null;
+                                    });
+                                  }) 
+                              : const Icon(Icons.search)),
+                    ),
+                    autofocus: true,
+                    onChanged: (text) {
+                      if (_debounce?.isActive ?? false) _debounce!.cancel();
+                      _debounce = Timer(const Duration(milliseconds: 500), () {
+                        performSearch(text.trim());
+                      });
+                    },
+                  ),
+                  if (statusMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(statusMessage!, style: const TextStyle(color: Colors.orange)),
+                    ),
+                  const SizedBox(height: 16),
+                  if (results.isNotEmpty) ...[
+                    const Divider(),
+                    const Text('Results (Tap to select):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    const SizedBox(height: 8),
+                    Flexible(
+                      child: SizedBox(
+                        height: 300, // Limit height
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: results.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final item = results[index];
+                            return ListTile(
+                              dense: true,
+                              leading: item.posterUrl != null 
+                                ? SafeNetworkImage(
+                                    url: item.posterUrl!, 
+                                    width: 30, 
+                                    height: 40, 
+                                    fit: BoxFit.cover
+                                  )
+                                : const Icon(Icons.movie),
+                              title: Text(item.title ?? 'Unknown Title', maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle: Text(
+                                '${item.year?.toString() ?? "No Year"}  •  ${(item.overview?.split('\n').firstOrNull ?? "")}', 
+                                maxLines: 1, 
+                                overflow: TextOverflow.ellipsis
+                              ),
+                              onTap: () async {
+                                Navigator.of(ctx).pop(); // Close dialog
+                                
+                                // Apply Selected Item
+                                final stashId = item.stashId ?? item.id.replaceFirst('stashdb:', ''); 
+                                
+                                if (stashId.isNotEmpty) {
+                                   final updated = _current.copyWith(stashId: stashId);
+                                   // Trigger rescan
+                                   await library.rescanSingleItem(updated, meta);
+                                   if (mounted) {
+                                     ScaffoldMessenger.of(context).showSnackBar(
+                                       SnackBar(content: Text('Linked to: ${item.title}')),
+                                     );
+                                   }
+                                }
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              autofocus: true,
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                 onPressed: () async {
+                    Navigator.of(ctx).pop();
+                    String input = controller.text.trim();
+                    // Fallback manual save logic
+                    String? newStashId;
+                    String? newFileName;
+                    final uuidRegex = RegExp(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', caseSensitive: false);
+                    final uuidMatch = uuidRegex.firstMatch(input);
+                    
+                    if (uuidMatch != null) {
+                      newStashId = uuidMatch.group(0)!;
+                    } else if (input.isNotEmpty) {
+                      newFileName = input;
+                    }
+                    
+                    if (input.isNotEmpty) {
+                       MediaItem updated = _current;
+                       if (newStashId != null) {
+                          updated = updated.copyWith(stashId: newStashId);
+                       } else if (newFileName != null) {
+                          updated = updated.copyWith(fileName: newFileName, stashId: null);
+                       }
+                       await library.rescanSingleItem(updated, meta);
+                       if (mounted) {
+                         ScaffoldMessenger.of(context).showSnackBar(
+                           const SnackBar(content: Text('Applying manual change...')),
+                         );
+                       }
+                    }
+                 },
+                 child: const Text('Manual Save'),
+              ),
+            ],
+          );
+        }
+      ),
+    );
+  }
+  Widget _buildInfoRow(BuildContext context, String label, String value, {bool allowCopy = false, IconData? actionIcon, VoidCallback? onAction}) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
-          FilledButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              String input = controller.text.trim();
-              
-              // Basic logic to extract UUID if full URL pasted
-              // 1. Try extracting UUID
-              final uuidRegex = RegExp(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', caseSensitive: false);
-              final uuidMatch = uuidRegex.firstMatch(input);
-              if (uuidMatch != null) {
-                input = uuidMatch.group(0)!;
-              } else if (input.startsWith('http')) {
-                // 2. If it's a URL but no UUID, assume the last segment is the ID/Slug (e.g. TPDB slug)
-                // Example: https://theporndb.net/movies/some-slug-name
-                final uri = Uri.tryParse(input);
-                if (uri != null && uri.pathSegments.isNotEmpty) {
-                  input = uri.pathSegments.last;
-                }
-              }
-              
-              if (input.isNotEmpty) {
-                 final updated = _current.copyWith(stashId: input);
-                 // Trigger rescan which will use this new ID
-                 await library.rescanSingleItem(updated, meta);
-                 
-                 if (mounted) {
-                   ScaffoldMessenger.of(context).showSnackBar(
-                     const SnackBar(content: Text('Updating with new ID...')),
-                   );
-                 }
-              }
-            },
-            child: const Text('Save & Rescan'),
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(
+                  child: SelectableText( // Changed to SelectableText for better UX
+                    value,
+                    style: theme.textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'),
+                  ),
+                ),
+                if (actionIcon != null && onAction != null)
+                   SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      iconSize: 16,
+                      icon: Icon(actionIcon),
+                      onPressed: onAction,
+                      tooltip: 'Open',
+                    ),
+                  ),
+                if (allowCopy)
+                  SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      iconSize: 16,
+                      icon: const Icon(Icons.copy),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: value));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 1)),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
     );
+  }
+
+  String _formatBytes(int bytes, [int decimals = 2]) {
+    if (bytes <= 0) return "0 B";
+    if(bytes < 1024) return "$bytes B";
+    if(bytes < 1024*1024) return "${(bytes/1024).toStringAsFixed(decimals)} KB";
+    if(bytes < 1024*1024*1024) return "${(bytes/(1024*1024)).toStringAsFixed(decimals)} MB";
+    return "${(bytes/(1024*1024*1024)).toStringAsFixed(decimals)} GB";
   }
 }
 
@@ -559,7 +800,7 @@ class _SceneCard extends StatelessWidget {
             final rawId = item.id.replaceFirst('stashdb:', '');
             context.push('/scene/$rawId', extra: item);
          } else {
-            context.push('/media/${item.id}', extra: item);
+            context.push('/media/${Uri.encodeComponent(item.id)}', extra: item);
          }
       },
       child: SizedBox(

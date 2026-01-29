@@ -1,10 +1,12 @@
 /// lib/widgets/video_player/video_controls.dart
 import 'dart:async';
+import 'dart:ui'; // For ImageFilter
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../../models/media_item.dart';
+import 'custom_track_shape.dart';
 
 class VideoControls extends StatefulWidget {
   final Player player;
@@ -38,6 +40,7 @@ class VideoControls extends StatefulWidget {
 }
 
 class _VideoControlsState extends State<VideoControls> {
+  // State
   bool _visible = true;
   Timer? _hideTimer;
   bool _isPlaying = true;
@@ -46,13 +49,12 @@ class _VideoControlsState extends State<VideoControls> {
   Duration _duration = Duration.zero;
   Duration _buffer = Duration.zero;
   double _volume = 100.0;
+  
+  // UI Interaction State
+  bool _isHovering = false;
+  bool _isScrubbing = false;
 
-  // Gestures
-  double? _dragStartVolume;
-  // Brightness requires native plugin, simplified 'mock' for now or purely internal value
-  double _brightness = 1.0; 
-  double? _dragStartBrightness;
-
+  // Streams
   late final StreamSubscription<bool> _playingSub;
   late final StreamSubscription<bool> _bufferingSub;
   late final StreamSubscription<Duration> _posSub;
@@ -96,7 +98,7 @@ class _VideoControlsState extends State<VideoControls> {
   void didUpdateWidget(VideoControls oldWidget) {
       super.didUpdateWidget(oldWidget);
       if (oldWidget.item.id != widget.item.id) {
-          _onUserInteraction(); // Show controls when video changes
+          _onUserInteraction(); 
       }
   }
 
@@ -130,7 +132,7 @@ class _VideoControlsState extends State<VideoControls> {
   void _startHideTimer() {
     _hideTimer?.cancel();
     _hideTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && _isPlaying) {
+      if (mounted && _isPlaying && !_isHovering && !_isScrubbing) {
         setState(() => _visible = false);
       }
     });
@@ -167,456 +169,250 @@ class _VideoControlsState extends State<VideoControls> {
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 
-  void _handleVerticalDragStart(DragStartDetails details) {
-      final width = MediaQuery.of(context).size.width;
-      if (details.globalPosition.dx > width / 2) {
-          // Right side: Volume
-          _dragStartVolume = widget.player.state.volume;
-      } else {
-          // Left side: Brightness (simulated opacity overlay for now or future plugin)
-           _dragStartBrightness = _brightness;
-      }
-  }
 
-  void _handleVerticalDragUpdate(DragUpdateDetails details) {
-      final delta = details.primaryDelta ?? 0;
-      final width = MediaQuery.of(context).size.width;
-      
-      // Sensitivity
-      const sensitivity = 0.5;
-
-      if (details.globalPosition.dx > width / 2) {
-          // Volume
-          final current = _dragStartVolume ?? widget.player.state.volume;
-          final newVol = (current - (delta * sensitivity)).clamp(0.0, 100.0);
-          widget.player.setVolume(newVol);
-          _dragStartVolume = newVol;
-          setState(() => _volume = newVol);
-      } else {
-           // Brightness (simulating 0.0 to 1.0)
-           final current = _dragStartBrightness ?? _brightness;
-           // Invert delta because dragging up (negative) should increase brightness
-           final newBright = (current - (delta * 0.01)).clamp(0.0, 1.0);
-           setState(() {
-             _brightness = newBright;
-             _dragStartBrightness = newBright;
-           });
-           
-           // Apply to system or overlay? 
-           // Real app would use screen_brightness plugin.
-      }
-      _onUserInteraction();
-  }
-  
-  void _showEpisodesSheet() {
-      _hideTimer?.cancel();
-      showModalBottomSheet(
-          context: context,
-          backgroundColor: Colors.transparent,
-          isScrollControlled: true,
-          builder: (ctx) => DraggableScrollableSheet(
-              initialChildSize: 0.5,
-              minChildSize: 0.3,
-              maxChildSize: 0.8,
-              builder: (_, scrollParams) => Container(
-                  decoration: BoxDecoration(
-                      color: Colors.grey[900],
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                  ),
-                  child: Column(
-                      children: [
-                           const SizedBox(height: 8),
-                           Container(
-                               width: 40, height: 4, 
-                               decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
-                           ),
-                           Padding(
-                             padding: const EdgeInsets.all(16.0),
-                             child: Text('Episodes in Playlist', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white)),
-                           ),
-                           Expanded(
-                               child: ListView.builder(
-                                   controller: scrollParams,
-                                   itemCount: widget.playlist.length,
-                                   itemBuilder: (ctx, i) {
-                                       final item = widget.playlist[i];
-                                       final isSelected = item.id == widget.item.id;
-                                       return ListTile(
-                                           selected: isSelected,
-                                           selectedTileColor: Colors.white10,
-                                           leading: item.posterUrl != null 
-                                              ? Image.network(item.posterUrl!, width: 50, fit: BoxFit.cover, 
-                                                errorBuilder: (_,__,___) => const Icon(Icons.movie, color: Colors.white54))
-                                              : const Icon(Icons.movie, color: Colors.white54),
-                                           title: Text(
-                                               item.title ?? item.fileName, 
-                                               style: TextStyle(color: isSelected ? Colors.redAccent : Colors.white)
-                                           ),
-                                           subtitle: item.season != null 
-                                              ? Text('S${item.season} E${item.episode}', style: const TextStyle(color: Colors.white54))
-                                              : null,
-                                           trailing: isSelected ? const Icon(Icons.play_arrow, color: Colors.redAccent) : null,
-                                           onTap: () {
-                                               Navigator.pop(ctx);
-                                               widget.onJump?.call(i);
-                                           },
-                                       );
-                                   },
-                               ),
-                           ),
-                      ],
-                  ),
-              ),
-          ),
-      ).then((_) => _onUserInteraction());
-  }
-
-  void _showTracksDialog() async {
-    _hideTimer?.cancel();
-    final tracks = widget.player.state.tracks;
-    
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text('Select Tracks', style: TextStyle(color: Colors.white)),
-        content: SizedBox(
-          width: 400,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (tracks.video.length > 1) ...[
-                  const Text('Quality', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  
-                  // Auto Option
-                  RadioListTile<VideoTrack>(
-                    title: const Text('Auto', style: TextStyle(color: Colors.white)),
-                    value: VideoTrack.auto(),
-                    groupValue: widget.player.state.track.video,
-                    onChanged: (val) {
-                      if (val != null) widget.player.setVideoTrack(val);
-                      Navigator.pop(ctx);
-                    },
-                    activeColor: Colors.redAccent,
-                  ),
-                  
-                  ...tracks.video.map((t) {
-                     // Parse bitrate/res from title or ID if needed, 
-                     // but usually 'title' or 'w x h' is good enough.
-                     // OneDrive HLS typically sends: "1080p (6264 kbps)" in title or similar.
-                     String label = t.title ?? t.id;
-                     if (t.w != null && t.h != null) {
-                        label = '${t.w}x${t.h}';
-                        if (t.bitrate != null) {
-                           label += ' (${(t.bitrate! / 1000).round()} kbps)';
-                        }
-                     }
-                     
-                     return RadioListTile<VideoTrack>(
-                        title: Text(label, style: const TextStyle(color: Colors.white)),
-                        value: t,
-                        groupValue: widget.player.state.track.video,
-                        onChanged: (val) {
-                          if (val != null) widget.player.setVideoTrack(val);
-                          Navigator.pop(ctx);
-                        },
-                        activeColor: Colors.redAccent,
-                     );
-                  }),
-                  const SizedBox(height: 16),
-                ],
-
-                if (tracks.audio.length > 1) ...[
-                  const Text('Audio', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  ...tracks.audio.map((t) => RadioListTile<AudioTrack>(
-                    title: Text(t.title ?? t.language ?? t.id, style: const TextStyle(color: Colors.white)),
-                    value: t,
-                    groupValue: widget.player.state.track.audio,
-                    onChanged: (val) {
-                      if (val != null) widget.player.setAudioTrack(val);
-                      Navigator.pop(ctx);
-                    },
-                    activeColor: Colors.redAccent,
-                  )),
-                  const SizedBox(height: 16),
-                ],
-                
-                const Text('Subtitles', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                 RadioListTile<SubtitleTrack>(
-                    title: const Text('None', style: TextStyle(color: Colors.white)),
-                    value: SubtitleTrack.no(),
-                    groupValue: widget.player.state.track.subtitle,
-                    onChanged: (val) {
-                      widget.player.setSubtitleTrack(SubtitleTrack.no());
-                      Navigator.pop(ctx);
-                    },
-                    activeColor: Colors.redAccent,
-                  ),
-                ...tracks.subtitle.map((t) => RadioListTile<SubtitleTrack>(
-                  title: Text(t.title ?? t.language ?? t.id, style: const TextStyle(color: Colors.white)),
-                  value: t,
-                  groupValue: widget.player.state.track.subtitle,
-                  onChanged: (val) {
-                    if (val != null) widget.player.setSubtitleTrack(val);
-                    Navigator.pop(ctx);
-                  },
-                  activeColor: Colors.redAccent,
-                )),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    _onUserInteraction();
-  }
 
   @override
   Widget build(BuildContext context) {
-    // Brightness overlay
-    final brightnessOverlay = IgnorePointer(
-        child: Container(
-            color: Colors.black.withOpacity(1.0 - _brightness),
-        ),
-    );
+    // Determine visibility based on explicit state or hovering
+    final showControls = _visible || _isHovering || !_isPlaying || _isScrubbing;
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Brightness Layer
-        brightnessOverlay,
-
-        KeyboardListener(
-          focusNode: _focusNode,
-          onKeyEvent: _onKeyEvent,
-          child: GestureDetector(
-            onTap: _onUserInteraction,
-            onDoubleTap: _togglePlay, 
-            onVerticalDragStart: _handleVerticalDragStart,
-            onVerticalDragUpdate: _handleVerticalDragUpdate,
-            behavior: HitTestBehavior.translucent,
-            child: Stack(
-              children: [
-              // Visibility Wrapper
+    return KeyboardListener(
+      focusNode: _focusNode,
+      onKeyEvent: _onKeyEvent,
+      child: MouseRegion(
+        onEnter: (_) => setState(() { _isHovering = true; _visible = true; }),
+        onExit: (_) => setState(() { _isHovering = false; _startHideTimer(); }),
+        onHover: (_) => _onUserInteraction(),
+        child: GestureDetector(
+          onTap: _onUserInteraction,
+          onDoubleTap: _togglePlay,
+          behavior: HitTestBehavior.translucent,
+          child: Stack(
+            children: [
+              // 1. Hover Gradients (Subtle)
               AnimatedOpacity(
-                opacity: _visible ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 200),
+                opacity: showControls ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
                 child: Stack(
                   children: [
-                    // Top Bar (Back + Title)
+                    // Top Gradient
                     Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        decoration: const BoxDecoration(
+                      top: 0, left: 0, right: 0,
+                      height: 120,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [Colors.black87, Colors.transparent],
+                            colors: [Colors.black.withOpacity(0.8), Colors.transparent],
                           ),
-                        ),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.arrow_back, color: Colors.white),
-                              onPressed: widget.onBack,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    widget.item.title ?? widget.item.fileName,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      shadows: [Shadow(blurRadius: 4, color: Colors.black)],
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  if (widget.item.season != null)
-                                      Text(
-                                          'S${widget.item.season} E${widget.item.episode} • ${widget.playlist.length} items',
-                                          style: const TextStyle(color: Colors.white70, fontSize: 12),
-                                      ),
-                                ],
-                              ),
-                            ),
-                            if (widget.playlist.length > 1)
-                                IconButton(
-                                    icon: const Icon(Icons.playlist_play, color: Colors.white),
-                                    tooltip: 'Episodes',
-                                    onPressed: _showEpisodesSheet,
-                                ),
-                          ],
                         ),
                       ),
                     ),
-    
-                    // Center Play/Pause & Seek Indicators
-                    if (_visible || _buffering)
-                      Center(
-                        child: _buffering 
-                          ? const CircularProgressIndicator(color: Colors.redAccent)
-                          : Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                              // Previous
-                              if (widget.onPrevious != null) 
-                                IconButton(
-                                    iconSize: 48,
-                                    icon: const Icon(Icons.skip_previous, color: Colors.white),
-                                    onPressed: widget.onPrevious,
-                                ),
-                              const SizedBox(width: 24),
-                              // Play/Pause
-                              IconButton(
-                                iconSize: 64,
-                                icon: Icon(
-                                  _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
-                                  color: Colors.white.withOpacity(0.9),
-                                ),
-                                onPressed: _togglePlay,
-                              ),
-                              const SizedBox(width: 24),
-                              // Next
-                              if (widget.onNext != null)
-                                IconButton(
-                                    iconSize: 48,
-                                    icon: const Icon(Icons.skip_next, color: Colors.white),
-                                    onPressed: widget.onNext,
-                                ),
-                          ],
-                        ),
-                      ),
-    
-                    // Bottom Controls
+                    // Bottom Gradient
                     Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: const BoxDecoration(
+                      bottom: 0, left: 0, right: 0,
+                      height: 200,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
                           gradient: LinearGradient(
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
-                            colors: [Colors.black87, Colors.transparent],
+                            colors: [Colors.black.withOpacity(0.9), Colors.transparent],
                           ),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Progress Bar
-                            Row(
-                              children: [
-                                Text(_formatDuration(_position), style: const TextStyle(color: Colors.white)),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: SliderTheme(
-                                    data: SliderTheme.of(context).copyWith(
-                                      trackHeight: 4,
-                                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                                      activeTrackColor: Colors.redAccent,
-                                      inactiveTrackColor: Colors.white24,
-                                      thumbColor: Colors.redAccent,
-                                    ),
-                                    child: Stack(
-                                      alignment: Alignment.centerLeft,
-                                      children: [
-                                        LayoutBuilder(
-                                          builder: (ctx, constraints) {
-                                            final double total = _duration.inMilliseconds.toDouble();
-                                            final double buffered = _buffer.inMilliseconds.toDouble();
-                                            if (total <= 0) return const SizedBox();
-                                            final double width = constraints.maxWidth * (buffered / total).clamp(0.0, 1.0);
-                                            return Container(
-                                              width: width,
-                                              height: 4,
-                                              color: Colors.white38,
-                                            );
-                                          },
-                                        ),
-                                        Slider(
-                                          value: _position.inSeconds.toDouble().clamp(0, _duration.inSeconds.toDouble()),
-                                          min: 0,
-                                          max: _duration.inSeconds.toDouble(),
-                                          onChanged: (val) {
-                                            _seek(Duration(seconds: val.toInt()));
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Text(_formatDuration(_duration), style: const TextStyle(color: Colors.white)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            
-                            // Action Buttons Row (Tracks, etc.)
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                IconButton(
-                                  icon: Icon(
-                                    _volume == 0 ? Icons.volume_off : Icons.volume_up,
-                                    color: Colors.white
-                                  ),
-                                  onPressed: () {
-                                     final newVol = _volume > 0 ? 0.0 : 100.0;
-                                     widget.player.setVolume(newVol);
-                                     setState(() => _volume = newVol);
-                                  },
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.subtitles, color: Colors.white),
-                                  onPressed: _showTracksDialog,
-                                ),
-                                IconButton(
-                                  icon: switch (widget.fit) {
-                                    BoxFit.contain => const Icon(Icons.aspect_ratio, color: Colors.white),
-                                    BoxFit.cover => const Icon(Icons.crop_free, color: Colors.white),
-                                    BoxFit.fill => const Icon(Icons.fit_screen, color: Colors.white),
-                                    _ => const Icon(Icons.aspect_ratio, color: Colors.white),
-                                  },
-                                  tooltip: 'Aspect Ratio: ${widget.fit.name}',
-                                  onPressed: () {
-                                      final next = switch(widget.fit) {
-                                          BoxFit.contain => BoxFit.cover,
-                                          BoxFit.cover => BoxFit.fill,
-                                          BoxFit.fill => BoxFit.contain,
-                                          _ => BoxFit.contain,
-                                      };
-                                      widget.onFitChanged(next);
-                                  },
-                                ),
-                              ],
-                            ),
-                          ],
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-              ],
-            ),
+
+              // 2. Top Bar (Back Button & Title)
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 300),
+                top: showControls ? 0 : -100,
+                left: 0, right: 0,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                  child: Row(
+                    children: [
+                       // Glass Back Button
+                       ClipRRect(
+                         borderRadius: BorderRadius.circular(50),
+                         child: BackdropFilter(
+                           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                           child: Container(
+                             color: Colors.white.withOpacity(0.1),
+                             child: IconButton(
+                               icon: const Icon(Icons.arrow_back, color: Colors.white),
+                               onPressed: widget.onBack,
+                             ),
+                           ),
+                         ),
+                       ),
+                       const SizedBox(width: 20),
+                       // Title Info
+                       Expanded(
+                         child: Column(
+                           crossAxisAlignment: CrossAxisAlignment.start,
+                           children: [
+                             Text(
+                               widget.item.title ?? widget.item.fileName,
+                               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                 color: Colors.white, 
+                                 fontWeight: FontWeight.bold,
+                                 shadows: [const Shadow(blurRadius: 8, color: Colors.black45)]
+                               ),
+                               maxLines: 1,
+                               overflow: TextOverflow.ellipsis,
+                             ),
+                             if (widget.item.season != null)
+                               Text(
+                                 'Season ${widget.item.season} • Episode ${widget.item.episode}',
+                                 style: const TextStyle(color: Colors.white70, fontSize: 13, letterSpacing: 0.5),
+                               ),
+                           ],
+                         ),
+                       ),
+
+                    ],
+                  ),
+                ),
+              ),
+
+              // 3. Center Play Button (Big, fades out)
+              AnimatedOpacity(
+                  opacity: showControls ? 1.0 : (_isPlaying ? 0.0 : 1.0),
+                  duration: const Duration(milliseconds: 300),
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: _togglePlay,
+                      child: Container(
+                         padding: const EdgeInsets.all(24),
+                         decoration: BoxDecoration(
+                           color: Colors.black.withOpacity(0.5),
+                           shape: BoxShape.circle,
+                           border: Border.all(color: Colors.white24),
+                         ),
+                         child: Icon(
+                            _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                            color: Colors.white,
+                            size: 64,
+                         ),
+                      ),
+                    ),
+                  ),
+              ),
+
+              // 4. Center Buffering Indicator
+              if (_buffering)
+                const Center(child: CircularProgressIndicator(color: Colors.white)),
+
+              // 5. Bottom Controls Layer
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 300),
+                bottom: showControls ? 0 : -150,
+                left: 0, right: 0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                       // Full Width Progress Bar (No padding)
+                       SizedBox(
+                         height: 20,
+                         child: _buildImmersiveProgressBar(context),
+                       ),
+                       const SizedBox(height: 8),
+
+                       // Row with Time, Volume, Playlist controls (No capsule)
+                       Row(
+                         children: [
+                            // Play/Pause Small (optional, but requested layout implies minimal bottom bar)
+                            IconButton(
+                              onPressed: _togglePlay,
+                              icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white),
+                            ),
+                            const SizedBox(width: 8),
+
+                            // Volume
+                            IconButton(
+                               icon: Icon(_volume == 0 ? Icons.volume_off : Icons.volume_up, color: Colors.white70),
+                               onPressed: () {
+                                 setState(() => _volume = _volume > 0 ? 0.0 : 100.0);
+                                 widget.player.setVolume(_volume);
+                               },
+                            ),
+                            
+                            // Time
+                            const SizedBox(width: 16),
+                            Text(
+                                '${_formatDuration(_position)} / ${_formatDuration(_duration)}',
+                                style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
+                            ),
+                            
+                            const Spacer(),
+                            
+                            // Previous/Next
+                            if (widget.onPrevious != null) 
+                               IconButton(icon: const Icon(Icons.skip_previous, color: Colors.white), onPressed: widget.onPrevious),
+                            if (widget.onNext != null)
+                               IconButton(icon: const Icon(Icons.skip_next, color: Colors.white), onPressed: widget.onNext),
+
+                            const SizedBox(width: 16),
+
+                            // Fit
+                            IconButton(
+                               icon: const Icon(Icons.fullscreen, color: Colors.white70),
+                               onPressed: () {
+                                  final next = switch(widget.fit) {
+                                      BoxFit.contain => BoxFit.cover,
+                                      _ => BoxFit.contain,
+                                  };
+                                  widget.onFitChanged(next);
+                               },
+                            ),
+                         ],
+                       ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-          ),
-      ],
+        ),
+      ),
     );
+  }
+
+
+
+  Widget _buildImmersiveProgressBar(BuildContext context) {
+     // Custom slider theme for thin line
+     return MouseRegion(
+       cursor: SystemMouseCursors.click,
+       child: SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 2, // Ultra thin
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6, elevation: 2),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+            activeTrackColor: Colors.redAccent,
+            inactiveTrackColor: Colors.white24,
+            thumbColor: Colors.redAccent,
+            overlayColor: Colors.redAccent.withOpacity(0.2),
+            trackShape: CustomTrackShape(), // Custom track to ensure full width
+          ),
+          child: Slider(
+            value: _position.inSeconds.toDouble().clamp(0, _duration.inSeconds.toDouble()),
+            min: 0,
+            max: _duration.inSeconds.toDouble(),
+            onChangeStart: (_) => _isScrubbing = true,
+            onChangeEnd: (_) => _isScrubbing = false,
+            onChanged: (val) {
+               _seek(Duration(seconds: val.toInt()));
+            },
+          ),
+       ),
+     );
   }
 }

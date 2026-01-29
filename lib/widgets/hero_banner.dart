@@ -20,7 +20,7 @@ class HeroBanner extends StatelessWidget {
             final rawId = item.id.replaceFirst('stashdb:', '');
             context.push('/scene/$rawId', extra: item);
          } else {
-            context.push('/media/${item.id}', extra: item);
+            context.push('/media/${Uri.encodeComponent(item.id)}', extra: item);
          }
       },
       child: Stack(
@@ -75,7 +75,7 @@ class HeroBanner extends StatelessWidget {
                         final rawId = item.id.replaceFirst('stashdb:', '');
                         context.push('/scene/$rawId', extra: item);
                      } else {
-                        context.push('/media/${item.id}', extra: item);
+                        context.push('/media/${Uri.encodeComponent(item.id)}', extra: item);
                      }
                   },
                   icon: const Icon(Icons.play_arrow),

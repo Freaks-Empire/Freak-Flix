@@ -5,6 +5,7 @@ import '../models/media_item.dart';
 import '../models/tmdb_extended_details.dart';
 import '../models/tmdb_episode.dart';
 import '../models/tmdb_item.dart'; // For recommendations if needed
+import '../models/cast_member.dart';
 
 // AniList uses the public GraphQL endpoint. Adjust the query if you need more fields.
 class AniListService {
@@ -125,6 +126,8 @@ class AniListService {
           coverImage { large }
           description
           episodes
+          status
+          genres
           recommendations(perPage: 10, sort: RATING_DESC) {
              nodes {
                mediaRecommendation {
@@ -140,6 +143,21 @@ class AniListService {
             thumbnail
             url
             site
+          }
+          characters(sort: ROLE, perPage: 12) {
+            edges {
+              role
+              node {
+                id
+                name { full }
+                image { large }
+              }
+              voiceActors(language: JAPANESE, sort: RELEVANCE) {
+                id
+                name { full }
+                image { large }
+              }
+            }
           }
         }
       }
@@ -174,10 +192,63 @@ class AniListService {
           .whereType<TmdbItem>()
           .toList();
 
+      final genres = (media['genres'] as List<dynamic>? ?? [])
+          .map((g) => TmdbGenre(id: 0, name: g.toString()))
+          .toList();
+
+      // Parse Characters -> CastMember
+      // Rule: Name = Voice Actor (if exists) or Character (fallback)
+      // Character = Character Name
+      // Image = Voice Actor Image
+      // Extra: characterImageUrl = Character Image
+      
+      final List<CastMember> cast = [];
+      final charEdges = media['characters']?['edges'] as List<dynamic>?;
+      
+      if (charEdges != null) {
+        for (var edge in charEdges) {
+          final node = edge['node'];
+          if (node == null) continue;
+          
+          final charName = node['name']?['full'] as String? ?? 'Unknown';
+          final charImage = node['image']?['large'] as String?;
+          final role = edge['role'] as String?; // MAIN, SUPPORTING
+          
+          // Get Japanese Voice Actor (first one usually)
+          final vas = edge['voiceActors'] as List<dynamic>?;
+          Map<String, dynamic>? va;
+          if (vas != null && vas.isNotEmpty) {
+            va = vas.first;
+          }
+          
+          final actorName = va?['name']?['full'] as String? ?? charName; // Fallback to char name if no VA
+          final actorImage = va?['image']?['large'] as String?; // Fallback null
+          
+          final staffId = va?['id']?.toString();
+          final charId = node['id']?.toString();
+          
+          final mainId = staffId != null ? 'anilist_staff:$staffId' : 'anilist_char:$charId';
+
+          cast.add(CastMember(
+            id: mainId,
+            name: actorName,
+            character: charName,
+            profileUrl: actorImage,
+            source: CastSource.aniList,
+            characterImageUrl: charImage,
+            role: role != null ? (role[0] + role.substring(1).toLowerCase()) : null,
+            characterId: charId != null ? 'anilist_char:$charId' : null, // New Field
+          ));
+        }
+      }
+
       return TmdbExtendedDetails(
-        cast: [], // TODO: fetch characters
+        cast: cast,
         videos: [], // TODO: fetch trailer
         recommendations: recs,
+        genres: genres,
+        status: media['status'] as String? ?? 'Unknown',
+        numberOfEpisodes: media['episodes'] as int? ?? 0,
         seasons: [
            TmdbSeason(
              id: id,
@@ -275,6 +346,94 @@ class AniListService {
       return list;
     } catch (_) {
       return [];
+    }
+  }
+  Future<Map<String, dynamic>?> getPersonDetails(int id) async {
+    const url = 'https://graphql.anilist.co';
+    const query = r'''
+      query ($id: Int) {
+        Staff(id: $id) {
+          id
+          name { full }
+          image { large }
+          description
+          dateOfBirth { year month day }
+          dateOfDeath { year month day }
+          homeTown
+          characterMedia(sort: START_DATE_DESC, perPage: 25) {
+             nodes {
+               id
+               title { romaji english }
+               coverImage { large }
+               startDate { year }
+               format # TV, MOVIE
+             }
+             edges {
+               characterRole # MAIN, SUPPORTING
+               node { id } # The media
+               characters { name { full } } # The character played
+             }
+          }
+        }
+      }
+    ''';
+
+    try {
+      final res = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'query': query, 'variables': {'id': id}}),
+      );
+      
+      if (res.statusCode != 200) return null;
+      
+      final body = jsonDecode(res.body);
+      final staff = body['data']?['Staff'];
+      return staff;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getCharacterDetails(int id) async {
+    const url = 'https://graphql.anilist.co';
+    const query = r'''
+      query ($id: Int) {
+        Character(id: $id) {
+          id
+          name { full }
+          image { large }
+          description
+          dateOfBirth { year month day }
+          media(sort: START_DATE_DESC, perPage: 25) {
+             nodes {
+               id
+               title { romaji english }
+               coverImage { large }
+               startDate { year }
+               format # TV, MOVIE
+             }
+             edges {
+               characterRole
+             }
+          }
+        }
+      }
+    ''';
+
+    try {
+      final res = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'query': query, 'variables': {'id': id}}),
+      );
+      
+      if (res.statusCode != 200) return null;
+      
+      final body = jsonDecode(res.body);
+      return body['data']?['Character'];
+    } catch (_) {
+      return null;
     }
   }
 }

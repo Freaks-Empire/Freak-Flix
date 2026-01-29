@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'services/monitoring/monitoring.dart';
 import 'package:provider/provider.dart';
 
 import 'providers/profile_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/library_provider.dart';
+import 'utils/logger.dart';
 
 // Screens
 // Screens
@@ -30,20 +32,34 @@ import 'models/discover_type.dart';
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
+// Helper to safely parse MediaItem from extra (which might be Map if restored)
+MediaItem? _parseMediaItemExtra(Object? extra) {
+  if (extra is MediaItem) return extra;
+  if (extra is Map<String, dynamic>) {
+    try {
+      return MediaItem.fromJson(extra);
+    } catch (e) {
+      AppLogger.e('Error parsing MediaItem from extra: $e', error: e, tag: 'Router');
+    }
+  }
+  return null;
+}
+
 GoRouter createRouter(
   SettingsProvider settings,
   ProfileProvider profiles,
-) {
+  ) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/discover',
     refreshListenable: Listenable.merge([settings, profiles]),
     debugLogDiagnostics: true,
-    
+    observers: [MonitoringService.navigationObserver],
+
     redirect: (context, state) {
       final isSetup = settings.isSetupCompleted;
       final isProfileSelected = profiles.activeProfile != null;
-      
+
       // 1. Setup Redirects
       if (!isSetup) {
         if (state.uri.path != '/setup') return '/setup';
@@ -57,9 +73,14 @@ GoRouter createRouter(
         return null;
       }
       if (isProfileSelected && state.uri.path == '/profiles') return '/discover';
-      
+
       // 3. Root Redirect
       if (state.uri.path == '/') return '/discover';
+
+      // 4. Adult Content Protection
+      if (!settings.enableAdultContent) {
+         if (state.uri.path.startsWith('/adult')) return '/discover';
+      }
 
       return null;
     },
@@ -98,8 +119,18 @@ GoRouter createRouter(
              routes: [
                GoRoute(
                  path: '/movies',
-                 builder: (context, state) => const MoviesScreen(),
-               ),
+                  builder: (context, state) => const MoviesScreen(),
+                  routes: [
+                    GoRoute(
+                      path: 'details/:id',
+                      builder: (context, state) {
+                        final id = state.pathParameters['id']!;
+                        final movie = _parseMediaItemExtra(state.extra);
+                        return DetailsScreen(item: movie, itemId: id);
+                      },
+                    ),
+                  ],
+                ),
              ],
            ),
            
@@ -160,10 +191,10 @@ GoRouter createRouter(
         path: '/media/:id',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
-           final id = state.pathParameters['id']!;
-           final extra = state.extra as MediaItem?;
-           // TODO: If extra is null, we need to fetch generic media by ID (StashDB or TMDB)?
-           // For now, this assumes we have the item or the screen handles partial data/fetching.
+           // URL-decode the ID to handle SFTP and other special characters
+           final rawId = state.pathParameters['id']!;
+           final id = Uri.decodeComponent(rawId);
+           final extra = _parseMediaItemExtra(state.extra);
            return DetailsScreen(item: extra, itemId: id);
         },
       ),
@@ -173,7 +204,7 @@ GoRouter createRouter(
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
            final id = state.pathParameters['id']!;
-           final extra = state.extra as MediaItem?;
+           final extra = _parseMediaItemExtra(state.extra);
            // Ensure ID is passed as stashdb:UUID if the screen expects it, or modify screen.
            // Screen likely expects 'stashdb:UUID' or just UUID if customized.
            // Let's pass normalized ID: 'stashdb:$id' if it doesn't start with it, 
@@ -189,18 +220,12 @@ GoRouter createRouter(
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
            final idStr = state.pathParameters['id']!;
-           final extra = state.extra as MediaItem?;
+           final extra = _parseMediaItemExtra(state.extra);
            // If we have extra, use it.
-           // If not, we might need to fetch by AniList ID if logic permits, 
-           // OR constructs a dummy item with anilistId to trigger enrichment.
+           // If not, we might need to fetch by AniList ID if logic permits.
            
            // Construct a usable ID for internal logic. 
-           // If internal logic mostly uses TMDB or StashDB, passing generic ID might fail.
-           // However, TvDetailsScreen can fetch via AniListService if we signal it.
-           // For now, let's pass id directly. DetailsScreen needs to be smart enough.
-           // If we don't have an internal ID, we might pass 'anilist:$idStr' ? 
-           // Currently DetailsScreen parses prefixes. Let's assume we pass 'anilist:$idStr' and support it there.
-           
+           // DetailsScreen passes prefix logic.
            return DetailsScreen(item: extra, itemId: 'anilist:$idStr');
         },
       ),

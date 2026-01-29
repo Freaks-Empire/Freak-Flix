@@ -1,251 +1,522 @@
-/// lib/screens/video_player_screen_mpv.dart
+import 'dart:async';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import '../models/media_item.dart';
-import '../widgets/video_player/video_controls.dart';
-import '../services/graph_auth_service.dart';
-import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+
+import '../../models/media_item.dart';
+import '../../providers/playback_provider.dart';
+import '../../widgets/video_player/premium_controls.dart';
+import '../../widgets/video_player/video_keyboard_listener.dart';
+import '../../services/graph_auth_service.dart';
+import '../../services/sftp_streaming_service.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
   final MediaItem item;
-  final List<MediaItem> playlist;
+  final List<MediaItem> playlist; // Optional playlist
+  final int initialIndex;
 
-  VideoPlayerScreen({
-    required this.item,
-    List<MediaItem>? playlist,
+  const VideoPlayerScreen({
     super.key,
-  }) : playlist = playlist ?? [item];
+    required this.item,
+    this.playlist = const [],
+    this.initialIndex = 0,
+  });
 
   @override
   State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
 }
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
-  late final Player player;
-  late final VideoController controller;
+  late final Player _player;
+  late final VideoController _controller;
   
-  late MediaItem _currentItem;
-  late int _currentIndex;
+  // State
+  bool _showControls = true;
+  bool _isObscured = false; // NSFW Curtain
+  bool _showSkipIntro = false;
+  bool _hasMarkedWatched = false; // Prevent spamming provider
+  Timer? _hideTimer;
+  bool _isDisposed = false;
+  int _lastSavedPosition = 0; // Throttle progress persistence
   BoxFit _fit = BoxFit.contain;
-  String? _errorMessage;
+
+  // SFTP Download State
+  bool _isDownloadingSftp = false;
+  double _sftpDownloadProgress = 0.0;
+  String? _sftpError;
 
   @override
   void initState() {
     super.initState();
-    _currentItem = widget.item;
-    _currentIndex = widget.playlist.indexWhere((e) => e.id == _currentItem.id);
-    if (_currentIndex == -1) _currentIndex = 0;
-
-    player = Player();
-    controller = VideoController(player);
+    // Default NSFW curtain if adult
+    _isObscured = false; // widget.item.isAdult;
     
-    // Subscribe to errors
-    player.stream.error.listen((event) {
-       debugPrint('VideoPlayerScreen MPV ERROR: $event');
-       setState(() {
-          _errorMessage = 'Player Error: $event';
-       });
-    });
+    // Hide cursor & Enter fullscreen
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    // On Desktop, windows management is usually separate, ensuring we just hide UI here
 
-    // Subscribe to logs (warn/error)
-    player.stream.log.listen((event) {
-       if (event.level == 'error' || event.level == 'warn') {
-          debugPrint('VideoPlayerScreen MPV LOG [${event.level}]: ${event.message}');
-       }
-    });
-    
-    _playCurrent();
+    _player = Player();
+    _controller = VideoController(_player);
+
+    _initPlayer();
   }
 
-  bool _isLoadingLink = false;
-
-  Future<void> _playCurrent() async {
-    setState(() => _isLoadingLink = true);
-    String path = _currentItem.streamUrl ?? _currentItem.filePath;
+  Future<void> _initPlayer() async {
+    // Determine URL. 
+    String url = widget.item.filePath;
     
-    debugPrint('VideoPlayerScreen: _playCurrent called for item ${_currentItem.id}');
-    debugPrint('VideoPlayerScreen: Initial path: $path');
-    
-    // Check if this is a OneDrive item (needs a network link)
-    // IDs start with 'onedrive_' (underscore).
-    final isOneDrive = _currentItem.id.startsWith('onedrive_');
-    
-    if (isOneDrive) {
-       debugPrint('VideoPlayerScreen: OneDrive item detected. Attempting refresh/fetch...');
-       try {
-          if (_currentItem.folderPath.startsWith('onedrive:')) {
-             final pathAfterPrefix = _currentItem.folderPath.substring('onedrive:'.length);
-             final accountId = pathAfterPrefix.split('/').first;
-             
-             final idPrefix = 'onedrive_${accountId}_';
-             if (_currentItem.id.startsWith(idPrefix)) {
-                final realItemId = _currentItem.id.substring(idPrefix.length);
-                
-                debugPrint('Refreshing OneDrive URL for item $realItemId account $accountId');
-                
-                // Try HLS first for quality selection
-                String? fresh = await GraphAuthService.instance.getHlsUrl(accountId, realItemId);
-                if (fresh == null) {
-                    debugPrint('VideoPlayerScreen: HLS unavailable (returned null), falling back to download URL');
-                    fresh = await GraphAuthService.instance.getDownloadUrl(accountId, realItemId);
-                } else {
-                    debugPrint('VideoPlayerScreen: HLS URL obtained successfully: $fresh');
-                }
-
-                if (fresh != null) {
-                   path = fresh;
-                   debugPrint('VideoPlayerScreen: Playing with fresh URL: $path');
-                } else {
-                   debugPrint('VideoPlayerScreen: Could not refresh download URL, using original streamUrl');
-                }
-             }
-          }
-       } catch (e) {
-          debugPrint('VideoPlayerScreen: Error refreshing URL: $e');
+    // Check if this is an SFTP file
+    final sftpParsed = SftpStreamingService.parseSftpPath(widget.item.filePath);
+    if (sftpParsed != null) {
+      final (accountId, remotePath) = sftpParsed;
+      debugPrint('VideoPlayer: Detected SFTP file - Account: $accountId, Path: $remotePath');
+      
+      setState(() {
+        _isDownloadingSftp = true;
+        _sftpDownloadProgress = 0.0;
+        _sftpError = null;
+      });
+      
+      final localPath = await SftpStreamingService.instance.getPlayablePath(
+        accountId: accountId,
+        remotePath: remotePath,
+        onProgress: (progress) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Error refreshing link: $e'), backgroundColor: Colors.red),
-            );
+            setState(() => _sftpDownloadProgress = progress);
           }
-       }
-    } else {
-       debugPrint('VideoPlayerScreen: Local/Static item. Skipping OneDrive refresh.');
-    }
-
-    setState(() => _isLoadingLink = false);
-    
-    // Final check: If path is still an internal ID, fail.
-    if (path.startsWith('onedrive') && !path.startsWith('http') && !path.contains('/') && !path.contains('\\')) {
-       // A bit loose check but 'onedrive_account_id' has no slashes usually, except inside the ID part?
-       // Better: check if it looks like a URL or absolute path.
-       // Windows path: C:\... or \\Server...
-       // URL: http...
-       // Our OneDrive internal IDs: onedrive_...
-       
-       if (path.startsWith('onedrive_')) {
+        },
+      );
+      
+      if (localPath == null) {
+        if (mounted) {
           setState(() {
-             _errorMessage = 'Could not resolve playback URL for cloud item.\nPlease try rescanning or check your internet connection.';
+            _isDownloadingSftp = false;
+            _sftpError = 'Failed to download file from SFTP server';
           });
-          return;
-       }
-    }
-
-    debugPrint('VideoPlayerScreen: Opening player with path: $path');
-    await player.open(Media(path));
-    
-    // Debug tracks after opening
-    await Future.delayed(const Duration(seconds: 2));
-    debugPrint('VideoPlayerScreen: Video Tracks: ${player.state.tracks.video.length}');
-    for (var t in player.state.tracks.video) {
-        debugPrint(' - Track: ${t.id} ${t.title} ${t.w}x${t.h}');
-    }
-    debugPrint('VideoPlayerScreen: Player opened.');
-  }
-  
-  void _playIndex(int index) {
-    if (index >= 0 && index < widget.playlist.length) {
+        }
+        return;
+      }
+      
+      url = localPath;
       if (mounted) {
-        setState(() {
-            _currentIndex = index;
-            _currentItem = widget.playlist[index];
-        });
-        _playCurrent();
+        setState(() => _isDownloadingSftp = false);
+      }
+      debugPrint('VideoPlayer: Using downloaded SFTP file: $url');
+    }
+    // If it's a OneDrive item, we MUST refresh the download URL because it expires.
+    else if (widget.item.id.startsWith('onedrive_')) {
+      final parts = widget.item.id.split('_');
+      if (parts.length >= 3) {
+        // Format: onedrive_{accountId}_{itemId}
+        final accountId = parts[1]; 
+        final itemId = parts.sublist(2).join('_'); // Join back just in case itemId has underscores
+        
+        debugPrint('VideoPlayer: Refreshing OneDrive URL for $itemId (Account: $accountId)...');
+        final freshUrl = await GraphAuthService().getDownloadUrl(accountId, itemId);
+        
+        if (freshUrl != null) {
+          url = freshUrl;
+          debugPrint('VideoPlayer: Got fresh URL');
+        } else {
+           debugPrint('VideoPlayer: Failed to refresh URL, trying fallback.');
+           if (widget.item.streamUrl != null) url = widget.item.streamUrl!;
+        }
+      }
+    } else if (widget.item.streamUrl != null) {
+      // Normal fallback for other stream types (web?)
+      url = widget.item.streamUrl!;
+    }
+    
+    // Open paused to ensure seek happens before playback starts
+    await _player.open(Media(url), play: false);
+
+    // Wait for duration to be valid before seeking
+    await _waitForDuration();
+
+    // Restore position: Check ProfileProvider for authoritative state
+    int startPos = widget.item.lastPositionSeconds;
+    if (mounted) {
+      final profileData = context.read<PlaybackProvider>().profileProvider.getDataFor(widget.item.id);
+      if (profileData != null && profileData.positionSeconds > 0) {
+        startPos = profileData.positionSeconds;
+      }
+    }
+
+    if (startPos > 0) {
+      debugPrint('VideoPlayer: Resuming at $startPos seconds for ${widget.item.id} (Duration: ${_player.state.duration.inSeconds}s)');
+      await _player.seek(Duration(seconds: startPos));
+    } else {
+      debugPrint('VideoPlayer: Starting from beginning (pos: $startPos)');
+    }
+
+    await _player.play();
+
+    // Listeners
+    _player.stream.position.listen((pos) {
+      if (_isDisposed) return;
+      _checkSkipIntro(pos);
+      _updateProgress(pos);
+      _checkCompletion(pos);
+    });
+
+    _startHideTimer();
+  }
+
+  Future<void> _waitForDuration() async {
+    if (_player.state.duration.inSeconds > 0) return;
+
+    final completer = Completer<void>();
+    final listener = _player.stream.duration.listen((duration) {
+      if (duration.inSeconds > 0 && !completer.isCompleted) {
+        completer.complete();
+      }
+    });
+
+    try {
+      await completer.future.timeout(const Duration(seconds: 5));
+    } catch (_) {
+      debugPrint('VideoPlayer: Timeout waiting for duration');
+    } finally {
+      listener.cancel();
+    }
+  }
+
+  void _checkSkipIntro(Duration pos) {
+    if (widget.item.introStart != null && widget.item.introEnd != null) {
+      final start = Duration(seconds: widget.item.introStart!);
+      final end = Duration(seconds: widget.item.introEnd!);
+      
+      final shouldShow = pos >= start && pos <= end;
+      if (shouldShow != _showSkipIntro && mounted) {
+        setState(() => _showSkipIntro = shouldShow);
       }
     }
   }
 
-  void _next() {
-      if (_currentIndex < widget.playlist.length - 1) {
-          _playIndex(_currentIndex + 1);
-      }
+  void _updateProgress(Duration pos) {
+     final seconds = pos.inSeconds;
+     // Save early so "continue watching" appears after only a few seconds
+     if (seconds >= 3 && (seconds - _lastSavedPosition >= 5)) {
+       _lastSavedPosition = seconds;
+       context.read<PlaybackProvider>().updateProgress(widget.item, seconds);
+     }
   }
 
-  void _previous() {
-      if (_currentIndex > 0) {
-          _playIndex(_currentIndex - 1);
+  void _skipIntro() {
+    if (widget.item.introEnd != null) {
+      _player.seek(Duration(seconds: widget.item.introEnd! + 1));
+      setState(() => _showSkipIntro = false);
+    }
+  }
+
+  void _checkCompletion(Duration pos) {
+    if (_hasMarkedWatched) return;
+
+    final duration = _player.state.duration;
+    if (duration.inSeconds > 0) {
+      final progress = pos.inSeconds / duration.inSeconds;
+      // Mark as watched if > 95% complete
+      if (progress >= 0.95 && !widget.item.isWatched) {
+         context.read<PlaybackProvider>().markWatched();
+         _hasMarkedWatched = true;
+         // _isDisposed check not needed as we are in listener
       }
+    }
+  }
+
+  void _toggleControls() {
+    setState(() => _showControls = !_showControls);
+    if (_showControls) _startHideTimer();
+  }
+
+  void _startHideTimer() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _showControls = false);
+    });
+  }
+
+  void _onPanUpdate() {
+    // Reset timer on user interaction
+    if (!_showControls) setState(() => _showControls = true);
+    _startHideTimer();
+  }
+
+  void _toggleObscure() {
+    setState(() => _isObscured = !_isObscured);
   }
 
   @override
   void dispose() {
-    player.dispose();
+    _isDisposed = true;
+    _hideTimer?.cancel();
+    
+    // Stop playback immediately to be safe
+    _player.stop(); 
+
+    try {
+      // Save final progress
+      final pos = _player.state.position.inSeconds;
+      if (pos >= 3) {
+        context.read<PlaybackProvider>().updateProgress(widget.item, pos);
+      }
+    } catch (e) {
+      debugPrint('Error saving progress on dispose: $e');
+    }
+
+    _player.dispose();
     super.dispose();
+  }
+
+  void _toggleFullscreen() {
+    // Basic implementation for now, or just rely on OS window controls
+  }
+
+  void _cycleFit() {
+    setState(() {
+      if (_fit == BoxFit.contain) _fit = BoxFit.cover;
+      else if (_fit == BoxFit.cover) _fit = BoxFit.fill;
+      else _fit = BoxFit.contain;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          Center(
-            child: Video(
-              controller: controller,
-              controls: NoVideoControls, // Disable default controls
-              fit: _fit,
-            ),
-          ),
-          if (_errorMessage != null)
-             Container(
-                color: Colors.black87,
-                child: Center(
-                   child: Padding(
-                     padding: const EdgeInsets.all(24.0),
-                     child: Column(
+    return VideoKeyboardListener(
+      player: _player,
+      onToggleFullscreen: _toggleFullscreen,
+      onBack: () => Navigator.of(context).pop(),
+      child: Scaffold(
+        backgroundColor: Colors.black, // Pure Black Theme
+        body: MouseRegion(
+          onHover: (_) => _onPanUpdate(),
+          child: GestureDetector(
+            onTap: _toggleControls,
+            onDoubleTap: () => _player.playOrPause(),
+            onLongPress: _toggleObscure, // Panic Gesture
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // 0. SFTP Download Progress Overlay
+                if (_isDownloadingSftp)
+                  Container(
+                    color: Colors.black,
+                    child: Center(
+                      child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                           const Icon(Icons.error, color: Colors.red, size: 48),
-                           const SizedBox(height: 16),
-                           Text(
-                              'Playback Error',
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
-                           ),
-                           const SizedBox(height: 8),
-                           Text(
-                              _errorMessage!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.white70),
-                           ),
-                           const SizedBox(height: 24),
-                           ElevatedButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Go Back'),
-                           )
+                          const Icon(LucideIcons.download, color: Colors.white, size: 48),
+                          const SizedBox(height: 24),
+                          const Text(
+                            'Preparing video...',
+                            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: 200,
+                            child: LinearProgressIndicator(
+                              value: _sftpDownloadProgress,
+                              backgroundColor: Colors.white24,
+                              color: Colors.redAccent,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${(_sftpDownloadProgress * 100).toStringAsFixed(0)}%',
+                            style: const TextStyle(color: Colors.white70, fontSize: 14),
+                          ),
                         ],
-                     ),
-                   ),
+                      ),
+                    ),
+                  ),
+                
+                // 0b. SFTP Error Overlay
+                if (_sftpError != null)
+                  Container(
+                    color: Colors.black,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(LucideIcons.alertCircle, color: Colors.redAccent, size: 48),
+                          const SizedBox(height: 24),
+                          Text(
+                            _sftpError!,
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          FilledButton.icon(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(LucideIcons.arrowLeft),
+                            label: const Text('Go Back'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // 1. Video Layer
+                Video(
+                  controller: _controller, 
+                  fit: _fit,
+                  controls: NoVideoControls, // Remove native controls
                 ),
-             ),
-          VideoControls(
-            player: player,
-            controller: controller,
-            item: _currentItem,
-            playlist: widget.playlist,
-            onBack: () => Navigator.pop(context),
-            onNext: (_currentIndex < widget.playlist.length - 1) ? _next : null,
-            onPrevious: (_currentIndex > 0) ? _previous : null,
-            onJump: _playIndex,
-            fit: _fit,
-            onFitChanged: (v) => setState(() => _fit = v),
-          ),
-          if (_isLoadingLink)
-            Container(
-              color: Colors.black54,
-              child: const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('Refreshing link...', style: TextStyle(color: Colors.white)),
-                  ],
+
+                // 2. NSFW Curtain (Blur)
+                if (_isObscured)
+                  Positioned.fill(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                      child: Container(
+                        color: Colors.black.withOpacity(0.4),
+                        alignment: Alignment.center,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(LucideIcons.eyeOff, color: Colors.white, size: 48),
+                            const SizedBox(height: 16),
+                            const Text(
+                              "Content Hidden",
+                              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            FilledButton.tonal(
+                              onPressed: _toggleObscure,
+                              child: const Text("Reveal"),
+                            )
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // 3. Controls Layer
+                AnimatedOpacity(
+                  opacity: _showControls && !_isObscured ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: IgnorePointer(
+                    ignoring: !_showControls || _isObscured,
+                    child: PremiumVideoControls(
+                      player: _player,
+                      title: widget.item.title ?? "Unknown Title",
+                      episodeTitle: widget.item.episode != null ? "Ep ${widget.item.episode}" : "",
+                      onNextEpisode: () {
+                         // Implement next episode logic here or emit event
+                      },
+                      onShowAudioSubs: _showAudioSubsModal,
+                      onBack: () => Navigator.of(context).pop(),
+                      onCycleFit: _cycleFit,
+                    ),
+                  ),
                 ),
-              ),
+
+                // 4. Skip Intro Button
+                if (_showSkipIntro && !_isObscured && _showControls)
+                  Positioned(
+                    bottom: 120, // Clear the larger premium control area
+                    right: 32,
+                    child: FilledButton.icon(
+                      onPressed: _skipIntro,
+                      icon: const Icon(LucideIcons.skipForward),
+                      label: const Text("Skip Intro"),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.white.withOpacity(0.9),
+                        foregroundColor: Colors.black,
+                      ),
+                    ).animate().fadeIn().slideX(begin: 0.2, end: 0),
+                  ),
+              ],
             ),
-        ],
+          ),
+        ),
       ),
     );
+  }
+
+  void _showAudioSubsModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E1E).withOpacity(0.95), // Glassy dark
+      barrierColor: Colors.black54,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) {
+        return DefaultTabController(
+          length: 2,
+          child: SizedBox(
+            height: 400,
+            child: Column(
+              children: [
+                const TabBar(
+                  indicatorColor: Colors.redAccent,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.grey,
+                  tabs: [
+                    Tab(text: 'Audio'),
+                    Tab(text: 'Subtitles'),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      // AUDIO TRACKS
+                      _buildTrackList<AudioTrack>(
+                        _player.state.tracks.audio, 
+                        _player.state.track.audio,
+                        (track) {
+                           _player.setAudioTrack(track);
+                           Navigator.pop(ctx);
+                        }
+                      ),
+                      // SUBTITLE TRACKS
+                      _buildTrackList<SubtitleTrack>(
+                        _player.state.tracks.subtitle, 
+                        _player.state.track.subtitle,
+                        (track) {
+                           _player.setSubtitleTrack(track);
+                           Navigator.pop(ctx);
+                        }
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+   Widget _buildTrackList<T>(List<T> tracks, T current, Function(T) onSelect) {
+     return ListView.builder(
+       itemCount: tracks.length,
+       itemBuilder: (context, index) {
+         final track = tracks[index];
+         String label = 'Track ${index + 1}';
+         
+         if (track is AudioTrack) {
+           label = track.title ?? track.language ?? track.id;
+         } else if (track is SubtitleTrack) {
+           label = track.title ?? track.language ?? track.id;
+         } else {
+            label = track.toString();
+         }
+         
+         final isSelected = track == current;
+
+         return ListTile(
+           leading: isSelected ? const Icon(Icons.check, color: Colors.redAccent) : const SizedBox(width: 24),
+           title: Text(label, style: TextStyle(color: isSelected ? Colors.redAccent : Colors.white)),
+           onTap: () => onSelect(track),
+         );
+       },
+     );
   }
 }

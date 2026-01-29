@@ -4,6 +4,7 @@ import '../../models/tmdb_episode.dart';
 import '../../models/media_item.dart';
 import '../../widgets/safe_network_image.dart';
 import '../video_player_screen.dart';
+import '../../utils/logger.dart';
 
 class EpisodeDetailsScreen extends StatelessWidget {
   final TmdbEpisode episode;
@@ -111,12 +112,12 @@ class EpisodeDetailsScreen extends StatelessWidget {
                         textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       onPressed: () {
-                         debugPrint('EpisodeDetailsScreen: Play button pressed for ${matchedFile?.id}');
+                         AppLogger.userAction('Play button pressed', tag: 'EpisodeDetailsScreen', params: {'mediaId': matchedFile?.id ?? 'unknown'});
                          Navigator.of(context).push(
                            MaterialPageRoute(
                              builder: (_) => VideoPlayerScreen(
                                item: matchedFile!,
-                               playlist: playlist,
+                               playlist: playlist ?? [],
                              ),
                            ),
                          );

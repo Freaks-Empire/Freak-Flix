@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../providers/profile_provider.dart';
 import '../providers/library_provider.dart';
 import '../models/user_profile.dart';
@@ -40,7 +41,7 @@ class _ManageProfileScreenState extends State<ManageProfileScreen> {
     _nameController = TextEditingController(text: widget.profile?.name ?? '');
     _pinController = TextEditingController(text: widget.profile?.pin ?? '');
     _selectedColor = widget.profile?.colorValue ?? _colors[0];
-    _avatarId = widget.profile?.avatarId ?? 'assets/avatars/default.png';
+    _avatarId = widget.profile?.avatarId ?? 'assets/logo.png';
     // Copy list to avoid mutation issues
     _allowedFolderIds = widget.profile?.allowedFolderIds != null
         ? List.from(widget.profile!.allowedFolderIds!)
@@ -168,8 +169,19 @@ class _ManageProfileScreenState extends State<ManageProfileScreen> {
                 ...folders.map((f) {
                   final isChecked = _allowedFolderIds!.contains(f.id);
                   return CheckboxListTile(
-                    title: Text(f.path.isEmpty ? 'Root' : f.path),
-                    subtitle: Text(f.accountId.isEmpty ? 'Local' : 'OneDrive'),
+                    title: Text(f.displayName),
+                    subtitle: Text(
+                      '${libraryTypeDisplayName(f.type)} • ${f.isCloud ? 'OneDrive' : 'Local'}',
+                      style: TextStyle(
+                        color: _getTypeColor(f.type),
+                        fontSize: 12,
+                      ),
+                    ),
+                    secondary: Icon(
+                      _getTypeIcon(f.type),
+                      color: _getTypeColor(f.type),
+                      size: 20,
+                    ),
                     value: isChecked,
                     onChanged: (val) {
                       setState(() {
@@ -191,7 +203,18 @@ class _ManageProfileScreenState extends State<ManageProfileScreen> {
               label: const Text('Save Profile'),
               style: FilledButton.styleFrom(
                   minimumSize: const Size(double.infinity, 50)),
-            )
+            ),
+
+            if (widget.profile != null) ...[
+              const SizedBox(height: 32),
+              const Divider(),
+              ListTile(
+                title: const Text('Import Legacy History'),
+                subtitle: const Text('Import watched status from old database versions.'),
+                leading: const Icon(LucideIcons.history),
+                onTap: _importLegacyHistory,
+              ),
+            ],
           ],
         ),
       ),
@@ -250,16 +273,83 @@ class _ManageProfileScreenState extends State<ManageProfileScreen> {
        builder: (ctx) => AlertDialog(
          title: const Text('Delete Profile?'),
          content: Text('Permanently delete ${widget.profile!.name}? History will be lost.'),
-         actions: [
-           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-           TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
-         ],
-       ),
-     );
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+          ],
+        ),
+      );
 
      if (confirm == true) {
        await provider.deleteProfile(widget.profile!.id);
        if (context.mounted) Navigator.pop(context);
      }
+  }
+
+  Future<void> _importLegacyHistory() async {
+    final library = context.read<LibraryProvider>();
+    final profile = context.read<ProfileProvider>();
+    
+    // 1. Extract
+    final legacyData = library.extractLegacyHistory();
+    if (legacyData.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No legacy history found to import.')),
+      );
+      return;
+    }
+
+    // 2. Confirm
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import Legacy History?'),
+        content: Text(
+          'Found ${legacyData.length} watched items in the library database.\n'
+          'This will merge them into this profile\'s history.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Import'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // 3. Import
+    await profile.importUserData(legacyData);
+    
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Successfully imported ${legacyData.length} items.')),
+    );
+  }
+
+  IconData _getTypeIcon(LibraryType type) {
+    switch (type) {
+      case LibraryType.movies: return LucideIcons.film;
+      case LibraryType.tv: return LucideIcons.tv;
+      case LibraryType.anime: return LucideIcons.sparkles;
+      case LibraryType.adult: return LucideIcons.lock;
+      case LibraryType.other: return LucideIcons.folder;
+    }
+  }
+
+  Color _getTypeColor(LibraryType type) {
+    switch (type) {
+      case LibraryType.movies: return const Color(0xFFF97316);
+      case LibraryType.tv: return const Color(0xFF3B82F6);
+      case LibraryType.anime: return const Color(0xFFEC4899);
+      case LibraryType.adult: return const Color(0xFFEF4444);
+      case LibraryType.other: return const Color(0xFF6B7280);
+    }
   }
 }

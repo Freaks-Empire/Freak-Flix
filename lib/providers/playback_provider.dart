@@ -28,17 +28,15 @@ class PlaybackProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updatePosition(int seconds) {
-    if (current == null) return;
+  void updateProgress(MediaItem item, int seconds) {
+    if (current == null || current!.id != item.id) {
+       // If tracking a different item, switch to it?
+       current = item;
+    }
     positionSeconds = seconds;
     
-    // Update local UI state
-    // We don't necessarily need to update 'current' if 'current' is just for display in player?
-    // But passing it around might value consistency.
-    // current = current!.copyWith(lastPositionSeconds: seconds); 
-    
     // Persist to Profile
-    profileProvider.updateProgress(current!.id, seconds);
+    profileProvider.updateProgress(item.id, seconds);
     notifyListeners();
   }
 

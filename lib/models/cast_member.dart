@@ -1,5 +1,5 @@
 /// lib/models/cast_member.dart
-enum CastSource { tmdb, stashDb }
+enum CastSource { tmdb, stashDb, aniList }
 
 class CastMember {
   final String id;
@@ -7,6 +7,11 @@ class CastMember {
   final String character;
   final String? profileUrl;
   final CastSource source;
+  
+  // Extended Metadata
+  final String? characterImageUrl;
+  final String? role; // e.g. "Main", "Supporting"
+  final String? characterId;
 
   const CastMember({
     required this.id,
@@ -14,6 +19,9 @@ class CastMember {
     required this.character,
     this.profileUrl,
     required this.source,
+    this.characterImageUrl,
+    this.role,
+    this.characterId,
   });
 
   factory CastMember.fromJson(Map<String, dynamic> json) {
@@ -26,6 +34,9 @@ class CastMember {
         (e) => e.toString() == json['source'],
         orElse: () => CastSource.tmdb,
       ),
+      characterImageUrl: json['characterImageUrl'] as String?,
+      role: json['role'] as String?,
+      characterId: json['characterId'] as String?,
     );
   }
 
@@ -35,5 +46,8 @@ class CastMember {
         'character': character,
         'profileUrl': profileUrl,
         'source': source.toString(),
+        'characterImageUrl': characterImageUrl,
+        'role': role,
+        'characterId': characterId,
       };
 }

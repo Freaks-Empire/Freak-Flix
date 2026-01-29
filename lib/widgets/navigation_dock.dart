@@ -17,9 +17,9 @@ class NavigationDock extends StatelessWidget {
     final settings = context.watch<SettingsProvider>();
     final isDark = theme.brightness == Brightness.dark;
     
-    // Calculate indices dynamically
-    final searchIndex = settings.enableAdultContent ? 5 : 4;
-    final settingsIndex = settings.enableAdultContent ? 6 : 5;
+    // Fixed indices to match Router branches
+    const searchIndex = 5;
+    const settingsIndex = 6;
 
     return Center(
       heightFactor: 1.0,

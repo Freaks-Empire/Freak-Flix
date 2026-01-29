@@ -8,11 +8,13 @@ import 'safe_network_image.dart';
 class HomeMediaCard extends StatelessWidget {
   final MediaItem item;
   final bool hideEpisodeInfo;
+  final VoidCallback? onTap;
 
   const HomeMediaCard({
     super.key,
     required this.item,
     this.hideEpisodeInfo = false,
+    this.onTap,
   });
 
   @override
@@ -22,6 +24,8 @@ class HomeMediaCard extends StatelessWidget {
     final totalSeconds = item.totalDurationSeconds ??
         (item.runtimeMinutes != null ? item.runtimeMinutes! * 60 : 0);
     final progress = _progressValue(watchedSeconds, totalSeconds);
+    final hasStashLock = item.stashId != null && item.stashId!.isNotEmpty;
+    final isAdult = item.isAdult;
 
     final watchedLabel = watchedSeconds > 0
         ? _formatDurationShort(Duration(seconds: watchedSeconds))
@@ -33,6 +37,10 @@ class HomeMediaCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: () {
+         if (onTap != null) {
+           onTap!();
+           return;
+         }
          if (item.isAnime && item.anilistId != null) {
             final slug = _slugify(item.title ?? 'anime');
             context.push('/anime/${item.anilistId}/$slug', extra: item);
@@ -40,7 +48,7 @@ class HomeMediaCard extends StatelessWidget {
             final rawId = item.id.replaceFirst('stashdb:', '');
             context.push('/scene/$rawId', extra: item);
          } else {
-            context.push('/media/${item.id}', extra: item);
+            context.push('/media/${Uri.encodeComponent(item.id)}', extra: item);
          }
       },
       child: SizedBox(
@@ -52,6 +60,35 @@ class HomeMediaCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               child: Stack(
                 children: [
+                  if (isAdult || hasStashLock)
+                    Positioned(
+                      top: 4,
+                      left: 4,
+                      child: Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
+                          if (isAdult)
+                            Tooltip(
+                              message: 'Adult metadata',
+                              child: _badge(
+                                context,
+                                label: 'Adult',
+                                color: theme.colorScheme.error,
+                              ),
+                            ),
+                          if (hasStashLock)
+                            Tooltip(
+                              message: 'Locked to StashDB ID',
+                              child: _badge(
+                                context,
+                                label: 'Stash',
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   AspectRatio(
                     aspectRatio: 16 / 9,
                     child: SafeNetworkImage(
@@ -197,6 +234,28 @@ class HomeMediaCard extends StatelessWidget {
       style: const TextStyle(
         fontSize: 10,
         fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+
+  Widget _badge(BuildContext context, {required String label, required Color color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ) ??
+            const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
       ),
     );
   }

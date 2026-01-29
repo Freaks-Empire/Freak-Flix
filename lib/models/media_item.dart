@@ -117,6 +117,10 @@ class MediaItem {
   // Manual or StashDB ID for overriding/enrichment
   String? stashId;
   String? imdbId; // Added for NFO support
+  
+  // Intro skipping support
+  int? introStart;
+  int? introEnd;
 
   MediaItem({
     required this.id,
@@ -150,6 +154,8 @@ class MediaItem {
     this.voteCount,
     this.stashId,
     this.imdbId,
+    this.introStart,
+    this.introEnd,
   });
 
   MediaItem copyWith({
@@ -177,7 +183,9 @@ class MediaItem {
     int? voteCount,
     String? stashId,
     String? imdbId,
-    String? fileName, 
+    String? fileName,
+    int? introStart,
+    int? introEnd, 
   }) {
     return MediaItem(
       id: id,
@@ -209,6 +217,8 @@ class MediaItem {
       cast: cast ?? this.cast,
       voteCount: voteCount ?? this.voteCount,
       stashId: stashId ?? this.stashId,
+      introStart: introStart ?? this.introStart,
+      introEnd: introEnd ?? this.introEnd,
     );
   }
 
@@ -241,6 +251,8 @@ class MediaItem {
         'voteCount': voteCount,
         'stashId': stashId,
         'imdbId': imdbId,
+        'introStart': introStart,
+        'introEnd': introEnd,
       };
 
   factory MediaItem.fromJson(Map<String, dynamic> json) {
@@ -281,6 +293,8 @@ class MediaItem {
       voteCount: json['voteCount'] as int?,
       stashId: json['stashId'] as String?,
       imdbId: json['imdbId'] as String?,
+      introStart: json['introStart'] as int?,
+      introEnd: json['introEnd'] as int?,
     );
   }
 

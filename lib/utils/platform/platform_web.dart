@@ -51,4 +51,8 @@ class PlatformDirectory implements PlatformFileSystemEntity {
   List<PlatformFileSystemEntity> listSync({bool recursive = false, bool followLinks = true}) {
     return [];
   }
+
+  Stream<PlatformFileSystemEntity> list({bool recursive = false, bool followLinks = true}) {
+    return const Stream.empty();
+  }
 }

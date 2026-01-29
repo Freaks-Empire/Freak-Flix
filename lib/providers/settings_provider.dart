@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/persistence_service.dart';
 import '../models/stash_endpoint.dart';
+import '../utils/logger.dart';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 
 enum TmdbKeyStatus {
   unknown,
@@ -25,8 +27,11 @@ class SettingsProvider extends ChangeNotifier {
   TmdbKeyStatus tmdbStatus = TmdbKeyStatus.unknown;
   
   bool enableAdultContent = false;
-  bool requirePerformerMatch = false; // New safety flag
+  bool requirePerformerMatch = false;
   String? primaryBackupAccountId; 
+  // Legacy single fields replaced by stashEndpoints
+  // String stashApiKey = '';
+  // String stashUrl = 'https://stashdb.org/graphql';
   List<StashEndpoint> stashEndpoints = [];
 
   bool _isTestingTmdbKey = false;
@@ -46,12 +51,16 @@ class SettingsProvider extends ChangeNotifier {
   static const _storageFile = 'settings.json';
 
   Future<void> load() async {
-    debugPrint('SettingsProvider: Loading settings from file...');
+    AppLogger.d('Loading settings from file...', tag: 'SettingsProvider');
     try {
       final jsonStr = await PersistenceService.instance.loadString(_storageFile);
       if (jsonStr == null) {
-        debugPrint('SettingsProvider: No settings file. Checking legacy prefs...');
+        AppLogger.d('No settings file. Checking legacy prefs...', tag: 'SettingsProvider');
         await _migrateFromPrefs();
+        // Even if migration happens, we fall through to defaults if needed or return
+        // Ideally _migrateFromPrefs sets values.
+        
+        // If still defaults (i.e. first run ever), check env
         if (tmdbApiKey.isEmpty) {
              tmdbApiKey = dotenv.env['TMDB_API_KEY'] ?? 
                    const String.fromEnvironment('TMDB_API_KEY');
@@ -61,9 +70,10 @@ class SettingsProvider extends ChangeNotifier {
 
       final data = jsonDecode(jsonStr) as Map<String, dynamic>;
       _loadFromMap(data);
-       debugPrint('SettingsProvider: Settings loaded from file.');
+       AppLogger.d('Settings loaded from file', tag: 'SettingsProvider');
     } catch (e) {
-      debugPrint('SettingsProvider: Error loading settings: $e');
+      AppLogger.e('Error loading settings: $e', error: e, tag: 'SettingsProvider');
+      // basic fallback
       tmdbApiKey = dotenv.env['TMDB_API_KEY'] ?? 
                    const String.fromEnvironment('TMDB_API_KEY');
     }
@@ -92,16 +102,19 @@ class SettingsProvider extends ChangeNotifier {
     }
     
     primaryBackupAccountId = data['primaryBackupAccountId'] as String?;
+    autoBackupEnabled = data['autoBackupEnabled'] as bool? ?? false;
 
     enableAdultContent = data['enableAdultContent'] as bool? ?? false;
     requirePerformerMatch = data['requirePerformerMatch'] as bool? ?? false;
     
+    // Load endpoints
     if (data['stashEndpoints'] != null) {
       stashEndpoints = (data['stashEndpoints'] as List)
           .map((e) => StashEndpoint.fromJson(e))
           .toList();
     }
     
+    // Migration: If no endpoints but legacy data exists
     if (stashEndpoints.isEmpty) {
       final legacyUrl = data['stashUrl'] as String?;
       final legacyKey = data['stashApiKey'] as String?;
@@ -112,6 +125,7 @@ class SettingsProvider extends ChangeNotifier {
           apiKey: legacyKey ?? '',
         ));
       } else {
+        // Add default StashDB.org if completely empty/fresh
         stashEndpoints.add(StashEndpoint(
            name: 'StashDB.org',
            url: 'https://stashdb.org/graphql',
@@ -153,9 +167,9 @@ class SettingsProvider extends ChangeNotifier {
        final data = jsonDecode(raw) as Map<String, dynamic>;
        _loadFromMap(data);
        await save();
-       debugPrint('SettingsProvider: Migrated settings from SharedPreferences.');
+       AppLogger.d('Migrated settings from SharedPreferences', tag: 'SettingsProvider');
     } catch (e) {
-       debugPrint('SettingsProvider: Migration failed: $e');
+       AppLogger.e('Migration failed: $e', error: e, tag: 'SettingsProvider');
     }
   }
 
@@ -171,9 +185,9 @@ class SettingsProvider extends ChangeNotifier {
         'requirePerformerMatch': requirePerformerMatch,
         'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
         'migrated_profiles': _hasMigratedProfiles,
-        'migrated_profiles': _hasMigratedProfiles,
         'isSetupCompleted': _isSetupCompleted,
         'primaryBackupAccountId': primaryBackupAccountId,
+        'autoBackupEnabled': autoBackupEnabled,
     };
     await PersistenceService.instance.saveString(_storageFile, jsonEncode(data));
   }
@@ -302,7 +316,6 @@ class SettingsProvider extends ChangeNotifier {
       'tmdbApiKey': tmdbApiKey,
       'tmdbStatus': tmdbStatus.index,
       'enableAdultContent': enableAdultContent,
-      'requirePerformerMatch': requirePerformerMatch,
       'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
     };
   }
@@ -328,9 +341,6 @@ class SettingsProvider extends ChangeNotifier {
     if (data.containsKey('enableAdultContent')) {
       enableAdultContent = data['enableAdultContent'] ?? false;
     }
-    if (data.containsKey('requirePerformerMatch')) {
-      requirePerformerMatch = data['requirePerformerMatch'] ?? false;
-    }
     if (data.containsKey('stashEndpoints')) {
        final list = data['stashEndpoints'] as List;
        stashEndpoints = list.map((e) => StashEndpoint.fromJson(e)).toList();
@@ -338,6 +348,17 @@ class SettingsProvider extends ChangeNotifier {
     if (data.containsKey('primaryBackupAccountId')) {
       primaryBackupAccountId = data['primaryBackupAccountId'];
     }
+    if (data.containsKey('autoBackupEnabled')) {
+      autoBackupEnabled = data['autoBackupEnabled'] ?? false;
+    }
+    await save();
+    notifyListeners();
+  }
+
+  bool autoBackupEnabled = false;
+
+  Future<void> toggleAutoBackup(bool value) async {
+    autoBackupEnabled = value;
     await save();
     notifyListeners();
   }

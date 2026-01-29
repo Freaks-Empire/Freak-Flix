@@ -1,25 +1,30 @@
 /// lib/screens/details/movie_details_screen.dart
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:provider/provider.dart';
-import 'package:youtube_explode_dart/youtube_explode_dart.dart' hide Video;
 import 'package:collection/collection.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../widgets/trailer_player.dart';
 import '../../models/media_item.dart';
 import '../../models/tmdb_item.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../services/tmdb_service.dart';
+import '../../services/metadata_service.dart';
 import '../../models/tmdb_extended_details.dart';
 import '../../widgets/discover_card.dart';
 import '../../widgets/safe_network_image.dart';
+import '../../utils/logger.dart';
 import '../video_player_screen.dart';
 import 'actor_details_screen.dart';
 import '../../models/cast_member.dart';
 import 'package:go_router/go_router.dart';
+import '../../services/vidking_service.dart';
+import '../remote_player_screen.dart';
 
 class MovieDetailsScreen extends StatefulWidget {
   final MediaItem item;
@@ -35,16 +40,18 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
   late final VideoController _controller;
   
   TmdbExtendedDetails? _details;
-  bool _trailerLoading = true;
-  bool _muted = true;
+  bool _muted = true; // Still used for backdrop video if local file plays? Or just remove backdrop video entirely for trailers?
+  // Let's keep backdrop video logic ONLY for local files if we ever implement that, but for now we are removing dynamic YouTube backdrop.
+  // Actually, the previous code used `Video` widget for backdrop. If we remove YouTube fetch, the backdrop will just be the image.
+  // So we don't need _player for trailers anymore.
 
   @override
   void initState() {
     super.initState();
     _current = widget.item;
-    _player = Player();
-    _controller = VideoController(_player, configuration: const VideoControllerConfiguration(enableHardwareAcceleration: true));
-    
+    // _player = Player(); // No longer needed for YouTube background
+    // _controller = VideoController(_player); 
+
     _loadDetails();
   }
 
@@ -54,61 +61,121 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
       final details = await service.getExtendedDetails(_current.tmdbId!, _current.type);
       if (mounted) {
         setState(() => _details = details);
-        _playTrailer();
       }
     }
   }
 
-  Future<void> _playTrailer() async {
-    if (_details?.videos.isEmpty ?? true) {
-      setState(() => _trailerLoading = false);
-      return;
-    }
-
-    final trailer = _details!.videos.firstWhere(
-      (v) => v.site == 'YouTube' && v.type == 'Trailer',
-      orElse: () => _details!.videos.firstWhere((v) => v.site == 'YouTube', orElse: () => const TmdbVideo(key: '', site: '', type: '', name: '')),
-    );
-
-    if (trailer.key.isEmpty) {
-      setState(() => _trailerLoading = false);
-      return;
-    }
-
-    try {
-      final yt = YoutubeExplode();
-      final manifest = await yt.videos.streamsClient.getManifest(trailer.key);
-      final streamInfo = manifest.muxed.withHighestBitrate();
-      yt.close();
-
-      await _player.open(Media(streamInfo.url.toString()), play: true);
-      await _player.setVolume(0); 
-      await _player.setPlaylistMode(PlaylistMode.loop);
-      
-      if (mounted) setState(() => _trailerLoading = false);
-    } catch (e) {
-      debugPrint('Error playing trailer: $e');
-      if (mounted) setState(() => _trailerLoading = false);
-    }
-  }
+  // _playTrailer removed
 
   @override
   void dispose() {
-    _player.dispose();
+    // _player.dispose();
     super.dispose();
   }
 
   void _toggleMute() {
-    setState(() => _muted = !_muted);
-    _player.setVolume(_muted ? 0 : 70);
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_muted ? 'Muted' : 'Unmuted'),
-        duration: const Duration(milliseconds: 500),
-        behavior: SnackBarBehavior.floating,
+    // Only relevant if we had a background player. 
+    // If we only show image backdrop, this is useless.
+    // Removing mute toggle logic for now as we are strictly Image-only backdrop unless playing content.
+  }
+
+  void _showMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.info_outline, color: Colors.white),
+              title: const Text('File Info', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showFileInfo(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_note, color: Colors.white),
+              title: const Text('Identify', style: TextStyle(color: Colors.white)),
+              subtitle: const Text('Fix incorrect match', style: TextStyle(color: Colors.white54, fontSize: 12)),
+              onTap: () {
+                Navigator.pop(ctx);
+                showDialog(
+                  context: context,
+                  builder: (_) => _IdentifyDialog(item: _current),
+                ).then((_) => _loadDetails()); // Reload details after potential update
+              },
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  void _showFileInfo(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Video Information', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 24),
+            _buildInfoRow('File Name', _current.fileName),
+            _buildInfoRow('Location', _current.filePath),
+            _buildInfoRow('Size', _formatBytes(_current.sizeBytes)),
+            if (_current.tmdbId != null) _buildInfoRow('TMDB ID', _current.tmdbId.toString()),
+            if (_current.stashId != null) _buildInfoRow('Stash ID', _current.stashId!),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(label, style: const TextStyle(color: Colors.white54, fontSize: 13)),
+          ),
+          Expanded(
+            child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 14)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes <= 0) return "0 B";
+    const suffixes = ["B", "KB", "MB", "GB", "TB"];
+    var i = 0;
+    double size = bytes.toDouble();
+    while (size >= 1024 && i < suffixes.length - 1) {
+      size /= 1024;
+      i++;
+    }
+    return '${size.toStringAsFixed(2)} ${suffixes[i]}';
   }
 
   @override
@@ -139,13 +206,11 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. Trailer / Backdrop Background
+          // 1. Static Backdrop Image
           Positioned.fill(
-            child: _trailerLoading || _player.state.width == null
-                ? (_current.backdropUrl != null 
-                    ? SafeNetworkImage(url: _current.backdropUrl, fit: BoxFit.cover) 
-                    : Container(color: baseColor))
-                : Video(controller: _controller, fit: BoxFit.cover, controls: NoVideoControls),
+             child: _current.backdropUrl != null 
+                ? SafeNetworkImage(url: _current.backdropUrl, fit: BoxFit.cover) 
+                : Container(color: baseColor)
           ),
 
           // 2. Heavy Blur & Gradient Overlay (Glassmorphism Base)
@@ -171,41 +236,56 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
           ),
 
           // 3. Main Content Scrollable
-          Positioned.fill(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                isDesktop ? 64 : 24, 
-                size.height * 0.15, // Top padding to show some backdrop
-                isDesktop ? 64 : 24, 
-                64
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // --- Hero Section ---
-                  if (isDesktop)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildHeroPoster(context),
-                        const SizedBox(width: 48),
-                        Expanded(child: _buildHeroDetails(context, library, playback, textColor, mutedTextColor)),
-                      ],
-                    )
-                  else
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Center(child: _buildHeroPoster(context)),
-                        const SizedBox(height: 24),
-                        _buildHeroDetails(context, library, playback, textColor, mutedTextColor),
-                      ],
-                    ),
-                  
-                  const SizedBox(height: 64),
-                  
-                  // --- Cast Section ---
-                  if (_details?.cast.isNotEmpty ?? false) ...[
+            Positioned.fill(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  isDesktop ? 64 : 24, 
+                  size.height * 0.15, // Top padding to show some backdrop
+                  isDesktop ? 64 : 24, 
+                  64
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // --- Hero Section ---
+                    if (isDesktop)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildHeroPoster(context),
+                          const SizedBox(width: 48),
+                          Expanded(child: _buildHeroDetails(context, library, playback, textColor, mutedTextColor)),
+                        ],
+                      )
+                    else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Center(child: _buildHeroPoster(context)),
+                          const SizedBox(height: 24),
+                          _buildHeroDetails(context, library, playback, textColor, mutedTextColor),
+                        ],
+                      ),
+                    
+                    const SizedBox(height: 64),
+                    
+                    // --- TRAILER SECTION (NEW) ---
+                    if (_details?.videos.any((v) => v.site == 'YouTube' && v.type == 'Trailer') == true) ...[
+                         Text('Trailer', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                         const SizedBox(height: 16),
+                         Builder(builder: (context) {
+                            final trailer = _details!.videos.firstWhere((v) => v.site == 'YouTube' && v.type == 'Trailer');
+                            return ConstrainedBox(
+                               constraints: const BoxConstraints(maxWidth: 800),
+                               child: TrailerPlayer(videoId: trailer.key),
+                            );
+                         }),
+                         const SizedBox(height: 48),
+                    ],
+
+                    // --- Cast Section ---
+                    if (_details?.cast.isNotEmpty ?? false) ...[
+                    // ... existing cast section ... (omitting strict context match for brevity if needed, but here we replace block)
                     Text('Actors', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
                     SizedBox(
@@ -246,32 +326,12 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                     const SizedBox(height: 48),
                   ],
 
-                  // --- Extras (Trailers) Section ---
-                  if (_details?.videos.isNotEmpty ?? false) ...[
-                     Text('Extras', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                     const SizedBox(height: 16),
-                     SizedBox(
-                       height: 140,
-                       child: ListView.separated(
-                         scrollDirection: Axis.horizontal,
-                         itemCount: _details!.videos.where((v) => v.site == 'YouTube').length,
-                         separatorBuilder: (_, __) => const SizedBox(width: 16),
-                         itemBuilder: (ctx, i) {
-                           final vid = _details!.videos.where((v) => v.site == 'YouTube').elementAt(i);
-                           return _TrailerCard(video: vid, textColor: textColor);
-                         }
-                       ),
-                     ),
-                    const SizedBox(height: 48),
-                  ],
-
-
                   // --- Related Movies ---
                   if (_details?.recommendations.isNotEmpty ?? false) ...[
                     Text('Related Movies', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
                     SizedBox(
-                      height: 220,
+                      height: 280,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: _details!.recommendations.length,
@@ -298,21 +358,6 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
               ),
             ),
           ),
-
-          // Mute Toggle (Top Right)
-          if (!_trailerLoading)
-            Positioned(
-              top: 24,
-              right: 24,
-              child: IconButton(
-                onPressed: _toggleMute,
-                icon: Icon(_muted ? Icons.volume_off : Icons.volume_up, color: textColor),
-                 style: IconButton.styleFrom(
-                  backgroundColor: baseColor.withOpacity(0.5),
-                  foregroundColor: textColor,
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -329,7 +374,10 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: SafeNetworkImage(url: _current.posterUrl, fit: BoxFit.cover),
+      child: Hero(
+        tag: 'poster_${_current.id}',
+        child: SafeNetworkImage(url: _current.posterUrl, fit: BoxFit.cover),
+      ),
     );
   }
 
@@ -428,7 +476,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: _current.filePath.isNotEmpty ? () {
-                 debugPrint('MovieDetailsScreen: Play button pressed for ${_current.id}');
+                 AppLogger.userAction('Play button pressed', tag: 'MovieDetailsScreen', params: {'mediaId': _current.id});
                  playback.start(_current);
                  Navigator.of(context).push(
                    MaterialPageRoute(
@@ -439,6 +487,27 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
               icon: const Icon(Icons.play_arrow),
               label: Text(_current.filePath.isNotEmpty ? 'Play Now' : 'Not Available'),
             ),
+
+            // Stream Online Button (when no local file but has TMDB ID)
+            if (_current.filePath.isEmpty && VidkingService.isContentLikelyAvailable(_current.tmdbId))
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 22),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () {
+                  AppLogger.userAction('Stream Online pressed', tag: 'MovieDetailsScreen', params: {'mediaId': _current.id, 'tmdbId': _current.tmdbId?.toString() ?? ''});
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => RemotePlayerScreen(item: _current),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.cloud_download),
+                label: const Text('Stream Online'),
+              ),
 
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
@@ -475,9 +544,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 fixedSize: const Size(60, 60),
               ),
-              onPressed: () {
-                // More options
-              },
+              onPressed: () => _showMenu(context),
                icon: const Icon(Icons.more_vert),
             ),
           ],
@@ -600,44 +667,147 @@ class _ReviewCard extends StatelessWidget {
   }
 }
 
-class _TrailerCard extends StatelessWidget {
-  final TmdbVideo video;
-  final Color textColor;
-  const _TrailerCard({required this.video, required this.textColor});
+
+
+
+
+class _IdentifyDialog extends StatefulWidget {
+  final MediaItem item;
+  const _IdentifyDialog({required this.item});
+
+  @override
+  State<_IdentifyDialog> createState() => _IdentifyDialogState();
+}
+
+class _IdentifyDialogState extends State<_IdentifyDialog> {
+  late TextEditingController _controller;
+  List<TmdbItem> _results = [];
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.item.title ?? widget.item.fileName);
+    _search();
+  }
+
+  Future<void> _search() async {
+    if (_controller.text.trim().isEmpty) return;
+    
+    setState(() {
+      _loading = true;
+      _error = null;
+      _results = [];
+    });
+
+    try {
+      final tmdb = context.read<TmdbService>();
+      final results = await tmdb.searchMulti(_controller.text);
+      if (mounted) setState(() => _results = results);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _select(TmdbItem match) async {
+    setState(() => _loading = true);
+    
+    try {
+      final meta = context.read<MetadataService>();
+      final lib = context.read<LibraryProvider>();
+      
+      var updated = widget.item.copyWith(
+         tmdbId: match.id,
+         type: match.type == TmdbMediaType.movie ? MediaType.movie : MediaType.tv,
+         title: match.title,
+         overview: match.overview,
+         posterUrl: match.posterUrl,
+         backdropUrl: match.backdropUrl,
+         year: match.releaseYear,
+         isAnime: false,
+      );
+      
+      updated = await meta.enrich(updated);
+      await lib.updateItem(updated);
+      
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Failed to update: $e';
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => launchUrl(Uri.parse('https://www.youtube.com/watch?v=${video.key}')),
-      child: SizedBox(
-        width: 220,
+    return Dialog(
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: SafeNetworkImage(
-                      url: 'https://img.youtube.com/vi/${video.key}/hqdefault.jpg',
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-                      child: const Icon(Icons.play_arrow, color: Colors.white),
-                    ),
-                  ),
-                ],
+            Text('Identify', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _controller,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Search for Title...',
+                hintStyle: const TextStyle(color: Colors.white38),
+                filled: true,
+                fillColor: Colors.white10,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.search, color: Colors.white70),
+                  onPressed: _search,
+                ),
               ),
+              onSubmitted: (_) => _search(),
             ),
-            const SizedBox(height: 8),
-            Text(video.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: textColor, fontSize: 12)),
-            const Text('YouTube', style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            Expanded(
+              child: _loading 
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null 
+                      ? Center(child: Text(_error!, style: const TextStyle(color: Colors.redAccent)))
+                      : _results.isEmpty 
+                          ? const Center(child: Text('No results found', style: TextStyle(color: Colors.white38)))
+                          : ListView.separated(
+                              itemCount: _results.length,
+                              separatorBuilder: (_, __) => const Divider(color: Colors.white10),
+                              itemBuilder: (ctx, i) {
+                                final r = _results[i];
+                                return ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: r.posterUrl != null 
+                                        ? Image.network(r.posterUrl!, width: 40, height: 60, fit: BoxFit.cover)
+                                        : Container(width: 40, height: 60, color: Colors.grey[800]),
+                                  ),
+                                  title: Text(r.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  subtitle: Text(
+                                    '${r.releaseYear ?? "Unknown"} • ${r.type == TmdbMediaType.movie ? "Movie" : "TV"}',
+                                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                  ),
+                                  onTap: () => _select(r),
+                                );
+                              },
+                            ),
+            ),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ),
           ],
         ),
       ),

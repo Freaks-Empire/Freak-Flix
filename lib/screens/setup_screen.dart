@@ -94,7 +94,7 @@ class _SetupScreenState extends State<SetupScreen> {
     // Create Admin Profile
     await profiles.addProfile(
         name, 
-        'assets/avatars/default.png', 
+      'assets/logo.png', 
         _selectedColorValue, 
         pin: pin.isNotEmpty && pin.length == 4 ? pin : null
     );

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'persistence_service.dart';
 
 class NotInitializedError implements Exception {
@@ -53,12 +54,31 @@ class GraphAccount {
         'id': id,
         'displayName': displayName,
         'userPrincipalName': userPrincipalName,
+        // Sensitive tokens are stored separately in secure storage
+        'expiresAt': expiresAt?.toIso8601String(),
+      };
+
+  Map<String, dynamic> toJsonWithTokens() => {
+        'id': id,
+        'displayName': displayName,
+        'userPrincipalName': userPrincipalName,
         'accessToken': accessToken,
         'refreshToken': refreshToken,
         'expiresAt': expiresAt?.toIso8601String(),
       };
 
   factory GraphAccount.fromJson(Map<String, dynamic> json) => GraphAccount(
+        id: json['id'] as String,
+        displayName: json['displayName'] as String? ?? '',
+        userPrincipalName: json['userPrincipalName'] as String? ?? '',
+        accessToken: '', // Will be loaded from secure storage
+        refreshToken: null, // Will be loaded from secure storage
+        expiresAt: json['expiresAt'] != null
+            ? DateTime.tryParse(json['expiresAt'] as String)
+            : null,
+      );
+
+  factory GraphAccount.fromJsonWithTokens(Map<String, dynamic> json) => GraphAccount(
         id: json['id'] as String,
         displayName: json['displayName'] as String? ?? '',
         userPrincipalName: json['userPrincipalName'] as String? ?? '',
@@ -126,14 +146,8 @@ class GraphAuthService {
 
   String? _configError;
 
-  /// Returns the base URL for Graph API calls (e.g. https://graph.microsoft.com/v1.0 or /api/graph/v1.0 on web)
-  String get graphBaseUrl {
-    if (kIsWeb) {
-      // Use local proxy defined in netlify.toml
-      return '/api/graph/v1.0';
-    }
-    return 'https://graph.microsoft.com/v1.0';
-  }
+  /// Returns the base URL for Graph API calls.
+  String get graphBaseUrl => 'https://graph.microsoft.com/v1.0';
 
   void configureFromEnv() {
     final String? clientIdRaw = dotenv.env['GRAPH_CLIENT_ID'] ??
@@ -158,18 +172,10 @@ class GraphAuthService {
     _tenant = tenant;
     _configError = null; // Success
     
-    if (kIsWeb) {
-      // Use local proxy to avoid CORS on web
-      // Configured in netlify.toml: /api/ms_auth/* -> https://login.microsoftonline.com/:splat
-      const proxyPrefix = '/api/ms_auth';
-      _deviceCodeEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/devicecode');
-      _tokenEndpoint = Uri.parse('$proxyPrefix/$_tenant/oauth2/v2.0/token');
-    } else {
-      _deviceCodeEndpoint = Uri.parse(
-          'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/devicecode');
-      _tokenEndpoint = Uri.parse(
-          'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/token');
-    }
+    _deviceCodeEndpoint = Uri.parse(
+      'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/devicecode');
+    _tokenEndpoint = Uri.parse(
+      'https://login.microsoftonline.com/$_tenant/oauth2/v2.0/token');
   }
 
   void _ensureConfigured() {
@@ -188,6 +194,9 @@ class GraphAuthService {
 
   static const _accountsKey = 'graph_accounts_v1';
   static const _activeAccountIdKey = 'graph_active_account_v1';
+
+  // Secure storage for sensitive tokens
+  static const _secureStorage = FlutterSecureStorage();
 
   List<GraphAccount> _accounts = [];
   String? _activeAccountId;
@@ -223,6 +232,56 @@ class GraphAuthService {
 
   static const _storageFile = 'graph_auth.json';
 
+  /// Save account tokens to secure storage
+  Future<void> _saveAccountTokens(GraphAccount account) async {
+    try {
+      await _secureStorage.write(
+        key: 'graph_token_${account.id}',
+        value: account.accessToken,
+      );
+      if (account.refreshToken != null) {
+        await _secureStorage.write(
+          key: 'graph_refresh_${account.id}',
+          value: account.refreshToken,
+        );
+      }
+      debugPrint('GraphAuthService: Saved tokens for account ${account.id} to secure storage');
+    } catch (e) {
+      debugPrint('GraphAuthService: Error saving tokens to secure storage: $e');
+      rethrow;
+    }
+  }
+
+  /// Load account tokens from secure storage
+  Future<Map<String, String?>> _loadAccountTokens(String accountId) async {
+    try {
+      final accessToken = await _secureStorage.read(key: 'graph_token_$accountId');
+      final refreshToken = await _secureStorage.read(key: 'graph_refresh_$accountId');
+      debugPrint('GraphAuthService: Loaded tokens for account $accountId from secure storage');
+      return {
+        'accessToken': accessToken,
+        'refreshToken': refreshToken,
+      };
+    } catch (e) {
+      debugPrint('GraphAuthService: Error loading tokens from secure storage: $e');
+      return {
+        'accessToken': null,
+        'refreshToken': null,
+      };
+    }
+  }
+
+  /// Delete account tokens from secure storage
+  Future<void> _deleteAccountTokens(String accountId) async {
+    try {
+      await _secureStorage.delete(key: 'graph_token_$accountId');
+      await _secureStorage.delete(key: 'graph_refresh_$accountId');
+      debugPrint('GraphAuthService: Deleted tokens for account $accountId from secure storage');
+    } catch (e) {
+      debugPrint('GraphAuthService: Error deleting tokens from secure storage: $e');
+    }
+  }
+
   /// Load saved token and user from PersistenceService.
   Future<void> loadFromPrefs() async {
     debugPrint('GraphAuthService: Loading from file storage...');
@@ -242,6 +301,21 @@ class GraphAuthService {
         final list = (data['accounts'] as List<dynamic>)
             .map((e) => GraphAccount.fromJson(e as Map<String, dynamic>))
             .toList();
+        
+        // Load tokens from secure storage for each account
+        for (int i = 0; i < list.length; i++) {
+          final tokens = await _loadAccountTokens(list[i].id);
+          final accountWithTokens = GraphAccount(
+            id: list[i].id,
+            displayName: list[i].displayName,
+            userPrincipalName: list[i].userPrincipalName,
+            accessToken: tokens['accessToken'] ?? '',
+            refreshToken: tokens['refreshToken'],
+            expiresAt: list[i].expiresAt,
+          );
+          list[i] = accountWithTokens;
+        }
+        
         _accounts = list;
       }
       
@@ -271,13 +345,33 @@ class GraphAuthService {
     
     try {
       final list = (jsonDecode(raw) as List<dynamic>)
-          .map((e) => GraphAccount.fromJson(e as Map<String, dynamic>))
+          .map((e) => GraphAccount.fromJsonWithTokens(e as Map<String, dynamic>))
           .toList();
+      
+      // Save tokens to secure storage
+      for (final account in list) {
+        await _saveAccountTokens(account);
+      }
+      
+      // Create account list without tokens for file storage
+      final listWithoutTokens = list.map((account) => GraphAccount(
+        id: account.id,
+        displayName: account.displayName,
+        userPrincipalName: account.userPrincipalName,
+        accessToken: '',
+        refreshToken: null,
+        expiresAt: account.expiresAt,
+      )).toList();
+      
       _accounts = list;
       _activeAccountId = activeId;
       
-      // Save to new storage
-      await _saveAccounts();
+      // Save non-sensitive data to file
+      final data = {
+        'accounts': listWithoutTokens.map((a) => a.toJson()).toList(),
+        'activeAccountId': _activeAccountId,
+      };
+      await PersistenceService.instance.saveString(_storageFile, jsonEncode(data));
       debugPrint('GraphAuthService: Migrated ${_accounts.length} accounts from SharedPreferences.');
     } catch (e) {
       debugPrint('GraphAuthService: Migration failed: $e');
@@ -285,6 +379,12 @@ class GraphAuthService {
   }
 
   Future<void> _saveAccounts() async {
+    // Save tokens to secure storage first
+    for (final account in _accounts) {
+      await _saveAccountTokens(account);
+    }
+    
+    // Save non-sensitive data to file
     final data = {
       'accounts': _accounts.map((a) => a.toJson()).toList(),
       'activeAccountId': _activeAccountId,
@@ -305,6 +405,10 @@ class GraphAuthService {
     if (_activeAccountId == accountId) {
       _activeAccountId = _accounts.isNotEmpty ? _accounts.first.id : null;
     }
+    
+    // Delete tokens from secure storage
+    await _deleteAccountTokens(accountId);
+    
     await _saveAccounts();
   }
 
@@ -316,26 +420,17 @@ class GraphAuthService {
   }
 
   Future<void> clearAll() async {
+    // Delete all tokens from secure storage
+    for (final account in _accounts) {
+      await _deleteAccountTokens(account.id);
+    }
+    
     _accounts = [];
     _activeAccountId = null;
     await _saveAccounts();
   }
 
-  Future<void> _saveToPrefs(String token, GraphUser user) async {
-    final prefs = await SharedPreferences.getInstance();
-    // Back-compat: store latest single token so old callers still work during migration.
-    await prefs.setString('graph_token_v1', token);
-    await prefs.setString('graph_user_name_v1', user.displayName);
-    await prefs.setString('graph_user_upn_v1', user.userPrincipalName);
 
-    final account = GraphAccount(
-      id: user.id,
-      displayName: user.displayName,
-      userPrincipalName: user.userPrincipalName,
-      accessToken: token,
-    );
-    await _upsertAccount(account);
-  }
 
   Future<void> disconnect() async {
     await clearAll();
@@ -783,19 +878,84 @@ class GraphAuthService {
     }
   }
 
+  /// Uploads bytes to a specific path
+  Future<void> uploadFileBytes(String accountId, String path, List<int> bytes) async {
+    final token = await getFreshAccessToken(accountId);
+    final url = Uri.parse('$graphBaseUrl/me/drive/root:/$path:/content');
+    
+    final res = await http.put(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/octet-stream',
+      },
+      body: bytes,
+    );
+
+    if (res.statusCode != 201 && res.statusCode != 200) {
+      throw Exception('Upload failed: ${res.statusCode} ${res.body}');
+    }
+  }
+
+  /// List backup files in a specific folder
+  Future<List<Map<String, dynamic>>> listBackupFiles(String accountId, String folderName) async {
+    final token = await getFreshAccessToken(accountId);
+    // Expand children to get file details
+    final url = Uri.parse('$graphBaseUrl/me/drive/root:/$folderName:/children?\$select=id,name,size,createdDateTime,file');
+    
+    final res = await http.get(url, headers: {'Authorization': 'Bearer $token'});
+    
+    if (res.statusCode == 404) {
+      return []; // Folder doesn't exist
+    }
+
+    if (res.statusCode != 200) {
+      throw Exception('List files failed: ${res.statusCode} ${res.body}');
+    }
+
+    final data = jsonDecode(res.body);
+    final List<dynamic> value = data['value'] ?? [];
+    
+    return value.map((item) => item as Map<String, dynamic>).toList();
+  }
+
+  /// Download a file by ID
+  Future<List<int>> downloadFile(String accountId, String itemId) async {
+     final token = await getFreshAccessToken(accountId);
+     final url = Uri.parse('$graphBaseUrl/me/drive/items/$itemId/content');
+
+     final res = await http.get(url, headers: {'Authorization': 'Bearer $token'});
+
+     if (res.statusCode == 302) {
+       // Follow redirect
+       final location = res.headers['location'];
+       if (location != null) {
+         final res2 = await http.get(Uri.parse(location));
+         if (res2.statusCode != 200) throw Exception('Download failed after redirect: ${res2.statusCode}');
+         return res2.bodyBytes;
+       }
+     }
+
+     if (res.statusCode != 200) {
+       throw Exception('Download failed: ${res.statusCode} ${res.body}');
+     }
+     
+     return res.bodyBytes;
+  }
+
   /// Downloads a file's content as string from the root of the user's Drive
   Future<String> downloadFileContent(String accountId, String fileName) async {
     final token = await getFreshAccessToken(accountId);
     final url = Uri.parse('$graphBaseUrl/me/drive/root:/$fileName:/content');
     
     final res = await http.get(
-      url, 
-      headers: {'Authorization': 'Bearer $token'}
+      url,
+      headers: {'Authorization': 'Bearer $token'},
     );
 
     if (res.statusCode != 200) {
-      throw Exception('Download failed: ${res.statusCode} ${res.body}');
+       throw Exception('Download failed: ${res.statusCode} ${res.body}');
     }
-    return res.body;
+    return res.body; 
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/user_profile.dart';
 import '../services/persistence_service.dart';
+import '../utils/logger.dart';
 
 class ProfileProvider extends ChangeNotifier {
   static const _profilesFile = 'profiles.json';
@@ -26,12 +27,19 @@ class ProfileProvider extends ChangeNotifier {
       if (jsonStr != null) {
         final List<dynamic> list = jsonDecode(jsonStr);
         profiles = list.map((e) => UserProfile.fromJson(e)).toList();
+        // Migrate missing avatar asset to existing logo placeholder
+        profiles = profiles.map((p) {
+          if (p.avatarId == 'assets/avatars/default.png') {
+            return p.copyWith(avatarId: 'assets/logo.png');
+          }
+          return p;
+        }).toList();
       } else {
         // First run or empty: Do nothing. Setup wizard will handle creation.
         profiles = []; 
       }
     } catch (e) {
-      debugPrint('ProfileProvider: Error loading profiles: $e');
+      AppLogger.e('Error loading profiles: $e', error: e, tag: 'ProfileProvider');
       // Fallback
       profiles = [
         const UserProfile(
@@ -72,7 +80,7 @@ class ProfileProvider extends ChangeNotifier {
         _userData = map.map((key, value) => MapEntry(key, UserMediaData.fromJson(value)));
       }
     } catch (e) {
-      debugPrint('ProfileProvider: Error loading user data for $profileId: $e');
+      AppLogger.e('Error loading user data for $profileId: $e', error: e, tag: 'ProfileProvider');
     }
   }
 
@@ -83,7 +91,7 @@ class ProfileProvider extends ChangeNotifier {
       final jsonStr = jsonEncode(_userData.map((k, v) => MapEntry(k, v.toJson())));
       await PersistenceService.instance.saveString(fileName, jsonStr);
     } catch (e) {
-      debugPrint('ProfileProvider: Error saving user data: $e');
+      AppLogger.e('Error saving user data: $e', error: e, tag: 'ProfileProvider');
     }
   }
 
@@ -92,7 +100,7 @@ class ProfileProvider extends ChangeNotifier {
       final jsonStr = jsonEncode(profiles.map((p) => p.toJson()).toList());
       await PersistenceService.instance.saveString(_profilesFile, jsonStr);
     } catch (e) {
-      debugPrint('ProfileProvider: Error saving profiles: $e');
+      AppLogger.e('Error saving profiles: $e', error: e, tag: 'ProfileProvider');
     }
   }
 
@@ -136,10 +144,16 @@ class ProfileProvider extends ChangeNotifier {
 
   void updateProgress(String mediaId, int positionSeconds, {bool isWatched = false}) {
     final now = DateTime.now();
+    
+    // Preserve existing isWatched status if already true
+    final existingData = _userData[mediaId];
+    final wasWatched = existingData?.isWatched ?? false;
+    final shouldBeWatched = isWatched || wasWatched;
+    
     _userData[mediaId] = UserMediaData(
       mediaId: mediaId,
       positionSeconds: positionSeconds,
-      isWatched: isWatched,
+      isWatched: shouldBeWatched,
       lastUpdated: now,
     );
     _saveUserData(); // Fire and forget save

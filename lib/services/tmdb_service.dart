@@ -1,5 +1,5 @@
-/// lib/services/tmdb_service.dart
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/media_item.dart';
 import '../models/tmdb_item.dart';
@@ -42,37 +42,40 @@ class TmdbService {
     if (item.type == MediaType.scene || item.type == MediaType.unknown) return item;
     if (item.title == null || item.title!.trim().isEmpty) return item;
 
-    final searchPath = '/3/search/${item.type == MediaType.tv ? 'tv' : 'movie'}';
-    final query = Uri.https(
-      _baseHost,
-      searchPath,
-      {
-        'api_key': key,
-        'query': item.title!,
-        if (item.year != null) 'year': item.year.toString(),
-        'include_adult': settings.enableAdultContent.toString(),
-      },
-    );
+    int tmdbId;
+    // If ID is already set manually, use it. Otherwise search.
+    if (item.tmdbId != null) {
+      tmdbId = item.tmdbId!;
+    } else {
+      final searchPath = '/3/search/${item.type == MediaType.tv ? 'tv' : 'movie'}';
+      final query = Uri.https(
+        _baseHost,
+        searchPath,
+        {
+          'api_key': key,
+          'query': item.title!,
+          if (item.year != null) 'year': item.year.toString(),
+          'include_adult': settings.enableAdultContent.toString(),
+        },
+      );
 
-    final res = await _client.get(query);
-    if (res.statusCode != 200) return item;
+      final res = await _client.get(query);
+      if (res.statusCode != 200) return item;
 
-    final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-    final results = decoded['results'] as List<dynamic>?;
-    if (results == null || results.isEmpty) return item;
+      final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+      final results = decoded['results'] as List<dynamic>?;
+      if (results == null || results.isEmpty) return item;
 
-    final best = results.first as Map<String, dynamic>;
-    final int tmdbId = best['id'] as int;
-    final String? posterPath = best['poster_path'] as String?;
-    final String? backdropPath = best['backdrop_path'] as String?;
-    final String? overview = best['overview'] as String?;
-    final num? voteAverage = best['vote_average'] as num?;
-    final String? date = (item.type == MediaType.tv
-            ? best['first_air_date']
-            : best['release_date'])
-        as String?;
-    final int? year =
-        date != null && date.length >= 4 ? int.tryParse(date.substring(0, 4)) : null;
+      final best = results.first as Map<String, dynamic>;
+      tmdbId = best['id'] as int;
+      // We could also update best match details here but the details call below covers it
+    }
+
+    String? posterPath;
+    String? backdropPath;
+    String? overview;
+    num? voteAverage;
+    int? year;
 
     int? runtimeMinutes;
     List<String> genres = [];
@@ -85,8 +88,11 @@ class TmdbService {
     );
 
     final detailsRes = await _client.get(detailsUri);
+    String? title;
     if (detailsRes.statusCode == 200) {
       final d = jsonDecode(detailsRes.body) as Map<String, dynamic>;
+      title = item.type == MediaType.movie ? d['title'] : d['name'];
+      
       if (item.type == MediaType.movie) {
         runtimeMinutes = d['runtime'] as int?;
       } else {
@@ -101,10 +107,20 @@ class TmdbService {
             .map((g) => (g as Map<String, dynamic>)['name'] as String)
             .toList();
       }
+      
+      posterPath = d['poster_path'];
+      backdropPath = d['backdrop_path'];
+      overview = d['overview'];
+      voteAverage = (d['vote_average'] as num?)?.toDouble();
+      final dateStr = item.type == MediaType.movie ? d['release_date'] : d['first_air_date'];
+      if (dateStr != null && dateStr.toString().length >= 4) {
+         year = int.tryParse(dateStr.toString().substring(0, 4));
+      }
     }
 
     return item.copyWith(
-      year: item.year ?? year,
+      title: title ?? item.title,
+      year: year ?? item.year,
       posterUrl: posterPath != null ? '$_imageBase$posterPath' : item.posterUrl,
       backdropUrl: backdropPath != null ? '$_imageBase$backdropPath' : item.backdropUrl,
       overview: overview?.isNotEmpty == true ? overview : item.overview,
@@ -199,13 +215,22 @@ class TmdbService {
     if (externals['instagram_id'] != null) exIds['instagram'] = externals['instagram_id'].toString();
     if (externals['twitter_id'] != null) exIds['twitter'] = externals['twitter_id'].toString();
 
+    // Parse Genres
+    final genreList = (data['genres'] as List<dynamic>? ?? [])
+        .map((g) => TmdbGenre(id: g['id'] as int, name: g['name'] as String))
+        .toList();
+
     return TmdbExtendedDetails(
-      cast: castList,
-      videos: vidList,
-      recommendations: combinedRecs,
-      seasons: seasonList,
-      reviews: reviewsList,
-      externalIds: exIds,
+       cast: castList,
+       videos: vidList,
+       recommendations: combinedRecs,
+       seasons: seasonList,
+       reviews: reviewsList,
+       externalIds: exIds,
+       genres: genreList,
+       status: data['status'] as String? ?? 'Unknown',
+       numberOfEpisodes: data['number_of_episodes'] as int? ?? 0,
+       tagline: (data['tagline'] as String?)?.isNotEmpty == true ? data['tagline'] : null,
     );
   }
 
@@ -250,6 +275,61 @@ class TmdbService {
 
     final data = jsonDecode(res.body) as Map<String, dynamic>;
     return TmdbTv.fromJson(data);
+  }
+
+
+
+  Future<List<TmdbItem>> getTrendingMovies() async {
+    return _fetchItems('/3/trending/movie/day', defaultType: TmdbMediaType.movie);
+  }
+
+  Future<List<TmdbItem>> getTrendingTv() async {
+    return _fetchItems('/3/trending/tv/day', defaultType: TmdbMediaType.tv);
+  }
+
+  Future<List<TmdbItem>> getAnime() async {
+    // Anime: Animation genre (16) + Japanese language (ja)
+    return _fetchItems(
+      '/3/discover/tv', 
+      extras: {
+        'with_genres': '16',
+        'original_language': 'ja',
+        'sort_by': 'popularity.desc',
+      },
+      defaultType: TmdbMediaType.tv,
+    );
+  }
+
+  Future<List<TmdbItem>> _fetchItems(String path, {Map<String, String>? extras, TmdbMediaType defaultType = TmdbMediaType.movie}) async {
+    final key = _key;
+    if (key == null) return [];
+
+    final uri = Uri.https(_baseHost, path, {
+      'api_key': key,
+      'language': 'en-US',
+      ...?extras,
+    });
+
+    try {
+      final response = await _client.get(uri);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final results = (data['results'] as List).map((e) => TmdbItem.fromMap(
+          e,
+          imageBase: _imageBase,
+          defaultType: defaultType, 
+        )).toList();
+        
+        return results.where((i) => i.type == TmdbMediaType.movie || i.type == TmdbMediaType.tv).toList();
+      }
+    } catch (e) {
+      debugPrint('Error fetching items from $path: $e');
+    }
+    return [];
+  }
+
+  Future<List<TmdbItem>> getTrending() async {
+    return _fetchItems('/3/trending/all/day');
   }
 
   Future<List<TmdbItem>> searchMulti(String query) async {

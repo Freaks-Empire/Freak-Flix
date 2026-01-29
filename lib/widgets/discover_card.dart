@@ -1,7 +1,8 @@
 /// lib/widgets/discover_card.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cached_network_image/cached_network_image.dart'; 
+import 'safe_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../models/tmdb_item.dart';
 import '../models/media_item.dart';
@@ -10,13 +11,34 @@ import '../screens/details_screen.dart';
 
 class DiscoverCard extends StatelessWidget {
   final TmdbItem item;
-  const DiscoverCard({super.key, required this.item});
+  final bool showOverlays;
+  final bool showTitle;
+  final double? width;
+  final double aspectRatio;
+  final MediaItem? sourceItem;
+
+  const DiscoverCard({
+    super.key, 
+    required this.item,
+    this.showOverlays = true,
+    this.showTitle = true,
+    this.width,
+    this.aspectRatio = 2 / 3,
+    this.sourceItem,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final heroTag = 'poster_${sourceItem?.id ?? item.id}';
+
     return GestureDetector(
       onTap: () {
+        if (sourceItem != null) {
+          context.push('/media/${sourceItem!.id}', extra: sourceItem);
+          return;
+        }
+
         final library = context.read<LibraryProvider>();
         final local = library.findByTmdbId(item.id);
         if (local != null) {
@@ -45,35 +67,32 @@ class DiscoverCard extends StatelessWidget {
         }
       },
       child: SizedBox(
-        width: 136,
+        width: width ?? 136,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: AspectRatio(
-                aspectRatio: 2 / 3,
+                aspectRatio: aspectRatio,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
                     if (item.posterUrl != null)
-                      CachedNetworkImage(
-                        imageUrl: item.posterUrl!,
-                        fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => _PosterFallback(type: item.type),
-                        placeholder: (_, __) => Container(
-                          color: Colors.grey[900],
-                          child: const Center(
-                            child: SizedBox(
-                              width: 20, 
-                              height: 20, 
-                              child: CircularProgressIndicator(strokeWidth: 2)
-                            )
-                          ),
+                      Hero(
+                        tag: heroTag,
+                        child: SafeNetworkImage(
+                          url: item.posterUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _PosterFallback(type: item.type),
                         ),
                       )
                     else
-                      _PosterFallback(type: item.type),
+                      Hero(
+                        tag: heroTag,
+                        child: _PosterFallback(type: item.type),
+                      ),
+                    if (showOverlays)
                     Positioned(
                       top: 6,
                       right: 6,
@@ -88,6 +107,7 @@ class DiscoverCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                      if (showOverlays)
                       Positioned(
                         top: 6,
                         left: 6,
@@ -139,13 +159,17 @@ class DiscoverCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              item.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
-            ),
+            if (showTitle) ...[
+              const SizedBox(height: 8),
+              Flexible(
+                child: Text(
+                  item.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
           ],
         ),
       ),

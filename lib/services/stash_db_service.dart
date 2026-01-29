@@ -13,8 +13,8 @@ import '../models/stash_endpoint.dart';
 class StashDbService {
   static const String _defaultEndpoint = 'https://stashdb.org/graphql';
 
-  final Map<String, List<MediaItem>> _performerSceneCache = {};
-  final Map<String, Future<List<MediaItem>>> _activePerformerRequests = {};
+  // Caches performer scene pages within a scan batch to avoid repeated calls.
+  final Map<String, Future<List<MediaItem>>> _performerScenesCache = {};
 
   // --- Queries ---
 
@@ -184,25 +184,20 @@ class StashDbService {
     }
   ''';
 
-  static const String _querySearchPerformer = r'''
-    query SearchPerformer($name: String!) {
-      searchPerformer(term: $name) {
-        id
-        name
+  static const String _querySearchPerformers = r'''
+    query SearchPerformers($name: String!) {
+      findPerformers(performer_filter: {
+        name: { value: $name, modifier: INCLUDES }
+      }, filter: { per_page: 5 }) {
+        performers { id name }
       }
     }
   ''';
 
-  static const String _querySearchPerformerBox = r'''
-    query SearchPerformerBox($name: String!) {
-      queryPerformers(input: {
-        text: $name
-        per_page: 3
-      }) {
-        performers {
-          id
-          name
-        }
+  static const String _querySearchPerformersBox = r'''
+    query QueryPerformers($text: String!) {
+      queryPerformers(input: { text: $text, per_page: 5 }) {
+        performers { id name }
       }
     }
   ''';
@@ -412,7 +407,58 @@ class StashDbService {
     }
   ''';
 
+  static const String _queryRecentScenes = r'''
+    query RecentScenes($limit: Int!) {
+      findScenes(
+        scene_filter: {}
+        filter: {
+          sort: "date"
+          direction: DESC
+          per_page: $limit
+          page: 1
+        }
+      ) {
+        scenes {
+          id
+          title
+          details
+          date
+          tags { name }
+          images { url }
+          files { duration }
+          paths { screenshot }
+          studio { name }
+        }
+      }
+    }
+  ''';
+
   // --- Public Methods ---
+
+  /// Fetch recently added scenes (Adult Trending)
+  Future<List<MediaItem>> getRecentScenes(List<StashEndpoint> endpoints, {int limit = 10}) async {
+    for (final ep in endpoints) {
+      if (!ep.enabled) continue;
+
+      try {
+        final data = await _executeQuery(
+          query: _queryRecentScenes,
+          operationName: 'RecentScenes',
+          variables: {'limit': limit},
+          apiKey: ep.apiKey,
+          baseUrl: ep.url,
+        );
+
+        final scenes = data?['findScenes']?['scenes'] as List?;
+        if (scenes != null && scenes.isNotEmpty) {
+           return scenes.map((s) => _mapSceneToMediaItem(s, s['title'] ?? 'Unknown', baseUrl: ep.url)).toList();
+        }
+      } catch (e) {
+        debugPrint('StashDB [${ep.name}]: Fetch Recent Scenes failed: $e');
+      }
+    }
+    return [];
+  }
 
   /// Tests the connection to StashDB using the provided API key.
   Future<bool> testConnection(String apiKey, String baseUrl) async {
@@ -452,8 +498,9 @@ class StashDbService {
 
         final sceneData = data?['findScene'];
         if (sceneData != null) {
-            return _mapSceneToMediaItem(sceneData, 'Unknown');
+            return _mapSceneToMediaItem(sceneData, 'Unknown', baseUrl: ep.url);
         } else if (isStashBox) {
+          // Fallback: Check if it's a Movie (TPDB often distinguishes strictly)
           debugPrint('StashDB [${ep.name}]: Scene not found, trying Movie...');
           final movieData = await _executeQuery(
             query: _queryFindMovieBox,
@@ -464,7 +511,7 @@ class StashDbService {
           );
           final movie = movieData?['findMovie'];
           if (movie != null) {
-             return _mapSceneToMediaItem(movie, 'Unknown', type: MediaType.movie);
+             return _mapSceneToMediaItem(movie, 'Unknown', type: MediaType.movie, baseUrl: ep.url);
           }
         }
       } catch (e) {
@@ -476,20 +523,56 @@ class StashDbService {
 
   /// Searches for a scene by title across all endpoints. Returns first match.
   Future<MediaItem?> searchScene(String title, List<StashEndpoint> endpoints) async {
+    final results = await searchScenesList(title, endpoints);
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  /// Searches for scenes by title and returns a list of matches.
+  Future<List<MediaItem>> searchScenesList(String title, List<StashEndpoint> endpoints, {bool useRaw = false}) async {
+    // 1. Raw Search (Exact)
+    if (useRaw) {
+      final results = await _executeSearchStrategy(title.trim(), endpoints);
+      if (results.isNotEmpty) return results;
+      debugPrint('StashDB: Raw search empty, falling back to cleaned...');
+    }
+
+    // 2. Cleaned Search (No punctuation/accents)
     final cleanTitle = _cleanTitle(title);
+    var results = await _executeSearchStrategy(cleanTitle, endpoints);
+    if (results.isNotEmpty) return results;
+
+    // 3. Truncated Search (First 6 words)
+    // Avoids mismatches in long titles (e.g. "Friends" vs "Friend's" at the end)
+    final truncated = _truncateToWords(cleanTitle, 6);
+    if (truncated != cleanTitle && truncated.length > 5) {
+       debugPrint('StashDB: Clean search empty, falling back to truncated: "$truncated"');
+       results = await _executeSearchStrategy(truncated, endpoints);
+    }
     
+    return results;
+  }
+  
+  String _truncateToWords(String text, int count) {
+    final words = text.split(' ');
+    if (words.length <= count) return text;
+    return words.take(count).join(' ');
+  }
+
+  Future<List<MediaItem>> _executeSearchStrategy(String query, List<StashEndpoint> endpoints) async {
+    // ... (existing implementation)
     for (final ep in endpoints) {
-      if (!ep.enabled) continue;
+      if (!ep.enabled) continue; 
       
-      debugPrint('StashDB [${ep.name}]: Searching for "$cleanTitle"');
+      debugPrint('StashDB [${ep.name}]: Searching List for "$query"');
       final isStashBox = _isBox(ep.url);
 
-      Future<MediaItem?> trySearch(String query, String opName, bool isBox, {bool isMovie = false}) async {
+      // Helper to execute and parse scene search
+      Future<List<MediaItem>> trySearch(String q, String opName, bool isBox, {bool isMovie = false}) async {
         try {
            final data = await _executeQuery(
-            query: query,
+            query: q,
             operationName: opName,
-            variables: {'title': cleanTitle},
+            variables: {'title': query},
             apiKey: ep.apiKey,
             baseUrl: ep.url,
           );
@@ -504,171 +587,133 @@ class StashDbService {
           }
 
           if (results != null && results.isNotEmpty) {
-            debugPrint('StashDB [${ep.name}]: Found match via $opName');
-            return _mapSceneToMediaItem(
-                results.first, 
-                title, 
-                type: isMovie ? MediaType.movie : MediaType.scene
-            );
+            debugPrint('StashDB [${ep.name}]: Found ${results.length} matches via $opName');
+            return results.map((r) => _mapSceneToMediaItem(
+                r, 
+                query, 
+                type: isMovie ? MediaType.movie : MediaType.scene,
+                baseUrl: ep.url
+            )).toList();
           }
         } catch (e) {
-          if (e.toString().contains('Cannot query field')) {
-             debugPrint('StashDB [${ep.name}]: $opName not supported by schema.');
-          } else {
-             debugPrint('StashDB [${ep.name}]: Search error ($opName): $e');
-          }
+           debugPrint('StashDB [${ep.name}]: Search List error ($opName): $e');
         }
-        return null;
+        return [];
       }
 
-      MediaItem? result;
+      // 1. Try Primary Scene Search
+      List<MediaItem> results = [];
       if (isStashBox) {
-        result = await trySearch(_queryFindScenesBox, 'QueryScenes', true);
-        if (result == null) result = await trySearch(_queryFindScenes, 'FindScenes', false);
-        if (result == null) result = await trySearch(_queryQueryMoviesBox, 'QueryMoviesBox', true, isMovie: true);
+        results = await trySearch(_queryFindScenesBox, 'QueryScenes', true);
+        if (results.isEmpty) results = await trySearch(_queryFindScenes, 'FindScenes', false);
+        if (results.isEmpty) results = await trySearch(_queryQueryMoviesBox, 'QueryMoviesBox', true, isMovie: true);
       } else {
-        result = await trySearch(_queryFindScenes, 'FindScenes', false);
-        if (result == null) result = await trySearch(_queryFindScenesBox, 'QueryScenes', true);
+        results = await trySearch(_queryFindScenes, 'FindScenes', false);
+        if (results.isEmpty) results = await trySearch(_queryFindScenesBox, 'QueryScenes', true);
       }
 
-      if (result != null) return result;
-
+      if (results.isNotEmpty) return results;
     }
-
-    return null;
+    return [];
   }
 
-  /// Performer-aware scene search: Finds performer ID, fetches their scenes, matches by title.
-  /// Returns the best match or null.
+  /// Performer-first search: find performer ID by name, then filter that performer's scenes by title.
   Future<MediaItem?> searchSceneByPerformer(
-    String sceneTitle,
+    String title,
     String performerName,
     List<StashEndpoint> endpoints, {
-    bool requirePerformerMatch = false, // New Flag
+    bool requirePerformerMatch = false,
   }) async {
-    if (performerName.trim().isEmpty || sceneTitle.trim().isEmpty) return null;
+    final performerId = await _findPerformerIdByName(performerName, endpoints);
+    if (performerId == null) return null;
 
-    final cleanTitle = _cleanTitle(sceneTitle);
-    final cleanPerformer = performerName.trim().toLowerCase();
+    final scenes = await getPerformerScenes(performerId, endpoints, page: 1, perPage: 50);
+    if (scenes.isEmpty) return null;
 
-    debugPrint('StashDB: Performer-first search: "$cleanPerformer" in "$cleanTitle" (Strict: $requirePerformerMatch)');
+    final target = _cleanTitle(title).toLowerCase();
+    MediaItem? best;
+    double bestSimilarity = -1;
 
+    for (final scene in scenes) {
+      final cleaned = _cleanTitle(scene.title ?? scene.fileName).toLowerCase();
+      final similarity = _titleSimilarity(target, cleaned);
+
+      debugPrint('[stash-match] strategy=performer title="$target" candidate="$cleaned" similarity=${similarity.toStringAsFixed(3)}');
+
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+        best = scene;
+      }
+    }
+
+    final meetsThreshold = bestSimilarity >= 0.5 || !requirePerformerMatch;
+    debugPrint('[stash-match] strategy=performer result=${best?.id ?? 'none'} similarity=${bestSimilarity.toStringAsFixed(3)} thresholdMet=$meetsThreshold');
+
+    if (!meetsThreshold) return null;
+    return best;
+  }
+
+  Future<String?> _findPerformerIdByName(String name, List<StashEndpoint> endpoints) async {
+    final cleanName = _cleanTitle(name);
     for (final ep in endpoints) {
       if (!ep.enabled) continue;
-
+      final isStashBox = _isBox(ep.url);
       try {
-        // 1. Find Performer ID
-        final isStashBox = _isBox(ep.url);
-        final searchQuery = isStashBox ? _querySearchPerformerBox : _querySearchPerformer;
-        final searchOp = isStashBox ? 'SearchPerformerBox' : 'SearchPerformer';
-
-        final searchData = await _executeQuery(
-          query: searchQuery,
-          operationName: searchOp,
-          variables: {'name': performerName},
+        final data = await _executeQuery(
+          query: isStashBox ? _querySearchPerformersBox : _querySearchPerformers,
+          operationName: isStashBox ? 'QueryPerformers' : 'SearchPerformers',
+          variables: isStashBox ? {'text': cleanName} : {'name': cleanName},
           apiKey: ep.apiKey,
           baseUrl: ep.url,
         );
 
         List<dynamic>? performers;
         if (isStashBox) {
-          performers = searchData?['queryPerformers']?['performers'] as List?;
+          performers = data?['queryPerformers']?['performers'] as List?;
         } else {
-          performers = searchData?['searchPerformer'] as List?;
+          performers = data?['findPerformers']?['performers'] as List?;
         }
 
-        if (performers == null || performers.isEmpty) {
-          debugPrint('StashDB [${ep.name}]: Performer "$performerName" not found');
-          continue;
+        if (performers != null && performers.isNotEmpty) {
+          // Prefer exact/startsWith match
+          final lower = cleanName.toLowerCase();
+          performers.sort((a, b) {
+            final an = (a['name'] as String? ?? '').toLowerCase();
+            final bn = (b['name'] as String? ?? '').toLowerCase();
+            final aScore = an == lower || an.startsWith(lower) ? 0 : 1;
+            final bScore = bn == lower || bn.startsWith(lower) ? 0 : 1;
+            return aScore.compareTo(bScore);
+          });
+          return performers.first['id'] as String?;
         }
-
-        // 2. Get Performer's Scenes (first 50 to be thorough)
-        final performerId = performers.first['id'] as String;
-        debugPrint('StashDB [${ep.name}]: Found performer ID $performerId');
-
-        final scenes = await getPerformerScenes(performerId, [ep], page: 1, perPage: 50);
-
-        if (scenes.isEmpty) {
-          debugPrint('StashDB [${ep.name}]: No scenes found for performer');
-          continue;
-        }
-
-        debugPrint('StashDB [${ep.name}]: Fetched ${scenes.length} scenes for $performerName');
-
-        // 3. Score and Match
-        MediaItem? bestMatch;
-        double bestScore = 0.0;
-
-        for (final scene in scenes) {
-          final sceneTitle = scene.title?.toLowerCase() ?? '';
-          final score = _tokenSetSimilarity(cleanTitle.toLowerCase(), sceneTitle); // Improved matching
-
-          if (score > 0.4) {
-             debugPrint('   Candidate: "${scene.title}" - Score: ${score.toStringAsFixed(2)}');
-          }
-
-          if (score > bestScore) {
-            bestScore = score;
-            bestMatch = scene;
-          }
-        }
-
-        // 4. Threshold Check
-        // If requirePerformerMatch is true, we enforce strict 0.5 threshold
-        // If false, we allow 0.5 but might already be covered by logic (prompt says allow <0.5 if not strict? No, prompt says "optional requirePerformerMatch enforces a 0.5 similarity threshold")
-        // Assuming without flag we stick to previous logic (which was >0.5 anyway). 
-        // Actually, previous logic was > 0.5. Let's say with strict mode we might demand even higher, or just enforce it rigidly.
-        // Prompt says "optional requirePerformerMatch enforces a 0.5 similarity threshold".
-        // Let's stick to > 0.5 for now as "good match".
-
-        if (bestScore > 0.5 && bestMatch != null) {
-          debugPrint('StashDB [${ep.name}]: MATCH FOUND "${bestMatch.title}" (score: ${bestScore.toStringAsFixed(2)})');
-          return bestMatch;
-        } else {
-           debugPrint('StashDB [${ep.name}]: No confident match. Best: ${bestScore.toStringAsFixed(2)}');
-        }
-
       } catch (e) {
-        debugPrint('StashDB [${ep.name}]: Performer search error: $e');
+        debugPrint('StashDB [${ep.name}]: Performer search failed: $e');
       }
     }
-
     return null;
   }
 
   /// Gets scenes for a specific performer (paginated, single page).
+  /// Aggregates results from all endpoints? Or just tries all until results found?
+  /// For pagination consistency, aggregation is hard. We will return results from the first endpoint that has data.
   Future<List<MediaItem>> getPerformerScenes(String performerId, List<StashEndpoint> endpoints, {int page = 1, int perPage = 20}) async {
-    // 1. Check Cache
-    final cacheKey = '$performerId-$page-$perPage';
-    if (_performerSceneCache.containsKey(cacheKey)) {
-       return _performerSceneCache[cacheKey]!;
-    }
-    
-    // 2. Check Active Requests (Dedupe)
-    if (_activePerformerRequests.containsKey(cacheKey)) {
-        return _activePerformerRequests[cacheKey]!;
-    }
+    final cacheKey = _sceneCacheKey(performerId, page, perPage);
+    final cached = _performerScenesCache[cacheKey];
+    if (cached != null) return cached;
 
-    // 3. Fetch (and cache future)
-    final future = _fetchPerformerScenesPage(performerId, endpoints, page, perPage);
-    _activePerformerRequests[cacheKey] = future;
-    
-    final result = await future;
-    
-    _performerSceneCache[cacheKey] = result;
-    _activePerformerRequests.remove(cacheKey);
-    
-    return result;
+    final future = _fetchPerformerScenes(performerId, endpoints, page, perPage);
+    _performerScenesCache[cacheKey] = future;
+    return future;
   }
 
-  Future<List<MediaItem>> _fetchPerformerScenesPage(String performerId, List<StashEndpoint> endpoints, int page, int perPage) async {
-      for (final ep in endpoints) {
+  Future<List<MediaItem>> _fetchPerformerScenes(String performerId, List<StashEndpoint> endpoints, int page, int perPage) async {
+    for (final ep in endpoints) {
       if (!ep.enabled) continue;
 
       final isStashBox = _isBox(ep.url);
 
       try {
-        debugPrint('StashDB [${ep.name}]: API Call -> Performer Scenes (Page $page)');
+        debugPrint('StashDB [${ep.name}]: Fetching performer scenes page $page');
         final data = await _executeQuery(
           query: isStashBox ? _queryPerformerScenesBox : _queryPerformerScenes,
           operationName: isStashBox ? 'PerformerScenesBox' : 'PerformerScenes',
@@ -689,15 +734,30 @@ class StashDbService {
         }
 
         if (scenes != null && scenes.isNotEmpty) {
+          debugPrint('[stash-fetch] performer=$performerId endpoint=${ep.name} page=$page perPage=$perPage count=${scenes.length}');
           return scenes
-            .map((s) => _mapSceneToMediaItem(s, s['title'] ?? 'Unknown'))
+            .map((s) => _mapSceneToMediaItem(s, s['title'] ?? 'Unknown', baseUrl: ep.url))
             .toList();
         }
       } catch (e) {
         debugPrint('StashDB [${ep.name}]: Fetch performer scenes failed: $e');
       }
     }
+
     return [];
+  }
+
+  String _sceneCacheKey(String performerId, int page, int perPage) => '$performerId:$page:$perPage';
+
+  double _titleSimilarity(String a, String b) {
+    if (a.isEmpty || b.isEmpty) return 0;
+    if (a == b) return 1;
+    final setA = a.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toSet();
+    final setB = b.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toSet();
+    if (setA.isEmpty || setB.isEmpty) return 0;
+    final intersection = setA.intersection(setB).length;
+    final union = setA.union(setB).length;
+    return union == 0 ? 0 : intersection / union;
   }
 
   Future<StashPerformer?> getPerformerDetails(String id, List<StashEndpoint> endpoints) async {
@@ -731,6 +791,7 @@ class StashDbService {
     return null;
   }
   
+  /// Gets performer details by ID (Legacy simplified).
   Future<CastMember?> getPerformer(String id, List<StashEndpoint> endpoints) async {
     for (final ep in endpoints) {
       if (!ep.enabled) continue;
@@ -776,13 +837,10 @@ class StashDbService {
     return null;
   }
 
-  void resetCache() {
-    _performerSceneCache.clear();
-    _activePerformerRequests.clear();
-  }
-
   // --- Helper Methods ---
 
+  /// Executes a GraphQL query and returns the 'data' field.
+  /// Throws exceptions on HTTP errors or GraphQL errors.
   Future<Map<String, dynamic>?> _executeQuery({
     required String query,
     required String operationName,
@@ -792,6 +850,7 @@ class StashDbService {
   }) async {
     final uri = Uri.parse(baseUrl.isEmpty ? _defaultEndpoint : baseUrl);
     
+    // StashDB typically uses 'ApiKey' header
     final headers = {
       'Content-Type': 'application/json',
       'ApiKey': apiKey.trim(),
@@ -821,46 +880,49 @@ class StashDbService {
   }
 
   String _cleanTitle(String title) {
+    // 1. Remove extension
     var cleaned = title.replaceAll(RegExp(r'\.(mp4|mkv|avi|wmv|mov|webm)$', caseSensitive: false), '');
+    
+    // 2. Remove dots, underscores, hyphens
     cleaned = cleaned.replaceAll(RegExp(r'[._-]'), ' ');
+    // Remove all forms of apostrophes/quotes
+    cleaned = cleaned.replaceAll(RegExp(r"['’‘`´]"), "");
 
+    // 3. Remove common release junk (Case insensitive)
+    // "XXX", "P2P", "PRT" (Private?), "SD", "HD", "4K", "1080p", etc.
     final junkPattern = RegExp(
       r'\b(xxx|p2p|prt|sd|hd|720p|1080p|2160p|4k|mp4|full|uhd|hevc|x264|x265|aac|webdl|web-dl|webrip|bluray|blueray|bdrip|dvdrip|hdtv)\b',
       caseSensitive: false,
     );
     cleaned = cleaned.replaceAll(junkPattern, ' ');
+
+    // 4. Remove trailing numbers (years, dates, or random digits at the end)
+    // First collapse/trim spaces so we don't fail on "Title 29 "
     cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
+    
+    // Now strip numeric suffix
     cleaned = cleaned.replaceAll(RegExp(r'\s+\d+$'), ''); 
     
-    return cleaned.trim();
+    return cleaned;
   }
 
-  /// Improved Token-Set Similarity (Jaccard Index of words)
-  double _tokenSetSimilarity(String s1, String s2) {
-    if (s1 == s2) return 1.0;
-    
-    final set1 = _tokenize(s1);
-    final set2 = _tokenize(s2);
-    
-    if (set1.isEmpty || set2.isEmpty) return 0.0;
-    
-    final intersection = set1.intersection(set2).length;
-    final union = set1.union(set2).length;
-    
-    return intersection / union;
-  }
-  
-  Set<String> _tokenize(String s) {
-     return s.toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]'), ' ')
-        .split(' ')
-        .where((w) => w.isNotEmpty)
-        .toSet();
-  }
-
-  MediaItem _mapSceneToMediaItem(dynamic sceneData, String originalFileName, {MediaType type = MediaType.scene}) {
+  MediaItem _mapSceneToMediaItem(dynamic sceneData, String originalFileName, {MediaType type = MediaType.scene, String? baseUrl}) {
     final scene = sceneData as Map<String, dynamic>;
     
+    // Helper to fix URLs
+    String? fixUrl(String? u) {
+      if (u == null) return null;
+      if (u.startsWith('http')) return u;
+      if (baseUrl != null) {
+        // Handle Stash relative paths
+         return baseUrl.endsWith('/') 
+           ? '$baseUrl${u.startsWith('/') ? u.substring(1) : u}' 
+           : '$baseUrl${u.startsWith('/') ? u : '/$u'}';
+      }
+      return u;
+    }
+
+    // Extract Poster
     String? poster;
     final images = scene['images'] as List?;
     if (images != null && images.isNotEmpty) {
@@ -869,15 +931,14 @@ class StashDbService {
       poster = scene['front_image']['url'];
     }
 
-    final rawPerformers = scene['performers'] as List?;
-    // debugPrint('StashDB: Parsing performers. Count: ${rawPerformers?.length}');
-    
+    // Fix poster URL
+    poster = fixUrl(poster);
+
+    // Extract Cast
+    final rawPerformers = scene['performers'] as List?;    
     final cast = rawPerformers?.map((p) {
         final perf = p['performer'];
-        if (perf == null) {
-          // debugPrint('StashDB: Performer object is null');
-          return null;
-        }
+        if (perf == null) return null;
         
         String? profileUrl;
         if (perf['image_path'] != null) {
@@ -890,37 +951,40 @@ class StashDbService {
           id: perf['id'] as String? ?? '',
           name: perf['name'] as String? ?? 'Unknown',
           character: 'Performer', 
-          profileUrl: profileUrl,
+          profileUrl: fixUrl(profileUrl),
           source: CastSource.stashDb,
         );
     }).whereType<CastMember>().toList() ?? [];
-    // debugPrint('StashDB: Extracted ${cast.length} cast members');
 
+    // Extract Tags/Genres
     final tags = (scene['tags'] as List?)
         ?.map((t) => t['name'] as String?)
         .whereType<String>()
         .toList() ?? [];
 
+    // Construct Overview
     String overview = scene['details'] ?? '';
     final studio = scene['studio']?['name'];
+    if (studio != null) overview = 'Studio: $studio\n\n$overview';
     
-    if (studio != null) {
-      overview = 'Studio: $studio\n\n$overview';
-    }
-
     final date = DateTime.tryParse(scene['date'] ?? '');
 
+    // Extract Backdrop (Priority: paths.screenshot -> paths.preview -> poster)
     String? backdrop;
     final paths = scene['paths'] as Map<String, dynamic>?;
-    if (paths != null) {
-      if (paths['screenshot'] != null && (paths['screenshot'] as String).isNotEmpty) {
-        backdrop = paths['screenshot'];
-      }
+    if (paths != null && paths['screenshot'] != null) {
+         backdrop = paths['screenshot'];
     } else if (scene['back_image'] != null) {
        backdrop = scene['back_image']['url'];
     }
+    
+    backdrop = fixUrl(backdrop);
+    
+    // Fallback logic
     backdrop ??= poster;
+    poster ??= backdrop; // Use screenshot as poster if no cover
 
+    // Extract Duration
     int? durationSeconds;
     if (scene['duration'] != null) {
        final d = scene['duration'];
@@ -939,10 +1003,11 @@ class StashDbService {
 
     return MediaItem(
       id: "stashdb:${scene['id']}",
+      stashId: scene['id'] as String?,
       title: scene['title'] ?? originalFileName,
       fileName: originalFileName,
-      filePath: '',
-      folderPath: '',
+      filePath: '', 
+      folderPath: '', 
       sizeBytes: 0, 
       lastModified: date ?? DateTime.now(),
       year: date?.year,
@@ -956,7 +1021,6 @@ class StashDbService {
       isAdult: true,
     );
   }
-  
   bool _isBox(String url) {
     return url.contains('stashdb.org') || url.contains('theporndb.net');
   }

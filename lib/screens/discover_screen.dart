@@ -11,6 +11,8 @@ import '../widgets/discover_section.dart';
 import '../providers/library_provider.dart';
 import '../widgets/home_media_card.dart';
 import '../models/media_item.dart';
+import '../providers/playback_provider.dart';
+import '../screens/video_player_screen.dart';
 
 class DiscoverScreen extends StatefulWidget {
   final DiscoverType type;
@@ -114,12 +116,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> with AutomaticKeepAlive
                   const SizedBox(height: 60), 
                   
                   // Continue Watching
-                  if (context.watch<LibraryProvider>().continueWatchingItems.isNotEmpty)
-                    _MediaItemSection(
-                      title: 'Continue Watching',
-                      icon: Icons.play_circle_outline,
-                      items: context.watch<LibraryProvider>().continueWatchingItems,
-                    ),
+                    if (context.watch<LibraryProvider>().continueWatchingItems.isNotEmpty)
+                      _MediaItemSection(
+                        title: 'Continue Watching',
+                        icon: Icons.play_circle_outline,
+                        items: context.watch<LibraryProvider>().continueWatchingItems,
+                        onItemTap: (item) {
+                           context.read<PlaybackProvider>().start(item);
+                           Navigator.of(context).push(
+                             MaterialPageRoute(builder: (_) => VideoPlayerScreen(item: item)),
+                           );
+                        },
+                      ),
 
                   // Recommended (Local Files Only)
                   if (context.watch<LibraryProvider>().getRecommendedLocal(widget.type).isNotEmpty)
@@ -189,12 +197,14 @@ class _MediaItemSection extends StatelessWidget {
   final IconData icon;
   final List<MediaItem> items;
   final bool hideEpisodeInfo;
+  final Function(MediaItem)? onItemTap;
   
   const _MediaItemSection({
     required this.title,
     required this.icon,
     required this.items,
     this.hideEpisodeInfo = false,
+    this.onItemTap,
   });
 
   @override
@@ -226,6 +236,7 @@ class _MediaItemSection extends StatelessWidget {
                 return HomeMediaCard(
                   item: items[index], 
                   hideEpisodeInfo: hideEpisodeInfo,
+                  onTap: onItemTap != null ? () => onItemTap!(items[index]) : null,
                 );
               },
             ),
