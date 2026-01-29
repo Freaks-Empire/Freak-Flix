@@ -48,7 +48,6 @@ dependencies:
   webdav_client: ^1.2.2         # WebDAV client
   flutter_secure_storage: ^10.0.0 # Secure credential storage
   webview_flutter: ^4.10.0        # WebView for Vidking embed
-  interactive_media_ads: ^0.2.3+3   # Google IMA video ads
 
 dev_dependencies:
   flutter_test:
