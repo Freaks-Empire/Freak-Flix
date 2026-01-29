@@ -1947,8 +1947,10 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
     setState(() => _oneDriveLoading = true);
     BuildContext? dialogContext;
     try {
-      final user = await _graphAuth.connectWithDeviceCode(
-        onUserCode: (session) {
+      // On web, use popup OAuth flow (no dialog needed)
+      // On native, use device code flow with dialog
+      final user = await _graphAuth.connect(
+        onUserCode: kIsWeb ? null : (session) {
           showDialog(
             context: context,
             barrierDismissible: false,
@@ -2000,6 +2002,9 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
       setState(() {});
       messenger.showSnackBar(SnackBar(content: Text('Connected as ${user.userPrincipalName}')));
     } catch (e) {
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.of(dialogContext!).pop();
+      }
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text('OneDrive error: $e')));
     } finally {

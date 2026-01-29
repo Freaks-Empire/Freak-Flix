@@ -7,6 +7,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'persistence_service.dart';
 
+// Conditional import for web OAuth
+import 'graph_auth_stub.dart'
+    if (dart.library.html) 'graph_auth_web.dart';
+
 class NotInitializedError implements Exception {
   final String message;
   NotInitializedError([this.message = '']);
@@ -591,6 +595,58 @@ class GraphAuthService {
     }
 
     throw Exception('Device code expired. Please try again.');
+  }
+
+  /// Connects using web popup OAuth flow.
+  /// Only available on web platform.
+  Future<GraphUser> connectWithWebPopup() async {
+    _ensureConfigured();
+    
+    if (!kIsWeb) {
+      throw Exception('Web popup login is only available on web platform. Use device code flow instead.');
+    }
+    
+    final result = await WebOAuthService.loginWithPopup(
+      clientId: _clientId!,
+      tenant: _tenant,
+    );
+    
+    if (!result.success) {
+      throw Exception(result.errorDescription ?? result.error ?? 'Login failed');
+    }
+    
+    if (result.accessToken == null) {
+      throw Exception('No access token received');
+    }
+    
+    // Fetch user profile and create account
+    final user = await _fetchMe(result.accessToken!);
+    final account = GraphAccount(
+      id: user.id,
+      displayName: user.displayName,
+      userPrincipalName: user.userPrincipalName,
+      accessToken: result.accessToken!,
+      refreshToken: result.refreshToken,
+      expiresAt: result.expiresIn != null
+          ? DateTime.now().add(Duration(seconds: result.expiresIn!))
+          : null,
+    );
+    
+    await _upsertAccount(account);
+    return user;
+  }
+
+  /// Smart connect method that chooses the right auth flow based on platform.
+  /// On web: uses popup OAuth flow
+  /// On other platforms: uses device code flow
+  Future<GraphUser> connect({
+    void Function(DeviceCodeSession session)? onUserCode,
+  }) async {
+    if (kIsWeb) {
+      return connectWithWebPopup();
+    } else {
+      return connectWithDeviceCode(onUserCode: onUserCode);
+    }
   }
 
   Future<GraphUser> _fetchMe(String token) async {
