@@ -14,6 +14,7 @@ import '../../screens/onedrive_folder_picker.dart';
 import '../../screens/remote_folder_picker.dart';
 import '../../services/remote_storage_service.dart';
 import 'remote_connection_dialog.dart';
+import '../ads/web_banner_ad.dart';
 
 class SettingsLibrarySection extends StatefulWidget {
   const SettingsLibrarySection({Key? key}) : super(key: key);
@@ -2000,6 +2001,12 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
 
       if (!mounted) return;
       setState(() {});
+      
+      // Show interstitial ad after successful connection (web only)
+      if (kIsWeb && mounted) {
+        await showInterstitialAd(context);
+      }
+      
       messenger.showSnackBar(SnackBar(content: Text('Connected as ${user.userPrincipalName}')));
     } catch (e) {
       if (dialogContext != null && dialogContext!.mounted) {
