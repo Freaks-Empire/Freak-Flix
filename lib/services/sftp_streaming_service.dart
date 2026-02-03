@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:dartssh2/dartssh2.dart';
 import 'remote_storage_service.dart';
+import '../utils/url_validator.dart';
 
 /// Callback for download progress (0.0 to 1.0)
 typedef ProgressCallback = void Function(double progress);
@@ -131,12 +132,22 @@ class SftpStreamingService {
     // Remove 'sftp:' prefix
     final withoutPrefix = path.substring(5);
     
-    // Find the first colon after accountId (accountId is a UUID, so look for :/)
+    // Find first colon after accountId (accountId is a UUID, so look for :/)
     final colonSlashIndex = withoutPrefix.indexOf(':/');
     if (colonSlashIndex == -1) return null;
     
     final accountId = withoutPrefix.substring(0, colonSlashIndex);
-    final remotePath = withoutPrefix.substring(colonSlashIndex + 1); // Include the leading /
+    var remotePath = withoutPrefix.substring(colonSlashIndex + 1); // Include the leading /
+    
+    // SECURITY: Sanitize remote path to prevent directory traversal
+    remotePath = UrlValidator.sanitizePath(remotePath);
+    
+    // Validate the sanitized path
+    final pathValidation = UrlValidator.validateFilePath(remotePath);
+    if (pathValidation != null) {
+      debugPrint('SftpStreaming: Path validation failed: $pathValidation');
+      return null;
+    }
     
     return (accountId, remotePath);
   }

@@ -15,6 +15,9 @@ import '../../widgets/video_player/premium_controls.dart';
 import '../../widgets/video_player/video_keyboard_listener.dart';
 import '../../services/graph_auth_service.dart';
 import '../../services/sftp_streaming_service.dart';
+import '../../utils/url_validator.dart';
+import '../utils/secure_logger.dart';
+import '../utils/retry_handler.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
   final MediaItem item;
@@ -45,6 +48,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   bool _isDisposed = false;
   int _lastSavedPosition = 0; // Throttle progress persistence
   BoxFit _fit = BoxFit.contain;
+  DateTime _lastUserInteraction = DateTime.now();
+
+  // Listener cleanup
+  StreamSubscription? _positionSubscription;
+
+  // Configuration
+  static const Duration _defaultDurationTimeout = Duration(seconds: 10);
+  static const Duration _minDurationTimeout = Duration(seconds: 3);
+  static const Duration _maxDurationTimeout = Duration(seconds: 30);
 
   // SFTP Download State
   bool _isDownloadingSftp = false;
@@ -71,11 +83,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     // Determine URL. 
     String url = widget.item.filePath;
     
+    // SECURITY: Validate URL before processing
+    final urlValidation = UrlValidator.validateUrl(url);
+    if (!urlValidation.isValid) {
+      SecureLogger.error('URL validation failed', urlValidation.message, 'VideoPlayer');
+      if (mounted) {
+        setState(() {
+          _sftpError = 'Security Error: ${urlValidation.message}';
+        });
+      }
+      return;
+    }
+    
     // Check if this is an SFTP file
     final sftpParsed = SftpStreamingService.parseSftpPath(widget.item.filePath);
     if (sftpParsed != null) {
       final (accountId, remotePath) = sftpParsed;
       debugPrint('VideoPlayer: Detected SFTP file - Account: $accountId, Path: $remotePath');
+      
+      if (!mounted) return; // Prevent race condition
       
       setState(() {
         _isDownloadingSftp = true;
@@ -83,18 +109,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         _sftpError = null;
       });
       
+      // Store progress callback with dispose check
+      late final ProgressCallback progressCallback;
+      progressCallback = (progress) {
+        if (mounted && !_isDisposed) {
+          setState(() => _sftpDownloadProgress = progress);
+        }
+      };
+      
       final localPath = await SftpStreamingService.instance.getPlayablePath(
         accountId: accountId,
         remotePath: remotePath,
-        onProgress: (progress) {
-          if (mounted) {
-            setState(() => _sftpDownloadProgress = progress);
-          }
-        },
+        onProgress: progressCallback,
       );
       
       if (localPath == null) {
-        if (mounted) {
+        if (mounted && !_isDisposed) {
           setState(() {
             _isDownloadingSftp = false;
             _sftpError = 'Failed to download file from SFTP server';
@@ -104,7 +134,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       }
       
       url = localPath;
-      if (mounted) {
+      if (mounted && !_isDisposed) {
         setState(() => _isDownloadingSftp = false);
       }
       debugPrint('VideoPlayer: Using downloaded SFTP file: $url');
@@ -118,19 +148,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         final itemId = parts.sublist(2).join('_'); // Join back just in case itemId has underscores
         
         debugPrint('VideoPlayer: Refreshing OneDrive URL for $itemId (Account: $accountId)...');
-        final freshUrl = await GraphAuthService().getDownloadUrl(accountId, itemId);
+        final urlResult = await RetryHandler.executeWithRetry<String?>(
+          () async => GraphAuthService().getDownloadUrl(accountId, itemId),
+          RetryHandler.forNetworkOperations(maxAttempts: 3),
+          operationName: 'OneDrive URL refresh',
+        );
         
-        if (freshUrl != null) {
-          url = freshUrl;
-          debugPrint('VideoPlayer: Got fresh URL');
+        if (urlResult.success && urlResult.result != null) {
+          url = urlResult.result!;
+          SecureLogger.debug('Got fresh URL from OneDrive', 'VideoPlayer');
         } else {
-           debugPrint('VideoPlayer: Failed to refresh URL, trying fallback.');
-           if (widget.item.streamUrl != null) url = widget.item.streamUrl!;
+          SecureLogger.warning('Failed to refresh OneDrive URL, using fallback', 'VideoPlayer');
+          if (widget.item.streamUrl != null) url = widget.item.streamUrl!;
         }
       }
     } else if (widget.item.streamUrl != null) {
       // Normal fallback for other stream types (web?)
       url = widget.item.streamUrl!;
+      
+      // SECURITY: Validate stream URL as well
+      final streamValidation = UrlValidator.validateUrl(url);
+      if (!streamValidation.isValid) {
+        SecureLogger.error('Stream URL validation failed', streamValidation.message, 'VideoPlayer');
+        if (mounted) {
+          setState(() {
+            _sftpError = 'Security Error: Invalid stream URL';
+          });
+        }
+        return;
+      }
     }
     
     // Open paused to ensure seek happens before playback starts
@@ -157,8 +203,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
     await _player.play();
 
-    // Listeners
-    _player.stream.position.listen((pos) {
+    // Listeners - store subscription for cleanup
+    _positionSubscription = _player.stream.position.listen((pos) {
       if (_isDisposed) return;
       _checkSkipIntro(pos);
       _updateProgress(pos);
@@ -168,23 +214,45 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _startHideTimer();
   }
 
-  Future<void> _waitForDuration() async {
+  Future<void> _waitForDuration({Duration? customTimeout}) async {
     if (_player.state.duration.inSeconds > 0) return;
 
+    final timeout = customTimeout ?? _defaultDurationTimeout;
     final completer = Completer<void>();
-    final listener = _player.stream.duration.listen((duration) {
+    late final StreamSubscription listener;
+
+    // Calculate adaptive timeout (conservative approach)
+    Duration adaptiveTimeout = timeout;
+    // Network conditions may require more time for some formats
+    adaptiveTimeout = Duration(
+      milliseconds: _calculateAdaptiveTimeout(timeout.inMilliseconds),
+    );
+
+    listener = _player.stream.duration.listen((duration) {
       if (duration.inSeconds > 0 && !completer.isCompleted) {
         completer.complete();
       }
     });
 
     try {
-      await completer.future.timeout(const Duration(seconds: 5));
-    } catch (_) {
-      debugPrint('VideoPlayer: Timeout waiting for duration');
+      await completer.future.timeout(adaptiveTimeout);
+      SecureLogger.debug('Duration loaded successfully', 'VideoPlayer');
+    } catch (e) {
+      SecureLogger.error('Timeout waiting for duration', e, 'VideoPlayer');
+      // Continue anyway - some formats don't report duration immediately
     } finally {
       listener.cancel();
     }
+  }
+
+  /// Calculate adaptive timeout based on reasonable limits
+  int _calculateAdaptiveTimeout(int baseTimeoutMs) {
+    final minMs = _minDurationTimeout.inMilliseconds;
+    final maxMs = _maxDurationTimeout.inMilliseconds;
+    
+    // Simple adaptive logic: allow up to 2x base timeout, within bounds
+    final adaptiveMs = (baseTimeoutMs * 2).clamp(minMs, maxMs);
+    return adaptiveMs;
   }
 
   void _checkSkipIntro(Duration pos) {
@@ -231,6 +299,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   void _toggleControls() {
+    _lastUserInteraction = DateTime.now();
     setState(() => _showControls = !_showControls);
     if (_showControls) _startHideTimer();
   }
@@ -238,12 +307,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   void _startHideTimer() {
     _hideTimer?.cancel();
     _hideTimer = Timer(const Duration(seconds: 4), () {
-      if (mounted) setState(() => _showControls = false);
+      // Only hide controls if no recent user interaction
+      final timeSinceInteraction = DateTime.now().difference(_lastUserInteraction);
+      if (mounted && timeSinceInteraction.inSeconds >= 4) {
+        setState(() => _showControls = false);
+      }
     });
   }
 
   void _onPanUpdate() {
     // Reset timer on user interaction
+    _lastUserInteraction = DateTime.now();
     if (!_showControls) setState(() => _showControls = true);
     _startHideTimer();
   }
@@ -257,6 +331,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _isDisposed = true;
     _hideTimer?.cancel();
     
+    // CRITICAL: Cancel subscriptions to prevent memory leaks
+    _positionSubscription?.cancel();
+    
     // Stop playback immediately to be safe
     _player.stop(); 
 
@@ -267,7 +344,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         context.read<PlaybackProvider>().updateProgress(widget.item, pos);
       }
     } catch (e) {
-      debugPrint('Error saving progress on dispose: $e');
+      SecureLogger.error('Error saving progress on dispose', e, 'VideoPlayer');
     }
 
     _player.dispose();
