@@ -94,7 +94,7 @@ class SftpStreamingService {
       
       // Download with progress
       int bytesRead = 0;
-      const chunkSize = 1024 * 1024; // 1MB chunks
+      const chunkSize = 64 * 1024; // 64KB chunks for better performance
       
       debugPrint('SftpStreaming: Downloading to $localPath');
       

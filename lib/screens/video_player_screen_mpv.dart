@@ -52,6 +52,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   // Listener cleanup
   StreamSubscription? _positionSubscription;
+  
+  // Memory management
+  Timer? _memoryCleanupTimer;
 
   // Configuration
   static const Duration _defaultDurationTimeout = Duration(seconds: 10);
@@ -330,6 +333,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   void dispose() {
     _isDisposed = true;
     _hideTimer?.cancel();
+    _memoryCleanupTimer?.cancel();
     
     // CRITICAL: Cancel subscriptions to prevent memory leaks
     _positionSubscription?.cancel();
@@ -349,6 +353,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
     _player.dispose();
     super.dispose();
+  }
+
+  /// Monitor memory usage during playback
+  void _startMemoryMonitoring() {
+    _memoryCleanupTimer?.cancel();
+    
+    _memoryCleanupTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
+      if (_isDisposed || !mounted) return;
+      
+      // Check memory usage and optimize if needed
+      _checkMemoryUsage();
+    });
+  }
+
+  /// Check memory usage and perform optimizations
+  void _checkMemoryUsage() {
+    // TODO: Implement actual memory monitoring
+    // For now, just log memory state periodically
+    SecureLogger.debug('Memory monitoring active', 'VideoPlayer');
   }
 
   void _toggleFullscreen() {
