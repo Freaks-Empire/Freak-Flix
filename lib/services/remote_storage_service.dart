@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/secure_logger.dart';
 
 /// Types of remote storage protocols supported
 enum RemoteStorageType { sftp, ftp, webdav }
@@ -119,7 +120,7 @@ class RemoteStorageService extends ChangeNotifier {
         debugPrint('RemoteStorageService: Loaded ${_accounts.length} accounts');
       }
     } catch (e) {
-      debugPrint('RemoteStorageService: Error loading accounts: $e');
+      SecureLogger.error('Error loading accounts', e, 'RemoteStorageService');
     }
     notifyListeners();
   }
@@ -131,7 +132,7 @@ class RemoteStorageService extends ChangeNotifier {
       final jsonStr = jsonEncode(_accounts.map((a) => a.toJson()).toList());
       await prefs.setString(_accountsKey, jsonStr);
     } catch (e) {
-      debugPrint('RemoteStorageService: Error saving accounts: $e');
+      SecureLogger.error('Error saving accounts', e, 'RemoteStorageService');
     }
   }
 
@@ -209,7 +210,7 @@ class RemoteStorageService extends ChangeNotifier {
   /// Get security warning for protocol
   static String? getSecurityWarning(RemoteStorageType type) {
     if (!isProtocolSecure(type)) {
-      return 'FTP transmits credentials and data in plaintext. Consider using SFTP or WebDAV for secure connections.';
+      return '⚠️ SECURITY WARNING: FTP transmits credentials and data in plaintext. This is highly insecure and should only be used for testing on local networks. Consider using SFTP or WebDAV for secure connections.';
     }
     return null;
   }

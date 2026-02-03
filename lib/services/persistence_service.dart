@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:archive/archive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/secure_logger.dart';
 
 class PersistenceService {
   PersistenceService._();
@@ -38,7 +39,7 @@ class PersistenceService {
       await file.writeAsString(content, flush: true);
       debugPrint('PersistenceService: Saved $filename (${content.length} chars)');
     } catch (e) {
-      debugPrint('PersistenceService: Error saving $filename: $e');
+      SecureLogger.error('Error saving file', e, 'PersistenceService');
       rethrow;
     }
   }
@@ -54,7 +55,7 @@ class PersistenceService {
       if (!await file.exists()) return null;
       return await file.readAsString();
     } catch (e) {
-      debugPrint('PersistenceService: Error loading $filename: $e');
+      SecureLogger.error('Error loading file', e, 'PersistenceService');
       return null;
     }
   }
@@ -78,7 +79,7 @@ class PersistenceService {
       await file.writeAsBytes(compressed, flush: true);
       debugPrint('PersistenceService: Saved compressed $filename (${compressed.length} bytes)');
     } catch (e) {
-      debugPrint('PersistenceService: Error saving compressed $filename: $e');
+      SecureLogger.error('Error saving compressed file', e, 'PersistenceService');
       rethrow;
     }
   }
@@ -103,7 +104,7 @@ class PersistenceService {
       final bytesList = bytes is List<int> ? bytes : (bytes as List).cast<int>();
       return await compute(_decompressHelper, bytesList);
     } catch (e) {
-      debugPrint('PersistenceService: Error loading compressed $filename: $e');
+      SecureLogger.error('Error loading compressed file', e, 'PersistenceService');
       return null;
     }
   }
@@ -123,7 +124,7 @@ class PersistenceService {
         debugPrint('PersistenceService: Deleted $filename');
       }
     } catch (e) {
-      debugPrint('PersistenceService: Error deleting $filename: $e');
+      SecureLogger.error('Error deleting file', e, 'PersistenceService');
     }
   }
 }

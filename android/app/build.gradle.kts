@@ -41,9 +41,22 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // SECURITY: DO NOT use debug keys for release builds
+            // Create a keystore with: keytool -genkey -v -keystore release-key.keystore -keyalg RSA -keysize 2048 -validity 10000 -alias release
+            // Then configure signing with the release keystore
+            // signingConfig = signingConfigs.getByName("release")
+            
+            // Temporarily disabled - requires proper release keystore configuration
+            // WARNING: Using debug keys for release is a security risk
+            // signingConfig = signingConfigs.getByName("debug")
+            
+            // Enable code shrinking and obfuscation for security
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }

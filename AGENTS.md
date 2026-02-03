@@ -1,17 +1,19 @@
 # AGENTS.md
 
-This file contains guidelines and commands for agentic coding agents working in the Freak-Flix repository.
+This file contains guidelines and commands for agentic coding agents working in Freak-Flix repository.
 
 ## Project Overview
 
-Freak-Flix is a Flutter-based cross-platform media library application that helps users organize and stream their media content. The app uses Provider for state management, Go Router for navigation, and integrates with multiple media APIs.
+Freak-Flix is a Flutter-based cross-platform media library application that helps users organize and stream their media content. The app uses Provider for state management, Go Router for navigation, and integrates with multiple media APIs (TMDB, AniList, StashDB).
 
 **Tech Stack:**
 - Flutter 3.38.4 (Dart 3.10.3)
 - Provider state management
 - Go Router for navigation
 - MSIX packaging for Windows
-- Firebase for cloud sync
+- Firebase for cloud sync and analytics
+- Media Kit for video playback
+- Multiple storage backends (Local, OneDrive, SFTP, FTP, WebDAV)
 
 ## Development Commands
 
@@ -70,6 +72,12 @@ flutter test --coverage
 
 # Run tests in watch mode
 flutter test --watch
+
+# Run tests with specific platform
+flutter test --platform chrome
+
+# Run tests with verbose output
+flutter test --verbose
 ```
 
 ### Code Quality
@@ -141,6 +149,15 @@ class ExampleWidget extends StatelessWidget {
     // Implementation
   }
 }
+```
+
+### File Headers
+Always start files with a descriptive header comment:
+```dart
+/// lib/services/example_service.dart
+/// 
+/// Service for handling example API operations
+/// Integrates with external APIs and provides data to providers
 ```
 
 ### State Management Pattern

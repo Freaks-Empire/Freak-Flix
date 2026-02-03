@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:webdav_client/webdav_client.dart' as webdav;
 import 'remote_storage_service.dart';
 import '../utils/input_validation.dart';
+import '../utils/secure_logger.dart';
 
 /// WebDAV client for browsing and streaming files
 class WebDavClientWrapper {
@@ -34,11 +35,11 @@ class WebDavClientWrapper {
         return false;
       }
       
-      // Build URL with proper scheme
-      final scheme = account.port == 443 ? 'https' : 'http';
+      // SECURITY: Always use HTTPS for secure connections
+      final scheme = 'https';
       final baseUrl = '$scheme://${account.host}:${account.port}';
       
-      debugPrint('WebDAV: Connecting to ${InputValidation.sanitizeForLogging(baseUrl)}');
+      SecureLogger.debug('Connecting to sanitized URL', 'WebDAV');
       
       _client = webdav.newClient(
         baseUrl,
@@ -49,10 +50,10 @@ class WebDavClientWrapper {
       
       // Test connection by reading root
       await _client!.readDir('/');
-      debugPrint('WebDAV: Connected to ${InputValidation.sanitizeForLogging(account.host)}');
+      SecureLogger.debug('Connected to host', 'WebDAV');
       return true;
     } catch (e) {
-      debugPrint('WebDAV Connection Error: $e');
+      SecureLogger.error('Connection error', e, 'WebDAV');
       return false;
     }
   }
@@ -82,7 +83,8 @@ class WebDavClientWrapper {
   String? getStreamUrl(String remotePath) {
     if (_client == null || _password == null) return null;
     
-    final scheme = account.port == 443 ? 'https' : 'http';
+    // SECURITY: Always use HTTPS for secure connections
+    final scheme = 'https';
     // Include auth in URL for direct access
     return '$scheme://${account.username}:$_password@${account.host}:${account.port}$remotePath';
   }
@@ -124,7 +126,8 @@ class WebDavClientWrapper {
     required String password,
   }) async {
     try {
-      final scheme = port == 443 ? 'https' : 'http';
+      // SECURITY: Always use HTTPS for secure connections
+      final scheme = 'https';
       final baseUrl = '$scheme://$host:$port';
       
       final client = webdav.newClient(
@@ -136,7 +139,7 @@ class WebDavClientWrapper {
       await client.readDir('/');
       return true;
     } catch (e) {
-      debugPrint('WebDAV Test Connection Failed: $e');
+      SecureLogger.error('Test connection failed', e, 'WebDAV');
       return false;
     }
   }

@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/library_provider.dart';
 import '../providers/profile_provider.dart';
+import '../utils/secure_logger.dart';
 import 'graph_auth_service.dart';
 
 class DataBackupService {
@@ -43,9 +44,9 @@ class DataBackupService {
        final jsonStr = jsonEncode(backupMap);
        final file = File(path);
        await file.writeAsString(jsonStr, flush: true);
-       debugPrint('DataBackupService: Backup saved to $path');
+       SecureLogger.debug('Backup saved successfully', 'DataBackupService');
     } catch (e) {
-      debugPrint('DataBackupService: Export failed: $e');
+       SecureLogger.error('Export failed', e, 'DataBackupService');
       rethrow;
     }
   }
@@ -58,7 +59,7 @@ class DataBackupService {
        final jsonStr = await file.readAsString();
        await restoreBackup(jsonStr);
      } catch (e) {
-       debugPrint('DataBackupService: Import failed: $e');
+        SecureLogger.error('Import failed', e, 'DataBackupService');
        rethrow;
      }
   }
@@ -99,7 +100,7 @@ class DataBackupService {
       }
       
     } catch (e) {
-      debugPrint('Restore failed: $e');
+       SecureLogger.error('Restore failed', e, 'DataBackupService');
       rethrow;
     }
   }
@@ -117,7 +118,7 @@ class DataBackupService {
       );
       debugPrint('DataBackupService: Backup uploaded to OneDrive: $fileName');
     } catch (e) {
-      debugPrint('DataBackupService: Backup upload failed: $e');
+       SecureLogger.error('Backup upload failed', e, 'DataBackupService');
       rethrow;
     }
   }

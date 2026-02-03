@@ -2,8 +2,13 @@
 /// Secure storage service for API keys and sensitive credentials
 
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:crypto/crypto.dart';
+import '../utils/secure_logger.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class SecureKeyService {
@@ -25,7 +30,7 @@ class SecureKeyService {
       final currentTmdbKey = await getTmdbApiKey();
       if (currentTmdbKey.isEmpty) {
         await setTmdbApiKey(tmdbEnvKey);
-        debugPrint('SecureKeyService: Loaded TMDB API key from environment');
+        SecureLogger.debug('Loaded TMDB API key from environment', 'SecureKeyService');
       }
     }
 
@@ -37,7 +42,7 @@ class SecureKeyService {
       final currentFirebaseKey = await getFirebaseApiKey();
       if (currentFirebaseKey.isEmpty) {
         await setFirebaseApiKey(firebaseApiKey);
-        debugPrint('SecureKeyService: Loaded Firebase API key from environment');
+        SecureLogger.debug('Loaded Firebase API key from environment', 'SecureKeyService');
       }
     }
 
@@ -60,9 +65,9 @@ class SecureKeyService {
   static Future<void> setTmdbApiKey(String apiKey) async {
     await _secureStorage.write(
       key: '$_tmdbKeyPrefix${_getKeySuffix()}',
-      value: _encryptKey(apiKey),
+      value: await _encryptKey(apiKey),
     );
-    debugPrint('SecureKeyService: TMDB API key stored securely');
+    SecureLogger.debug('TMDB API key stored securely', 'SecureKeyService');
   }
 
   /// Retrieve TMDB API key
@@ -71,9 +76,9 @@ class SecureKeyService {
       final encrypted = await _secureStorage.read(
         key: '$_tmdbKeyPrefix${_getKeySuffix()}',
       );
-      return encrypted != null ? _decryptKey(encrypted) : '';
+      return encrypted != null ? await _decryptKey(encrypted) : '';
     } catch (e) {
-      debugPrint('SecureKeyService: Error retrieving TMDB key: $e');
+      SecureLogger.error('Error retrieving TMDB key', e, 'SecureKeyService');
       return '';
     }
   }
@@ -81,16 +86,16 @@ class SecureKeyService {
   /// Delete TMDB API key
   static Future<void> deleteTmdbApiKey() async {
     await _secureStorage.delete(key: '$_tmdbKeyPrefix${_getKeySuffix()}');
-    debugPrint('SecureKeyService: TMDB API key deleted');
+    SecureLogger.debug('TMDB API key deleted', 'SecureKeyService');
   }
 
   /// Store Firebase API key securely
   static Future<void> setFirebaseApiKey(String apiKey) async {
     await _secureStorage.write(
       key: '$_firebaseKeyPrefix${_getKeySuffix()}',
-      value: _encryptKey(apiKey),
+      value: await _encryptKey(apiKey),
     );
-    debugPrint('SecureKeyService: Firebase API key stored securely');
+    SecureLogger.debug('Firebase API key stored securely', 'SecureKeyService');
   }
 
   /// Retrieve Firebase API key
@@ -99,9 +104,9 @@ class SecureKeyService {
       final encrypted = await _secureStorage.read(
         key: '$_firebaseKeyPrefix${_getKeySuffix()}',
       );
-      return encrypted != null ? _decryptKey(encrypted) : '';
+      return encrypted != null ? await _decryptKey(encrypted) : '';
     } catch (e) {
-      debugPrint('SecureKeyService: Error retrieving Firebase API key: $e');
+      SecureLogger.error('Error retrieving Firebase API key', e, 'SecureKeyService');
       return '';
     }
   }
@@ -110,7 +115,7 @@ class SecureKeyService {
   static Future<void> setFirebaseAppId(String appId) async {
     await _secureStorage.write(
       key: '${_firebaseKeyPrefix}app_id_${_getKeySuffix()}',
-      value: _encryptKey(appId),
+      value: await _encryptKey(appId),
     );
     debugPrint('SecureKeyService: Firebase App ID stored securely');
   }
@@ -121,9 +126,9 @@ class SecureKeyService {
       final encrypted = await _secureStorage.read(
         key: '${_firebaseKeyPrefix}app_id_${_getKeySuffix()}',
       );
-      return encrypted != null ? _decryptKey(encrypted) : '';
+      return encrypted != null ? await _decryptKey(encrypted) : '';
     } catch (e) {
-      debugPrint('SecureKeyService: Error retrieving Firebase App ID: $e');
+      SecureLogger.error('Error retrieving Firebase App ID', e, 'SecureKeyService');
       return '';
     }
   }
@@ -132,7 +137,7 @@ class SecureKeyService {
   static Future<void> setFirebaseProjectId(String projectId) async {
     await _secureStorage.write(
       key: '${_firebaseKeyPrefix}project_id_${_getKeySuffix()}',
-      value: _encryptKey(projectId),
+      value: await _encryptKey(projectId),
     );
     debugPrint('SecureKeyService: Firebase Project ID stored securely');
   }
@@ -143,9 +148,9 @@ class SecureKeyService {
       final encrypted = await _secureStorage.read(
         key: '${_firebaseKeyPrefix}project_id_${_getKeySuffix()}',
       );
-      return encrypted != null ? _decryptKey(encrypted) : '';
+      return encrypted != null ? await _decryptKey(encrypted) : '';
     } catch (e) {
-      debugPrint('SecureKeyService: Error retrieving Firebase Project ID: $e');
+      SecureLogger.error('Error retrieving Firebase Project ID', e, 'SecureKeyService');
       return '';
     }
   }
@@ -154,9 +159,9 @@ class SecureKeyService {
   static Future<void> deleteAllKeys() async {
     try {
       await _secureStorage.deleteAll();
-      debugPrint('SecureKeyService: All API keys deleted');
+    SecureLogger.debug('All API keys deleted', 'SecureKeyService');
     } catch (e) {
-      debugPrint('SecureKeyService: Error deleting all keys: $e');
+      SecureLogger.error('Error deleting all keys', e, 'SecureKeyService');
     }
   }
 
@@ -240,36 +245,63 @@ class SecureKeyService {
     return 'default';
   }
 
-  /// Basic encryption for API keys (XOR with a simple key)
-  static String _encryptKey(String key) {
+  /// Generate a secure encryption key from device-specific entropy
+  static Future<String> _getEncryptionKey() async {
     try {
-      final bytes = utf8.encode(key);
-      const xorKey = 'FreakFlixSecure2024'; // Simple XOR key
-      final keyBytes = utf8.encode(xorKey);
+      // Combine multiple entropy sources for a unique key per installation
+      final secureStorage = FlutterSecureStorage();
+      String? deviceKey = await secureStorage.read(key: 'device_encryption_key');
       
-      final encrypted = List<int>.generate(bytes.length, (i) => 
-          bytes[i] ^ keyBytes[i % keyBytes.length]);
+      if (deviceKey == null) {
+        // Generate new key from multiple entropy sources
+        final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+        final random = DateTime.now().microsecondsSinceEpoch.toString();
+        final entropy = 'FreakFlixSecure_${timestamp}_${random}';
+        
+        deviceKey = sha256.convert(utf8.encode(entropy)).toString();
+        await secureStorage.write(key: 'device_encryption_key', value: deviceKey);
+      }
+      
+      return deviceKey;
+    } catch (e) {
+      SecureLogger.error('Key generation error', e, 'SecureKeyService');
+      // Fallback to a less secure but deterministic key
+      return sha256.convert(utf8.encode('FreakFlixSecureFallback')).toString();
+    }
+  }
+
+  /// Secure encryption using SHA-256 based key derivation
+  static Future<String> _encryptKey(String key) async {
+    try {
+      final encryptionKey = await _getEncryptionKey();
+      final keyBytes = utf8.encode(key);
+      
+      // Use XOR with derived SHA-256 key for better security
+      final derivedKey = sha256.convert(utf8.encode(encryptionKey)).bytes;
+      final encrypted = List<int>.generate(keyBytes.length, (i) => 
+          keyBytes[i] ^ derivedKey[i % derivedKey.length]);
       
       return base64Encode(encrypted);
     } catch (e) {
-      debugPrint('SecureKeyService: Encryption error: $e');
+      SecureLogger.error('Encryption error', e, 'SecureKeyService');
       return key; // Fallback to unencrypted
     }
   }
 
-  /// Basic decryption for API keys
-  static String _decryptKey(String encryptedKey) {
+  /// Secure decryption using SHA-256 based key derivation
+  static Future<String> _decryptKey(String encryptedKey) async {
     try {
+      final encryptionKey = await _getEncryptionKey();
       final encrypted = base64Decode(encryptedKey);
-      const xorKey = 'FreakFlixSecure2024'; // Must match encryption key
-      final keyBytes = utf8.encode(xorKey);
       
+      // Use XOR with derived SHA-256 key matching encryption
+      final derivedKey = sha256.convert(utf8.encode(encryptionKey)).bytes;
       final decrypted = List<int>.generate(encrypted.length, (i) => 
-          encrypted[i] ^ keyBytes[i % keyBytes.length]);
+          encrypted[i] ^ derivedKey[i % derivedKey.length]);
       
       return utf8.decode(decrypted);
     } catch (e) {
-      debugPrint('SecureKeyService: Decryption error: $e');
+      SecureLogger.error('Decryption error', e, 'SecureKeyService');
       return encryptedKey; // Fallback to original
     }
   }

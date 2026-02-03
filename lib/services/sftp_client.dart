@@ -6,6 +6,7 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'remote_storage_service.dart';
 import '../utils/input_validation.dart';
+import '../utils/secure_logger.dart';
 
 /// SFTP client for browsing and streaming files
 class SftpClient {
@@ -20,7 +21,7 @@ class SftpClient {
     // Validate connection parameters
     final hostValidation = InputValidation.validateHostname(account.host);
     if (hostValidation != null) {
-      debugPrint('SFTP: Invalid host - $hostValidation');
+      SecureLogger.warning('Invalid host validation', 'SFTP');
       return false;
     }
     
@@ -31,7 +32,7 @@ class SftpClient {
     }
     
     try {
-      debugPrint('SFTP: Connecting to ${InputValidation.sanitizeForLogging(account.host)}:${InputValidation.sanitizeForLogging(account.port.toString())}');
+      SecureLogger.debug('Connecting to SFTP server', 'SFTP');
       final socket = await SSHSocket.connect(account.host, account.port);
       
       _sshClient = SSHClient(
@@ -45,10 +46,10 @@ class SftpClient {
 
       // Wait for authentication
       await _sshClient!.authenticated;
-      debugPrint('SFTP: Connected to ${InputValidation.sanitizeForLogging(account.host)}');
+      SecureLogger.debug('Connected to SFTP server', 'SFTP');
       return true;
     } catch (e) {
-      debugPrint('SFTP Connection Error: $e');
+      SecureLogger.error('Connection error', e, 'SFTP');
       return false;
     }
   }
@@ -137,7 +138,7 @@ class SftpClient {
       client.close();
       return true;
     } catch (e) {
-      debugPrint('SFTP Test Connection Failed: $e');
+      SecureLogger.error('Test connection failed', e, 'SFTP');
       return false;
     }
   }

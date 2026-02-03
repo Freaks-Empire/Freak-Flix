@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'persistence_service.dart';
+import '../utils/secure_logger.dart';
 
 // Conditional import for web OAuth
 import 'graph_auth_stub.dart'
@@ -249,9 +250,9 @@ class GraphAuthService {
           value: account.refreshToken,
         );
       }
-      debugPrint('GraphAuthService: Saved tokens for account ${account.id} to secure storage');
+      SecureLogger.debug('Saved tokens for account to secure storage', 'GraphAuthService');
     } catch (e) {
-      debugPrint('GraphAuthService: Error saving tokens to secure storage: $e');
+      SecureLogger.error('Error saving tokens to secure storage', e, 'GraphAuthService');
       rethrow;
     }
   }
@@ -261,13 +262,13 @@ class GraphAuthService {
     try {
       final accessToken = await _secureStorage.read(key: 'graph_token_$accountId');
       final refreshToken = await _secureStorage.read(key: 'graph_refresh_$accountId');
-      debugPrint('GraphAuthService: Loaded tokens for account $accountId from secure storage');
+      SecureLogger.debug('Loaded tokens for account from secure storage', 'GraphAuthService');
       return {
         'accessToken': accessToken,
         'refreshToken': refreshToken,
       };
     } catch (e) {
-      debugPrint('GraphAuthService: Error loading tokens from secure storage: $e');
+      SecureLogger.error('Error loading tokens from secure storage', e, 'GraphAuthService');
       return {
         'accessToken': null,
         'refreshToken': null,
@@ -280,9 +281,9 @@ class GraphAuthService {
     try {
       await _secureStorage.delete(key: 'graph_token_$accountId');
       await _secureStorage.delete(key: 'graph_refresh_$accountId');
-      debugPrint('GraphAuthService: Deleted tokens for account $accountId from secure storage');
+      SecureLogger.debug('Deleted tokens for account from secure storage', 'GraphAuthService');
     } catch (e) {
-      debugPrint('GraphAuthService: Error deleting tokens from secure storage: $e');
+      SecureLogger.error('Error deleting tokens from secure storage', e, 'GraphAuthService');
     }
   }
 
