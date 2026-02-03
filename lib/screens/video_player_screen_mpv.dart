@@ -18,6 +18,7 @@ import '../../services/sftp_streaming_service.dart';
 import '../../utils/url_validator.dart';
 import '../utils/secure_logger.dart';
 import '../utils/retry_handler.dart';
+import '../utils/video_validator.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
   final MediaItem item;
@@ -93,6 +94,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       if (mounted) {
         setState(() {
           _sftpError = 'Security Error: ${urlValidation.message}';
+        });
+      }
+      return;
+    }
+
+    // Validate video file format
+    final videoValidation = SimpleVideoValidator.validateVideo(url);
+    if (!videoValidation['is_supported'] as bool) {
+      SecureLogger.warning('Unsupported video format', 'VideoPlayer');
+      if (mounted) {
+        setState(() {
+          _sftpError = 'Unsupported video format: ${videoValidation['file_extension']}';
         });
       }
       return;
