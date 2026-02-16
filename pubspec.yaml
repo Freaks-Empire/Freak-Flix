@@ -48,6 +48,8 @@ dependencies:
   webdav_client: ^1.2.2         # WebDAV client
   flutter_secure_storage: ^10.0.0 # Secure credential storage
   webview_flutter: ^4.10.0        # WebView for Vidking embed
+  google_sign_in: ^7.0.0          # Google Drive authentication
+  googleapis: ^14.0.0             # Google Drive API
 
 dev_dependencies:
   flutter_test:

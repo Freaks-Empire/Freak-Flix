@@ -1,200 +1,118 @@
 # AGENTS.md
 
-This file contains guidelines and commands for agentic coding agents working in Freak-Flix repository.
+Guidelines for AI coding agents working in Freak-Flix repository.
 
 ## Project Overview
 
-Freak-Flix is a Flutter-based cross-platform media library application that helps users organize and stream their media content. The app uses Provider for state management, Go Router for navigation, and integrates with multiple media APIs (TMDB, AniList, StashDB).
+Freak-Flix is a Flutter media library app with multi-storage backend support (Local, OneDrive, SFTP, FTP, WebDAV). Uses Provider for state management, Go Router for navigation, and integrates with TMDB, AniList, and StashDB APIs.
 
-**Tech Stack:**
-- Flutter 3.38.4 (Dart 3.10.3)
-- Provider state management
-- Go Router for navigation
-- MSIX packaging for Windows
-- Firebase for cloud sync and analytics
-- Media Kit for video playback
-- Multiple storage backends (Local, OneDrive, SFTP, FTP, WebDAV)
+**Tech Stack:** Flutter 3.38.4 (Dart 3.10.3), Provider, Go Router, Firebase, Media Kit, MSIX packaging
 
-## Development Commands
+## Build/Run/Test Commands
 
-### Package Management
 ```bash
 # Install dependencies
 flutter pub get
 
-# Upgrade dependencies
-flutter pub upgrade
-```
+# Run locally
+flutter run -d windows      # Windows (primary dev platform)
+flutter run -d chrome       # Web
+flutter run -d android      # Android
 
-### Running the Application
-```bash
-# Run on Windows (primary development platform)
-flutter run -d windows
-
-# Run on Android
-flutter run -d android
-
-# Run on Web (Chrome)
-flutter run -d chrome
-
-# Run with specific build flavor
-flutter run --release
-```
-
-### Building for Release
-```bash
-# Windows release build
+# Build release
 flutter build windows --release
-
-# Android release build
+flutter build web --release
 flutter build android --release
 
-# Web release build
-flutter build web --release
-
-# Create MSIX package (Windows distribution)
+# MSIX package
 flutter pub run msix:create
 
-# Use the automated Windows release script
-.\build_release.ps1
-```
+# Testing
+flutter test                                    # Run all tests
+flutter test test/security/command_injection_test.dart    # Single test file
+flutter test --coverage                         # With coverage
 
-### Testing Commands
-```bash
-# Run all tests
-flutter test
-
-# Run specific test file
-flutter test test/widget_test.dart
-
-# Run tests with coverage
-flutter test --coverage
-
-# Run tests in watch mode
-flutter test --watch
-
-# Run tests with specific platform
-flutter test --platform chrome
-
-# Run tests with verbose output
-flutter test --verbose
-```
-
-### Code Quality
-```bash
-# Static analysis (linting)
-flutter analyze
-
-# Format code
-dart format .
-
-# Check for formatting issues
-dart format --set-exit-if-changed .
+# Linting & formatting
+flutter analyze                                 # Static analysis
+flutter format .                                # Format all files
+dart format --set-exit-if-changed .            # CI check
 ```
 
 ## Code Style Guidelines
 
-### File Organization
-```
-lib/
-├── main.dart                 # App entry point
-├── app.dart                  # Root app widget
-├── router.dart               # Route configuration
-├── models/                   # Data models and entities
-├── providers/                # State management (Provider pattern)
-├── screens/                  # Full-screen UI components
-├── services/                 # API integrations and external services
-├── widgets/                  # Reusable UI components
-└── utils/                    # Utility functions and helpers
-```
+### Import Order
+1. Dart core (`dart:*`)
+2. Flutter (`package:flutter/*`)
+3. Third-party packages
+4. Local relative imports (`../models/`, `../providers/`)
 
-### Naming Conventions
-- **Files**: `snake_case.dart` (e.g., `media_item.dart`, `library_provider.dart`)
-- **Classes**: `PascalCase` (e.g., `MediaItem`, `LibraryProvider`)
-- **Variables/Methods**: `camelCase` (e.g., `mediaItems`, `fetchMetadata()`)
-- **Constants**: `UPPER_SNAKE_CASE` (e.g., `_baseHost`, `_imageBase`)
-- **Private members**: Prefix with `_` (e.g., `_client`, `_filter`)
-
-### Import Style
 ```dart
-// Dart core imports first
-import 'dart:convert';
 import 'dart:async';
+import 'dart:io';
 
-// Flutter packages
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:media_kit/media_kit.dart';
 
-// Third-party packages
-import 'package:http/http.dart' as http;
-
-// Local imports (relative)
 import '../models/media_item.dart';
 import '../providers/library_provider.dart';
 ```
 
-### Class and Widget Structure
-```dart
-/// File header describing the purpose of this widget/service
-/// lib/widgets/example_widget.dart
-import 'package:flutter/material.dart';
-
-/// A brief description of what this widget does.
-/// Use dartdoc comments for all public APIs.
-class ExampleWidget extends StatelessWidget {
-  const ExampleWidget({super.key});
-  
-  @override
-  Widget build(BuildContext context) {
-    // Implementation
-  }
-}
-```
+### Naming Conventions
+- **Files:** `snake_case.dart` (e.g., `library_provider.dart`)
+- **Classes:** `PascalCase` (e.g., `LibraryProvider`)
+- **Variables/Methods:** `camelCase` (e.g., `mediaItems`, `fetchMetadata()`)
+- **Constants:** `UPPER_SNAKE_CASE` (e.g., `_BASE_URL`)
+- **Private members:** `_` prefix (e.g., `_client`, `_cache`)
+- **Widgets:** Suffix with `Widget` if not obvious
 
 ### File Headers
-Always start files with a descriptive header comment:
+Every file must start with a descriptive header:
 ```dart
-/// lib/services/example_service.dart
+/// lib/screens/library_screen.dart
 /// 
-/// Service for handling example API operations
-/// Integrates with external APIs and provides data to providers
+/// Main library screen showing user's media collection
+
+import 'package:flutter/material.dart';
 ```
 
-### State Management Pattern
-Use Provider pattern consistently:
+### Class Structure
 ```dart
-// In widgets
-Consumer<LibraryProvider>(
-  builder: (context, library, child) {
-    final bool isLoading = library.isLoading;
-    // UI implementation
-  },
-)
-
-// In models/services
-class LibraryProvider extends ChangeNotifier {
+class ExampleProvider extends ChangeNotifier {
   List<MediaItem> _items = [];
-  List<MediaItem> get items => _items;
+  bool _isLoading = false;
   
-  Future<void> fetchItems() async {
-    // Implementation
+  List<MediaItem> get items => _items;
+  bool get isLoading => _isLoading;
+  
+  Future<void> loadItems() async {
+    _isLoading = true;
     notifyListeners();
+    
+    try {
+      _items = await service.fetchItems();
+    } catch (e) {
+      _handleError(e);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+  
+  void _handleError(dynamic error) {
+    debugPrint('Error: $error');
   }
 }
 ```
 
 ### Error Handling
-- Use try-catch blocks for all async operations
-- Provide user-friendly error messages
-- Log errors appropriately (avoid print in production)
-- Handle null values with proper null safety
-
+Always use try-catch with context checking:
 ```dart
 try {
-  final result = await apiCall();
+  final result = await api.fetchData();
   return result;
 } catch (e) {
-  debugPrint('Error fetching data: $e');
+  debugPrint('API error: $e');
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Failed to load data')),
@@ -204,107 +122,78 @@ try {
 }
 ```
 
-### API Integration Guidelines
-- Use dependency injection for services (pass http.Client)
-- Implement proper error handling and null safety
-- Use cached_network_image for remote images
-- Follow existing service patterns (like TmdbService)
-- Store API keys in environment variables (.env file)
-
-### Testing Strategy
-- **Widget tests**: For UI components in `test/` directory
-- **Unit tests**: For services and providers
-- **Integration tests**: For critical user flows
-- Use `flutter_test` package with proper test structure
-
+### State Management
+Provider with ChangeNotifier:
 ```dart
-// Example test structure
+// In widgets
+Consumer<LibraryProvider>(
+  builder: (context, library, child) => ListView.builder(
+    itemCount: library.items.length,
+    itemBuilder: (context, index) => MediaCard(library.items[index]),
+  ),
+)
+```
+
+## Linting Configuration
+Project uses `flutter_lints` with custom rules in `analysis_options.yaml`:
+- `avoid_print: false` - print allowed for debugging
+- `prefer_const_declarations: false` - flexible const usage
+
+## Testing Guidelines
+
+### Test Structure
+```dart
+/// test/security/command_injection_test.dart
+/// 
+/// Tests for command injection attack prevention
+import 'package:flutter_test/flutter_test.dart';
+import '../helpers/security_test_helpers.dart';
+
 void main() {
-  testWidgets('MediaItemCard displays correctly', (WidgetTester tester) async {
-    // Test implementation
+  group('Command Injection Tests', () {
+    test('blocks semicolon injection', () {
+      SecurityTestHelpers.expectSecurityBlocked(
+        'user; rm -rf /',
+        (input) => InputValidation.validateUsername(input),
+        customMessage: 'Semicolon injection should be blocked',
+      );
+    });
   });
 }
 ```
 
-## Architecture Guidelines
+Security tests are in `test/security/` - use `SecurityTestHelpers` for assertions.
 
-### Provider Usage
-- Create separate providers for different domains (Library, Settings, Player)
-- Use ChangeNotifier for state management
-- Call `notifyListeners()` after state changes
-- Access providers through Consumer or Provider.of
+## Architecture
 
-### Navigation
-- Use Go Router for all navigation
-- Define routes in `lib/router.dart`
-- Use named routes with proper path parameters
-- Handle deep linking appropriately
-
-### Data Models
-- Keep models in `lib/models/` with proper JSON serialization
-- Use fromJson/toJson methods for API integration
-- Implement proper equality operators
-- Use immutable objects where possible
-
-### Services
-- Keep services in `lib/services/` for API integrations
-- Use dependency injection (pass http.Client)
-- Implement proper error handling
-- Cache responses when appropriate
-
-## Build and Deployment
-
-### Version Management
-- Version is managed in `pubspec.yaml`
-- Use git commit count for automated versioning
-- Maintain consistency across all platforms
-
-### Windows Distribution
-- Use MSIX packaging for Windows Store distribution
-- Configure MSIX settings in `pubspec.yaml`
-- Test MSIX package before distribution
-
-### Environment Configuration
-- Use `.env` file for environment variables
-- Load with `flutter_dotenv` package
-- Never commit sensitive data to repository
-
-## Common Patterns
-
-### Async Operations
-```dart
-Future<void> loadData() async {
-  if (isLoading) return;
-  
-  _isLoading = true;
-  notifyListeners();
-  
-  try {
-    _items = await service.fetchItems();
-  } catch (e) {
-    _error = e.toString();
-  } finally {
-    _isLoading = false;
-    notifyListeners();
-  }
-}
+### Directory Structure
+```
+lib/
+├── main.dart              # App entry point
+├── app.dart               # Root widget with MultiProvider
+├── router.dart            # GoRouter configuration
+├── models/                # Data models
+├── providers/             # ChangeNotifier providers
+├── screens/               # Full-screen widgets
+├── services/              # API integrations
+├── widgets/               # Reusable UI components
+└── utils/                 # Utilities, input validation
 ```
 
-### Responsive Design
-- Use LayoutBuilder for responsive layouts
-- Consider different screen sizes
-- Test on multiple platforms
+### API Integration
+- Pass `http.Client` for dependency injection
+- Implement fromJson/toJson in models
+- Store API keys in `.env` file
+- Handle null safety explicitly
 
 ### Performance
 - Use `const` constructors where possible
-- Implement proper image caching
-- Use ListView.builder for long lists
+- Use `ListView.builder` for long lists
 - Dispose resources properly
+- Use `cached_network_image` for remote images
 
-## Linting and Analysis
-
-The project uses `flutter_lints` with some custom rules:
-- `avoid_print: false` (allowed for debugging)
-- `prefer_const_declarations: false` (flexible const usage)
-
-Always run `flutter analyze` before committing changes to ensure code quality.
+## Environment
+- Use `.env` file for environment variables
+- Load via `flutter_dotenv` package
+- Never commit sensitive data
+- Version in `pubspec.yaml` under `msix_config:`

@@ -534,7 +534,7 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
 
   Widget _buildCloudAccountsSection(LibraryProvider library, MetadataService metadata) {
     // List of all supported cloud storage providers
-    final providers = ['OneDrive', 'SFTP', 'FTP', 'WebDAV'];
+    final providers = ['OneDrive', 'Google Drive', 'SFTP', 'FTP', 'WebDAV'];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -571,6 +571,11 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
         icon = LucideIcons.cloud;
         color = const Color(0xFF0078D4); // Microsoft Blue
         accountCount = _graphAuth.accounts.length;
+        break;
+      case 'Google Drive':
+        icon = LucideIcons.cloud;
+        color = const Color(0xFF4285F4); // Google Blue
+        accountCount = 0; // Coming soon
         break;
       case 'SFTP':
         icon = LucideIcons.shield;
@@ -700,6 +705,14 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
                       )
                     else
                       ..._graphAuth.accounts.map((account) => _buildAccountTile(account, library)),
+                  ] else if (provider == 'Google Drive') ...[
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'Google Drive integration coming soon!',
+                        style: TextStyle(color: AppColors.textSub, fontSize: 13),
+                      ),
+                    ),
                   ] else ...[
                     // SFTP, FTP, WebDAV accounts
                     ..._buildRemoteAccountTiles(provider, library),
@@ -707,11 +720,13 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
 
                   const SizedBox(height: 12),
                   
-                  // "Connect Account" button for this provider
+                  // "Connect Account" button for this provider (or Coming Soon for Google Drive)
                   _buildAddButton(
-                    icon: LucideIcons.plusCircle,
-                    label: 'Connect $provider Account',
-                    onTap: () => _connectProvider(provider),
+                    icon: provider == 'Google Drive' ? LucideIcons.clock : LucideIcons.plusCircle,
+                    label: provider == 'Google Drive' ? 'Coming Soon' : 'Connect $provider Account',
+                    onTap: provider == 'Google Drive' 
+                      ? () => _connectProvider(provider)
+                      : () => _connectProvider(provider),
                     isLoading: provider == 'OneDrive' ? _oneDriveLoading : false,
                     compact: true,
                   ),
@@ -832,6 +847,13 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
 
   /// Connect to a provider based on type
   void _connectProvider(String provider) {
+    if (provider == 'Google Drive') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Google Drive integration is coming soon!')),
+      );
+      return;
+    }
+    
     switch (provider) {
       case 'OneDrive':
         _connectOneDrive();
@@ -995,12 +1017,14 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
 
                   const SizedBox(height: 12),
                   
-                  // "Connect Account" button for this provider
+                  // "Connect Account" button for this provider (or Coming Soon for Google Drive)
                   _buildAddButton(
-                    icon: LucideIcons.plusCircle,
-                    label: 'Connect $provider Account',
+                    icon: provider == 'Google Drive' ? LucideIcons.clock : LucideIcons.plusCircle,
+                    label: provider == 'Google Drive' ? 'Coming Soon' : 'Connect $provider Account',
                     onTap: () {
-                      if (provider == 'OneDrive') {
+                      if (provider == 'Google Drive') {
+                        _connectProvider(provider);
+                      } else if (provider == 'OneDrive') {
                         _connectOneDrive();
                       }
                     },

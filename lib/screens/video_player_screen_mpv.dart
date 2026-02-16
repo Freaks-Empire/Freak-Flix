@@ -175,7 +175,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
           SecureLogger.debug('Got fresh URL from OneDrive', 'VideoPlayer');
         } else {
           SecureLogger.warning('Failed to refresh OneDrive URL, using fallback', 'VideoPlayer');
-          if (widget.item.streamUrl != null) url = widget.item.streamUrl!;
+          if (widget.item.streamUrl != null) {
+            url = widget.item.streamUrl!;
+          } else {
+            // No valid URL available - show error
+            SecureLogger.error('No valid URL for OneDrive item', 'VideoPlayer');
+            if (mounted) {
+              setState(() {
+                _sftpError = 'Unable to play: Could not get OneDrive URL. Please check your connection.';
+              });
+            }
+            return;
+          }
         }
       }
     } else if (widget.item.streamUrl != null) {
