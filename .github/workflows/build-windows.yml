@@ -81,6 +81,15 @@ jobs:
           if (Test-Path $source) { Copy-Item $source $target -Force }
           else { throw "Executable not found at $source" }
 
+      - name: Create ZIP archive
+        shell: pwsh
+        run: |
+          $sourceDir = "build/windows/x64/runner/Release"
+          $zipFile = "freakflix-windows-$($env:BUILD_NUMBER).zip"
+          Compress-Archive -Path "$sourceDir\*" -DestinationPath $zipFile -Force
+          Write-Host "Created $zipFile"
+          Get-ChildItem $zipFile
+
       - name: Generate version.json
         shell: pwsh
         run: |
@@ -99,6 +108,7 @@ jobs:
           name: freakflix-windows-${{ env.BUILD_NUMBER }}
           path: |
             build/windows/x64/runner/Release/freakflix-${{ env.BUILD_NUMBER }}.exe
+            freakflix-windows-${{ env.BUILD_NUMBER }}.zip
             version.json
 
       - name: Publish Release
@@ -109,9 +119,15 @@ jobs:
           name: Build ${{ env.BUILD_NUMBER }}
           files: |
             build/windows/x64/runner/Release/freakflix-${{ env.BUILD_NUMBER }}.exe
+            freakflix-windows-${{ env.BUILD_NUMBER }}.zip
             version.json
           body: |
             Automated Windows build.
+            
+            **Downloads:**
+            - `freakflix-${{ env.BUILD_NUMBER }}.exe` - Standalone executable (requires Visual C++ Redistributables)
+            - `freakflix-windows-${{ env.BUILD_NUMBER }}.zip` - Full portable package with all dependencies
+            
             Commit: ${{ github.sha }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
