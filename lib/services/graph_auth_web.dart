@@ -1,5 +1,11 @@
 /// lib/services/graph_auth_web.dart
-/// Web-specific OAuth popup implementation for Microsoft Graph authentication.
+/// DEPRECATED: Web-specific OAuth popup implementation
+/// 
+/// This file is no longer used. The app now uses Device Code Flow for all platforms
+/// including web, which doesn't require redirect URIs or popup windows.
+/// 
+/// Kept for reference only. Safe to delete if no longer needed.
+/// Last used before: Switch to Device Code Flow for web authentication
 
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;

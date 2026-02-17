@@ -8,9 +8,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'persistence_service.dart';
 import '../utils/secure_logger.dart';
 
-// Conditional import for web OAuth
-import 'graph_auth_stub.dart'
-    if (dart.library.html) 'graph_auth_web.dart';
+// Web OAuth is now handled via Device Code Flow (same as desktop)
+import 'graph_auth_stub.dart';
 
 class NotInitializedError implements Exception {
   final String message;
@@ -637,17 +636,13 @@ class GraphAuthService {
     return user;
   }
 
-  /// Smart connect method that chooses the right auth flow based on platform.
-  /// On web: uses popup OAuth flow
-  /// On other platforms: uses device code flow
+  /// Smart connect method that uses device code flow for all platforms.
+  /// Previously used popup OAuth on web, now unified to use device code flow everywhere.
   Future<GraphUser> connect({
     void Function(DeviceCodeSession session)? onUserCode,
   }) async {
-    if (kIsWeb) {
-      return connectWithWebPopup();
-    } else {
-      return connectWithDeviceCode(onUserCode: onUserCode);
-    }
+    // Device code flow works on all platforms (web, desktop, mobile)
+    return connectWithDeviceCode(onUserCode: onUserCode);
   }
 
   Future<GraphUser> _fetchMe(String token) async {

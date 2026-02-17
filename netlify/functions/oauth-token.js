@@ -1,6 +1,13 @@
 // netlify/functions/oauth-token.js
-// Serverless function to exchange OAuth authorization code for tokens
-// This avoids CORS issues since the request comes from server-side
+// DEPRECATED: Serverless function to exchange OAuth authorization code for tokens
+// 
+// This function is no longer used. The app now uses Device Code Flow for all platforms
+// including web, which doesn't require authorization code exchange.
+// 
+// Device Code Flow works directly with Microsoft's OAuth endpoints without needing
+// a server-side token exchange, eliminating CORS issues entirely.
+//
+// Safe to delete if no longer needed.
 
 exports.handler = async (event) => {
     // Handle CORS preflight
