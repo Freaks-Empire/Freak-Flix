@@ -1,0 +1,46 @@
+# GitHub Pages Configuration
+
+title: Freak-Flix
+description: A Netflix-style media library for your local and cloud content
+theme: jekyll-theme-cayman
+show_downloads: true
+
+# Social links
+github:
+  repository_url: https://github.com/Freaks-Empire/Freak-Flix
+  owner_url: https://github.com/Freaks-Empire
+  owner_name: Freaks Empire
+
+# SEO
+author: Protik Mondal
+email: protik@example.com
+
+# Google Analytics (add your tracking ID)
+google_analytics: 
+
+# Plugins
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap
+  - jekyll-feed
+
+# SEO Settings
+twitter:
+  username: freakflix
+  card: summary_large_image
+
+# Social
+social:
+  name: Freak-Flix
+  links:
+    - https://github.com/Freaks-Empire/Freak-Flix
+
+# Exclude files
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/
