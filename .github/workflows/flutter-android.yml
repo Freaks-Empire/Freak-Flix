@@ -44,16 +44,23 @@ jobs:
       - name: Build APK
         run: flutter build apk --release
 
+      - name: Rename APK with build number
+        run: |
+          mkdir -p release
+          cp build/app/outputs/flutter-apk/app-release.apk release/freakflix-android-${{ github.run_number }}.apk
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: android-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: release/freakflix-android-${{ github.run_number }}.apk
 
       - name: Publish Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
         with:
-          files: build/app/outputs/flutter-apk/app-release.apk
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          files: release/freakflix-android-${{ github.run_number }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

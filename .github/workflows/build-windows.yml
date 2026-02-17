@@ -109,7 +109,6 @@ jobs:
           path: |
             build/windows/x64/runner/Release/freakflix-${{ env.BUILD_NUMBER }}.exe
             freakflix-windows-${{ env.BUILD_NUMBER }}.zip
-            version.json
 
       - name: Publish Release
         if: github.ref == 'refs/heads/main'
@@ -120,13 +119,13 @@ jobs:
           files: |
             build/windows/x64/runner/Release/freakflix-${{ env.BUILD_NUMBER }}.exe
             freakflix-windows-${{ env.BUILD_NUMBER }}.zip
-            version.json
           body: |
-            Automated Windows build.
+            Automated Windows & Android build.
             
             **Downloads:**
-            - `freakflix-${{ env.BUILD_NUMBER }}.exe` - Standalone executable (requires Visual C++ Redistributables)
-            - `freakflix-windows-${{ env.BUILD_NUMBER }}.zip` - Full portable package with all dependencies
+            - `freakflix-${{ env.BUILD_NUMBER }}.exe` - Windows standalone executable (requires Visual C++ Redistributables)
+            - `freakflix-windows-${{ env.BUILD_NUMBER }}.zip` - Windows full portable package with all dependencies  
+            - `freakflix-android-${{ env.BUILD_NUMBER }}.apk` - Android APK (uploaded by Android workflow)
             
             Commit: ${{ github.sha }}
         env:
