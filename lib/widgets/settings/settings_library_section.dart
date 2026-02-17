@@ -1972,10 +1972,9 @@ class _SettingsLibrarySectionState extends State<SettingsLibrarySection> {
     setState(() => _oneDriveLoading = true);
     BuildContext? dialogContext;
     try {
-      // On web, use popup OAuth flow (no dialog needed)
-      // On native, use device code flow with dialog
+      // Use device code flow for all platforms (web, desktop, mobile)
       final user = await _graphAuth.connect(
-        onUserCode: kIsWeb ? null : (session) {
+        onUserCode: (session) {
           showDialog(
             context: context,
             barrierDismissible: false,
