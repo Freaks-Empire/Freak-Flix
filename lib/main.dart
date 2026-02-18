@@ -11,9 +11,6 @@ import 'providers/library_provider.dart';
 import 'providers/playback_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/profile_provider.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'firebase_options.dart';
 import 'services/analytics_service.dart';
 
 
@@ -38,6 +35,10 @@ void main() async {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
+    // Initialize file logging first so we can capture all startup logs
+    await AppLogger.initializeFileLogging();
+    AppLogger.i('Freak-Flix starting up...', tag: 'Main');
+
     usePathUrlStrategy();
 
     try {
@@ -50,43 +51,15 @@ void main() async {
     // Config moved to service
     // New Relic Config - Logic moved to MonitoringService
 
-    // 1. Initialize Firebase (Skip on Windows - not supported)
-    final bool isWindowsDesktop = !kIsWeb && Platform.isWindows;
-    if (!isWindowsDesktop) {
-      try {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
+    // Set up error handlers
+    FlutterError.onError = (errorDetails) {
+      AppLogger.e('Caught Flutter Error: ${errorDetails.exception}', error: errorDetails.exception, stackTrace: errorDetails.stack, tag: 'Main');
+    };
 
-        // 2. Set up Crashlytics (Mobile only usually)
-        if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-          FlutterError.onError = (errorDetails) {
-            AppLogger.e('Caught Flutter Error: ${errorDetails.exception}', error: errorDetails.exception, stackTrace: errorDetails.stack, tag: 'Main');
-            try {
-              FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
-            } catch (e) {
-              AppLogger.e('Failed to report to Crashlytics: $e', error: e, tag: 'Main');
-            }
-          };
-
-          PlatformDispatcher.instance.onError = (error, stack) {
-            AppLogger.e('Caught Platform Error: $error', error: error, stackTrace: stack, tag: 'Main');
-            try {
-              FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-            } catch (e) {
-              AppLogger.e('Failed to report to Crashlytics: $e', error: e, tag: 'Main');
-            }
-            return true;
-          };
-        } else {
-          AppLogger.config('Firebase Crashlytics', 'disabled on this platform', tag: 'Main');
-        }
-      } catch (e) {
-        AppLogger.e('Firebase Init Failed (Likely due to missing configuration): $e', error: e, tag: 'Main');
-      }
-    } else {
-      AppLogger.config('Firebase', 'disabled on Windows desktop', tag: 'Main');
-    }
+    PlatformDispatcher.instance.onError = (error, stack) {
+      AppLogger.e('Caught Platform Error: $error', error: error, stackTrace: stack, tag: 'Main');
+      return true;
+    };
 
     await MonitoringService.initialize();
 
@@ -142,6 +115,7 @@ void main() async {
     final playbackProvider = PlaybackProvider(libraryProvider, profileProvider);
     
     // Auto Backup Manager (Windows)
+    final isWindowsDesktop = !kIsWeb && Platform.isWindows;
     if (isWindowsDesktop) {
        final autoBackupManager = AutoBackupManager(
           settings: settingsProvider, 

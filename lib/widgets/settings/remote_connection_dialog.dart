@@ -37,11 +37,22 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
   bool _obscurePassword = true;
   String? _testResult;
   bool _testSuccess = false;
+  String? _privateIpWarning;
 
   @override
   void initState() {
     super.initState();
     _portController.text = RemoteStorageAccount.defaultPort(widget.type).toString();
+    
+    // Listen for private IP warnings
+    _hostController.addListener(() {
+      final warning = InputValidation.getPrivateIpWarning(_hostController.text);
+      if (warning != _privateIpWarning) {
+        setState(() {
+          _privateIpWarning = warning;
+        });
+      }
+    });
   }
 
   @override
@@ -411,6 +422,42 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                   validator: InputValidation.validateDisplayName,
                 ),
 
+                // Security warning for private/local IP addresses
+                if (_privateIpWarning != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.warning_amber, color: Colors.orange.shade600, size: 20),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Network Warning',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _privateIpWarning!,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
                 // Security warning for FTP
                 if (widget.type == RemoteStorageType.ftp) ...[
                   const SizedBox(height: 16),
@@ -449,7 +496,7 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          '💡 Use SFTP (SSH) or WebDAV (HTTPS) for secure encrypted connections.',
+                          'Use SFTP (SSH) or WebDAV (HTTPS) for secure encrypted connections.',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.green,

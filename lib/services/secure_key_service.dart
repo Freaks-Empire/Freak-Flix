@@ -16,7 +16,6 @@ class SecureKeyService {
   
   // Key prefixes for different API types
   static const String _tmdbKeyPrefix = 'api_key_tmdb_';
-  static const String _firebaseKeyPrefix = 'api_key_firebase_';
   static const String _stashKeyPrefix = 'api_key_stash_';
 
   /// Initialize API keys from environment if not already set
@@ -32,32 +31,6 @@ class SecureKeyService {
         await setTmdbApiKey(tmdbEnvKey);
         SecureLogger.debug('Loaded TMDB API key from environment', 'SecureKeyService');
       }
-    }
-
-    // Firebase API Keys
-    final firebaseApiKey = dotenv.env['FIREBASE_API_KEY'] ?? 
-                         const String.fromEnvironment('FIREBASE_API_KEY');
-    if (firebaseApiKey.isNotEmpty && 
-        firebaseApiKey != 'your_firebase_api_key_here') {
-      final currentFirebaseKey = await getFirebaseApiKey();
-      if (currentFirebaseKey.isEmpty) {
-        await setFirebaseApiKey(firebaseApiKey);
-        SecureLogger.debug('Loaded Firebase API key from environment', 'SecureKeyService');
-      }
-    }
-
-    // Other Firebase config
-    final firebaseAppId = dotenv.env['FIREBASE_APP_ID'] ?? 
-                         const String.fromEnvironment('FIREBASE_APP_ID');
-    if (firebaseAppId.isNotEmpty && 
-        firebaseAppId != 'your_firebase_app_id_here') {
-      await setFirebaseAppId(firebaseAppId);
-    }
-
-    final firebaseProjectId = dotenv.env['FIREBASE_PROJECT_ID'] ?? 
-                           const String.fromEnvironment('FIREBASE_PROJECT_ID');
-    if (firebaseProjectId.isNotEmpty) {
-      await setFirebaseProjectId(firebaseProjectId);
     }
   }
 
@@ -89,70 +62,32 @@ class SecureKeyService {
     SecureLogger.debug('TMDB API key deleted', 'SecureKeyService');
   }
 
-  /// Store Firebase API key securely
-  static Future<void> setFirebaseApiKey(String apiKey) async {
+  /// Store StashDB API key securely
+  static Future<void> setStashApiKey(String apiKey) async {
     await _secureStorage.write(
-      key: '$_firebaseKeyPrefix${_getKeySuffix()}',
+      key: '$_stashKeyPrefix${_getKeySuffix()}',
       value: await _encryptKey(apiKey),
     );
-    SecureLogger.debug('Firebase API key stored securely', 'SecureKeyService');
+    SecureLogger.debug('StashDB API key stored securely', 'SecureKeyService');
   }
 
-  /// Retrieve Firebase API key
-  static Future<String> getFirebaseApiKey() async {
+  /// Retrieve StashDB API key
+  static Future<String> getStashApiKey() async {
     try {
       final encrypted = await _secureStorage.read(
-        key: '$_firebaseKeyPrefix${_getKeySuffix()}',
+        key: '$_stashKeyPrefix${_getKeySuffix()}',
       );
       return encrypted != null ? await _decryptKey(encrypted) : '';
     } catch (e) {
-      SecureLogger.error('Error retrieving Firebase API key', e, 'SecureKeyService');
+      SecureLogger.error('Error retrieving StashDB key', e, 'SecureKeyService');
       return '';
     }
   }
 
-  /// Store Firebase App ID securely
-  static Future<void> setFirebaseAppId(String appId) async {
-    await _secureStorage.write(
-      key: '${_firebaseKeyPrefix}app_id_${_getKeySuffix()}',
-      value: await _encryptKey(appId),
-    );
-    debugPrint('SecureKeyService: Firebase App ID stored securely');
-  }
-
-  /// Retrieve Firebase App ID
-  static Future<String> getFirebaseAppId() async {
-    try {
-      final encrypted = await _secureStorage.read(
-        key: '${_firebaseKeyPrefix}app_id_${_getKeySuffix()}',
-      );
-      return encrypted != null ? await _decryptKey(encrypted) : '';
-    } catch (e) {
-      SecureLogger.error('Error retrieving Firebase App ID', e, 'SecureKeyService');
-      return '';
-    }
-  }
-
-  /// Store Firebase Project ID securely
-  static Future<void> setFirebaseProjectId(String projectId) async {
-    await _secureStorage.write(
-      key: '${_firebaseKeyPrefix}project_id_${_getKeySuffix()}',
-      value: await _encryptKey(projectId),
-    );
-    debugPrint('SecureKeyService: Firebase Project ID stored securely');
-  }
-
-  /// Retrieve Firebase Project ID
-  static Future<String> getFirebaseProjectId() async {
-    try {
-      final encrypted = await _secureStorage.read(
-        key: '${_firebaseKeyPrefix}project_id_${_getKeySuffix()}',
-      );
-      return encrypted != null ? await _decryptKey(encrypted) : '';
-    } catch (e) {
-      SecureLogger.error('Error retrieving Firebase Project ID', e, 'SecureKeyService');
-      return '';
-    }
+  /// Delete StashDB API key
+  static Future<void> deleteStashApiKey() async {
+    await _secureStorage.delete(key: '$_stashKeyPrefix${_getKeySuffix()}');
+    SecureLogger.debug('StashDB API key deleted', 'SecureKeyService');
   }
 
   /// Delete all API keys (for logout/reset)
@@ -184,8 +119,6 @@ class SecureKeyService {
     // Check for common placeholder values
     final placeholders = [
       'your_api_key_here',
-      'your_firebase_api_key_here',
-      'your_firebase_app_id_here',
       'api_key_here',
       'key_here',
       'your_key_here',
@@ -205,7 +138,7 @@ class SecureKeyService {
     }
 
     // Check for quotes and backticks
-    final pattern2 = RegExp('["\'`]', caseSensitive: false);
+    final pattern2 = RegExp('["\'\`]', caseSensitive: false);
     if (pattern2.hasMatch(trimmed)) {
       return 'API key contains invalid characters';
     }
@@ -316,23 +249,23 @@ class SecureKeyService {
   /// Check if any API keys are stored
   static Future<bool> hasStoredKeys() async {
     final tmdbKey = await getTmdbApiKey();
-    final firebaseKey = await getFirebaseApiKey();
+    final stashKey = await getStashApiKey();
     
-    return tmdbKey.isNotEmpty || firebaseKey.isNotEmpty;
+    return tmdbKey.isNotEmpty || stashKey.isNotEmpty;
   }
 
   /// Get security audit info for stored keys
   static Future<Map<String, dynamic>> getSecurityAudit() async {
     final tmdbKey = await getTmdbApiKey();
-    final firebaseKey = await getFirebaseApiKey();
+    final stashKey = await getStashApiKey();
     
     return {
       'tmdb_key_stored': tmdbKey.isNotEmpty,
       'tmdb_key_length': tmdbKey.length,
       'tmdb_key_is_test': tmdbKey.isNotEmpty ? isTestKey(tmdbKey) : false,
-      'firebase_key_stored': firebaseKey.isNotEmpty,
-      'firebase_key_length': firebaseKey.length,
-      'firebase_key_is_test': firebaseKey.isNotEmpty ? isTestKey(firebaseKey) : false,
+      'stash_key_stored': stashKey.isNotEmpty,
+      'stash_key_length': stashKey.length,
+      'stash_key_is_test': stashKey.isNotEmpty ? isTestKey(stashKey) : false,
       'storage_method': 'flutter_secure_storage',
       'encryption_enabled': true,
     };

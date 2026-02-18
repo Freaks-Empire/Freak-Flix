@@ -21,6 +21,7 @@ import 'screens/anime_screen.dart';
 import 'package:go_router/go_router.dart';
 import 'router.dart';
 import 'screens/adult_screen.dart';
+import 'utils/logger.dart';
 
 class FreakFlixApp extends StatefulWidget {
   const FreakFlixApp({super.key});
@@ -39,6 +40,13 @@ class _FreakFlixAppState extends State<FreakFlixApp> {
     final settings = context.read<SettingsProvider>();
     final profiles = context.read<ProfileProvider>();
     _router = createRouter(settings, profiles);
+  }
+
+  @override
+  void dispose() {
+    // Close log file when app closes
+    AppLogger.dispose();
+    super.dispose();
   }
 
   @override

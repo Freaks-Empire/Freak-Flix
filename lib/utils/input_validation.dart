@@ -170,12 +170,8 @@ class InputValidation {
       }
     }
 
-    // Check for private IP ranges
-    for (final network in _privateNetworks) {
-      if (trimmed.startsWith(network)) {
-        return 'Private IP addresses not allowed';
-      }
-    }
+    // Note: Private IP ranges are now allowed - validation moved to warning system
+    // Users can connect to private IPs but will see a security warning
 
     // Basic hostname format validation
     if (!RegExp(r'^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$').hasMatch(trimmed)) {
@@ -199,6 +195,39 @@ class InputValidation {
     return null;
   }
 
+  /// Checks if hostname is a private/local IP address (for warnings only)
+  /// Returns a warning message if it's a private IP, null otherwise
+  static String? getPrivateIpWarning(String? hostname) {
+    if (hostname == null || hostname.trim().isEmpty) {
+      return null;
+    }
+
+    final trimmed = hostname.trim();
+
+    // Check for localhost and loopback
+    final localHostnames = [
+      'localhost',
+      '127.0.0.1',
+      '::1',
+      '0.0.0.0',
+    ];
+    
+    for (final local in localHostnames) {
+      if (trimmed.toLowerCase() == local) {
+        return 'Warning: Connecting to localhost/loopback address';
+      }
+    }
+
+    // Check for private IP ranges
+    for (final network in _privateNetworks) {
+      if (trimmed.startsWith(network)) {
+        return 'Warning: Private IP addresses may not be accessible from all networks';
+      }
+    }
+
+    return null;
+  }
+
   /// Validates port number
   static String? validatePort(String? port) {
     if (port == null || port.trim().isEmpty) {
@@ -215,7 +244,8 @@ class InputValidation {
     }
 
     // Block common administrative ports (except for specific protocols)
-    final blockedPorts = {22, 23, 25, 53, 135, 139, 445, 993, 995};
+    // Note: Port 22 (SSH/SFTP) is allowed for remote storage connections
+    final blockedPorts = {23, 25, 53, 135, 139, 445, 993, 995};
     if (blockedPorts.contains(portNum)) {
       return 'Port $portNum is not allowed for security reasons';
     }

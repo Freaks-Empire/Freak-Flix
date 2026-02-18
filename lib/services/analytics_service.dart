@@ -1,54 +1,26 @@
-import 'package:firebase_analytics/firebase_analytics.dart';
+/// lib/services/analytics_service.dart
+/// Analytics service (Firebase removed - now a no-op stub)
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 class AnalyticsService {
-  FirebaseAnalytics? _analytics;
-
   AnalyticsService() {
-    // Only use Firebase Analytics on supported platforms where Firebase is initialized
-    if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
-      try {
-        _analytics = FirebaseAnalytics.instance;
-      } catch (e) {
-        debugPrint('AnalyticsService: Failed to get FirebaseAnalytics instance: $e');
-      }
-    }
+    debugPrint('AnalyticsService: Firebase Analytics removed - analytics disabled');
   }
 
-  // Log when a user opens a movie
+  // Log when a user opens a movie (no-op)
   Future<void> logMovieView(String movieId, String movieTitle) async {
-    if (_analytics == null) return;
-    try {
-      await _analytics!.logEvent(
-        name: 'view_movie',
-        parameters: {
-          'id': movieId,
-          'title': movieTitle,
-        },
-      );
-    } catch (_) {}
+    // Firebase removed - analytics disabled
   }
 
-  // Log when a user plays a video
+  // Log when a user plays a video (no-op)
   Future<void> logVideoStart(String movieTitle) async {
-    if (_analytics == null) return;
-    try {
-      await _analytics!.logEvent(
-        name: 'video_start',
-        parameters: {
-          'title': movieTitle,
-        },
-      );
-    } catch (_) {}
+    // Firebase removed - analytics disabled
   }
 
-  // Log searches
+  // Log searches (no-op)
   Future<void> logSearch(String query) async {
-    if (_analytics == null) return;
-    try {
-      await _analytics!.logSearch(searchTerm: query);
-    } catch (_) {}
+    // Firebase removed - analytics disabled
   }
 }
