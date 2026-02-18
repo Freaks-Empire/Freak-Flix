@@ -1893,12 +1893,15 @@ class LibraryProvider extends ChangeNotifier {
         ? file.path.substring(0, file.path.lastIndexOf('/'))
         : '/';
 
+    // Build full filePath with protocol prefix for remote files
+    final filePath = '${folder.path.split(':').first}:${folder.accountId}:${file.path}';
+
     return MediaItem(
       id: itemId,
       title: parsed.movieTitle ?? file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       year: parsed.year,
       type: type,
-      filePath: file.path,
+      filePath: filePath,
       fileName: file.name,
       folderPath: folderPathFromFile,
       sizeBytes: file.size ?? 0,
