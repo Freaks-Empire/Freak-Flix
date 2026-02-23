@@ -24,6 +24,8 @@ import '../services/sftp_client.dart';
 import '../services/ftp_client_wrapper.dart';
 import '../services/webdav_client_wrapper.dart';
 import '../services/scan_orchestration_service.dart';
+import '../services/library_filter_service.dart';
+import '../services/library_import_export_service.dart';
 
 import 'settings_provider.dart';
 import '../utils/filename_parser.dart';
@@ -47,116 +49,35 @@ class LibraryProvider extends ChangeNotifier {
   List<MediaItem> get items => _filteredItems;
   List<MediaItem> get allItems => List.unmodifiable(_allItems);
 
-  List<MediaItem> get continueWatchingItems {
-    return _filteredItems.where((item) {
-      final pos = item.lastPositionSeconds;
-      final total = item.totalDurationSeconds ??
-          (item.runtimeMinutes != null ? item.runtimeMinutes! * 60 : 0);
+  List<MediaItem> get continueWatchingItems =>
+      LibraryFilterService.filterContinueWatchingDetailed(_filteredItems);
 
-      // Basic check: has position, not fully watched
-      if (pos <= 0) return false;
-      if (item.isWatched) return false;
-
-      // Optional: ignore if < 5% or > 95%?
-      // For now, raw check is fine.
-      // User might want to resume end credits?
-      // Usually "Continue Watching" excludes finished items.
-
-      return true;
-    }).toList()
-      ..sort((a, b) => b.lastModified
-          .compareTo(a.lastModified)); // Most recently modified/watched first
-  }
-
-  List<MediaItem> get historyItems {
-    return _filteredItems.where((item) {
-      // User request: History only shows if completely watched
-      return item.isWatched;
-    }).toList()
-      ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
-  }
+  List<MediaItem> get historyItems =>
+      LibraryFilterService.filterHistory(_filteredItems);
 
   // --- Profile Statistics ---
-  
-  /// Total watch time in seconds across all watched content
-  int get totalWatchTimeSeconds {
-    int total = 0;
-    for (final item in _filteredItems) {
-      if (item.isWatched && item.runtimeMinutes != null) {
-        total += item.runtimeMinutes! * 60;
-      } else if (item.lastPositionSeconds > 0) {
-        total += item.lastPositionSeconds;
-      }
-    }
-    return total;
-  }
 
-  /// Count of fully watched movies
-  int get watchedMoviesCount => _filteredItems
-      .where((i) => i.type == MediaType.movie && i.isWatched).length;
+  int get totalWatchTimeSeconds =>
+      LibraryFilterService.calculateTotalWatchTime(_filteredItems);
 
-  /// Count of fully watched TV episodes  
-  int get watchedEpisodesCount => _filteredItems
-      .where((i) => i.type == MediaType.tv && i.isWatched).length;
+  int get watchedMoviesCount =>
+      LibraryFilterService.countWatchedMovies(_filteredItems);
 
-  /// Genre breakdown map {genre: count}
-  Map<String, int> get genreBreakdown {
-    final map = <String, int>{};
-    for (final item in _filteredItems.where((i) => i.isWatched || i.lastPositionSeconds > 0)) {
-      for (final genre in item.genres) {
-        map[genre] = (map[genre] ?? 0) + 1;
-      }
-    }
-    return map;
-  }
+  int get watchedEpisodesCount =>
+      LibraryFilterService.countWatchedEpisodes(_filteredItems);
 
-  /// Top genres sorted by count, limited to top N
-  List<MapEntry<String, int>> topGenres([int limit = 5]) {
-    final sorted = genreBreakdown.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    return sorted.take(limit).toList();
-  }
+  Map<String, int> get genreBreakdown =>
+      LibraryFilterService.calculateGenreBreakdown(_filteredItems);
 
-  /// Recent activity (items with any watch progress, sorted by lastModified)
-  List<MediaItem> get recentActivity => _filteredItems
-      .where((i) => i.lastPositionSeconds > 0 || i.isWatched)
-      .toList()
-    ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+  List<MapEntry<String, int>> topGenres([int limit = 5]) =>
+      LibraryFilterService.topGenres(_filteredItems, limit);
 
-  /// Watch activity by day for last 7 days {dayName: minutes}
-  Map<String, int> get watchActivityByDay {
-    final now = DateTime.now();
-    final dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    final activity = <String, int>{};
-    
-    // Initialize all days with 0 - order from 6 days ago to today
-    for (int i = 6; i >= 0; i--) {
-      final day = now.subtract(Duration(days: i));
-      activity[dayNames[day.weekday % 7]] = 0;
-    }
-    
-    // Aggregate watch time per day using actual watch dates from user data
-    for (final entry in _currentUserData.entries) {
-      final userData = entry.value;
-      if (userData.positionSeconds > 0 || userData.isWatched) {
-        final watchDate = userData.lastUpdated;
-        final dayDiff = now.difference(watchDate).inDays;
-        
-        if (dayDiff >= 0 && dayDiff < 7) {
-          final dayName = dayNames[watchDate.weekday % 7];
-          // Use position seconds as watch time in minutes
-          final minutes = userData.positionSeconds > 0 
-              ? userData.positionSeconds ~/ 60 
-              : 0;
-          activity[dayName] = (activity[dayName] ?? 0) + (minutes > 0 ? minutes : 30); // Default 30 min if watched but no position
-        }
-      }
-    }
-    
-    return activity;
-  }
+  List<MediaItem> get recentActivity =>
+      LibraryFilterService.recentActivity(_filteredItems);
 
-  /// Total number of items in library
+  Map<String, int> get watchActivityByDay =>
+      LibraryFilterService.calculateWatchActivityByDay(_currentUserData);
+
   int get totalLibraryCount => _allItems.length;
 
   List<LibraryFolder> libraryFolders = [];
@@ -417,7 +338,7 @@ class LibraryProvider extends ChangeNotifier {
         } else {
           // Other/Unknown: Keep inference but remove anime guessing if not strictly anime?
           // Actually we'll keep inference for 'Other'.
-          newType = _inferTypeFromPath(item);
+          newType = LibraryFilterService.inferTypeFromPath(item);
         }
       }
 
@@ -1294,108 +1215,39 @@ class LibraryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<MediaItem> get movies => settings.enableAdultContent
-      ? items.where((i) => i.type == MediaType.movie).toList()
-      : items.where((i) => i.type == MediaType.movie && !i.isAdult).toList();
+  List<MediaItem> get movies =>
+      LibraryFilterService.filterMovies(items, settings.enableAdultContent);
 
-  List<MediaItem> get adult => items.where((i) => i.isAdult).toList();
+  List<MediaItem> get adult => LibraryFilterService.filterAdult(items);
 
-  // Group TV/anime by showKey and aggregate episodes under one show card.
-  // TV tab excludes anime; Anime tab shows only anime.
-  List<MediaItem> get tv => _groupShows(settings.enableAdultContent
-      ? items.where((i) => i.type == MediaType.tv && !i.isAnime)
-      : items.where((i) => i.type == MediaType.tv && !i.isAnime && !i.isAdult));
+  List<MediaItem> get tv =>
+      LibraryFilterService.filterTv(items, settings.enableAdultContent);
 
-  List<MediaItem> get anime =>
-      _groupShows(items.where((i) => i.type == MediaType.tv && i.isAnime));
+  List<MediaItem> get anime => LibraryFilterService.filterAnime(items);
 
-  List<TvShowGroup> get groupedTvShows => _groupShowsToGroups(settings
-          .enableAdultContent
-      ? items.where((i) => i.type == MediaType.tv && !i.isAnime)
-      : items.where((i) => i.type == MediaType.tv && !i.isAnime && !i.isAdult));
+  List<TvShowGroup> get groupedTvShows =>
+      LibraryFilterService.groupedTvShows(items, settings.enableAdultContent);
 
-  List<TvShowGroup> get groupedAnimeShows => _groupShowsToGroups(
-      items.where((i) => i.type == MediaType.tv && i.isAnime));
+  List<TvShowGroup> get groupedAnimeShows =>
+      LibraryFilterService.groupedAnimeShows(items);
 
-  List<MediaItem> get continueWatching => settings.enableAdultContent
-      ? items.where((i) => i.lastPositionSeconds > 0 && !i.isWatched).toList()
-      : items
-          .where((i) => i.lastPositionSeconds > 0 && !i.isWatched && !i.isAdult)
-          .toList();
+  List<MediaItem> get continueWatching =>
+      LibraryFilterService.filterContinueWatching(
+          items, settings.enableAdultContent);
 
-  List<MediaItem> get recentlyAdded {
-    final pool =
-        settings.enableAdultContent ? items : items.where((i) => !i.isAdult);
-    final sorted = pool.toList()
-      ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
-    return sorted.take(20).toList();
-  }
+  List<MediaItem> get recentlyAdded =>
+      LibraryFilterService.filterRecentlyAdded(
+          items, settings.enableAdultContent);
 
-  List<MediaItem> get topRated {
-    final pool =
-        settings.enableAdultContent ? items : items.where((i) => !i.isAdult);
-    final sorted = pool.toList()
-      ..sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
-    return sorted.take(20).toList();
-  }
+  List<MediaItem> get topRated =>
+      LibraryFilterService.filterTopRated(items, settings.enableAdultContent);
 
-  /// Returns recommended local items based on type.
-  /// Logic: Unwatched items, filtered by type, sorted by Rating desc or Random?
-  /// Let's go with Random unwatched for discovery, or Rating.
-  /// User asked for "Recommended only show local files".
-  List<MediaItem> getRecommendedLocal(DiscoverType type) {
-    if (items.isEmpty) return [];
+  List<MediaItem> getRecommendedLocal(DiscoverType type) =>
+      LibraryFilterService.getRecommendedLocal(
+          items, type, settings.enableAdultContent);
 
-    // Base filter: Not Watched; include adult only when allowed.
-    var pool = settings.enableAdultContent
-        ? items.where((i) => !i.isWatched)
-        : items.where((i) => !i.isWatched && !i.isAdult);
-
-    switch (type) {
-      case DiscoverType.movie:
-        pool = pool.where((i) => i.type == MediaType.movie);
-        break;
-      case DiscoverType.tv:
-        pool = pool.where((i) => i.type == MediaType.tv && !i.isAnime);
-        break;
-      case DiscoverType.anime:
-        pool = pool.where((i) => i.isAnime);
-        break;
-      case DiscoverType.all:
-      default:
-        // Mixed
-        break;
-    }
-
-    // Group by Show to avoid showing every single episode
-    final uniqueList = <MediaItem>[];
-    final seenShows = <String>{};
-
-    for (final item in pool) {
-      if (item.type == MediaType.movie) {
-        uniqueList.add(item);
-      } else {
-        // TV / Anime
-        final key = item.showKey ??
-            item.tmdbId?.toString() ??
-            item.title ??
-            item.folderPath;
-        if (!seenShows.contains(key)) {
-          seenShows.add(key);
-          uniqueList.add(item);
-        }
-      }
-    }
-
-    // Shuffle for discovery
-    uniqueList.shuffle();
-
-    return uniqueList.take(20).toList();
-  }
-
-  MediaItem? findByTmdbId(int tmdbId) {
-    return items.firstWhereOrNull((i) => i.tmdbId == tmdbId);
-  }
+  MediaItem? findByTmdbId(int tmdbId) =>
+      LibraryFilterService.findByTmdbId(items, tmdbId);
 
   // --- Sync Methods ---
 
@@ -1749,291 +1601,45 @@ class LibraryProvider extends ChangeNotifier {
     return videoExtensions.contains(ext);
   }
 
-  Map<String, dynamic> exportState() {
-    return {
-      'folders': libraryFolders.map((f) => f.toJson()).toList(),
-      'items': MediaItem.listToJson(_allItems),
-    };
-  }
+  Map<String, dynamic> exportState() =>
+      LibraryImportExportService.export(libraryFolders, _allItems);
 
-  Map<String, UserMediaData> extractLegacyHistory() {
-    final map = <String, UserMediaData>{};
-    for (final item in _allItems) {
-      if (item.isWatched || item.lastPositionSeconds > 0) {
-        map[item.id] = UserMediaData(
-          mediaId: item.id,
-          positionSeconds: item.lastPositionSeconds,
-          isWatched: item.isWatched,
-          lastUpdated: DateTime.now(),
-        );
-        // Optional: clear legacy data from item? No, keep it as backup or for legacy readers.
-      }
-    }
-    return map;
-  }
+  Map<String, UserMediaData> extractLegacyHistory() =>
+      LibraryImportExportService.extractLegacyHistory(_allItems);
 
-  ({int count, int sizeBytes}) getFolderStats(LibraryFolder folder) {
-    // Defines which items belong to this folder
-    final relevant = _allItems.where((i) {
-      if (folder.accountId.isNotEmpty) {
-        // OneDrive items use ID convention: onedrive_{accountId}_{itemId}
-        // But checking by path is safer for nested folders?
-        // Our folderPath logic is 'onedrive:{accountId}:{path}'
-        // Let's verify if item belongs to this library folder tree.
-        // Actually, scanOneDrive uses 'onedrive:{accountId}' prefix for all items from that account.
-        // To distinguish between two folders from SAME account, we need path check.
-        final rootPath =
-            'onedrive:${folder.accountId}${folder.path.isEmpty ? '/' : folder.path}';
-        return i.folderPath.startsWith(rootPath);
-      } else {
-        // Local: path starts with folder.path
-        return i.filePath.startsWith(folder.path);
-      }
-    });
-
-    final count = relevant.length;
-    final size = relevant.fold<int>(0, (sum, item) => sum + item.sizeBytes);
-    return (count: count, sizeBytes: size);
-  }
+  ({int count, int sizeBytes}) getFolderStats(LibraryFolder folder) =>
+      LibraryImportExportService.computeFolderStats(_allItems, folder);
 
   Future<void> importState(Map<String, dynamic> data) async {
     AppLogger.d('Importing library state...', tag: 'LibraryProvider');
+    final result = LibraryImportExportService.importState(
+      data: data,
+      currentFolders: libraryFolders,
+      currentItems: _allItems,
+    );
 
-    // 1. Import Folders
-    final rawFolders = data['folders'] as List<dynamic>?;
-    if (rawFolders != null) {
-AppLogger.d('Processing ${rawFolders.length} folders from backup', tag: 'LibraryProvider');
-      final incomingFolders = rawFolders
-          .map((e) => LibraryFolder.fromJson(e as Map<String, dynamic>))
-          .toList();
-
-      // Merge Strategy:
-      // Start with a copy of current folders.
-      // Add incoming folders if they don't already exist (by ID/Account or Path).
-      final mergedFolders = <LibraryFolder>[...libraryFolders];
-
-      for (final inc in incomingFolders) {
-        // Check if exists by unique ID + Account
-        final existsById = mergedFolders.any(
-            (curr) => curr.id == inc.id && curr.accountId == inc.accountId);
-
-        if (!existsById) {
-          // For local folders, also check by Path to avoid duplicates just because ID is different
-          if (inc.accountId.isEmpty) {
-            final existsByPath = mergedFolders.any((curr) =>
-                curr.accountId.isEmpty &&
-                curr.path.toLowerCase() ==
-                    inc.path.toLowerCase()); // Windows insensitive
-
-            if (!existsByPath) {
-              mergedFolders.add(inc);
-            }
-          } else {
-            // Cloud folder: Add if ID didn't match
-            mergedFolders.add(inc);
-          }
-        }
-      }
-
-      libraryFolders = mergedFolders;
-AppLogger.d('Final folder count: ${libraryFolders.length}', tag: 'LibraryProvider');
-
-      await _saveLibraryFolders();
-      notifyListeners();
-    }
-
-    // 2. Import Items
-    final rawItems = data['items'];
-    if (rawItems != null) {
-      List<MediaItem> cloudItems = [];
-
-      if (rawItems is List) {
-        // Already decoded List
-        cloudItems = rawItems
-            .map((e) => MediaItem.fromJson(e as Map<String, dynamic>))
-            .toList();
-      } else if (rawItems is String) {
-        // Encoded String (Edge case if passed differently)
-        cloudItems = MediaItem.listFromJson(rawItems);
-      }
-
-AppLogger.d('Processing ${cloudItems.length} items from backup', tag: 'LibraryProvider');
-
-      final map = {for (var i in _allItems) i.id: i};
-      for (final i in cloudItems) {
-        // Overwrite local with cloud/backup version
-        map[i.id] = i;
-      }
-      _allItems = map.values.toList()
-        ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
-
-      AppLogger.d('Final item count: ${_allItems.length}', tag: 'LibraryProvider');
-
-      await saveLibrary();
-      notifyListeners();
-      _configChangedController.add(null);
-    }
+    libraryFolders = result.mergedFolders;
+    await _saveLibraryFolders();
+    _allItems = result.mergedItems;
+    await saveLibrary();
+    notifyListeners();
+    _configChangedController.add(null);
   }
 
-  /// Removes items from the library that no longer exist on the local filesystem.
-  /// Returns the number of items removed.
   Future<int> cleanLibrary() async {
-    int removedCount = 0;
-    final List<MediaItem> toRemove = [];
-
-    // Run in Isolate or simple async loop?
-    // Using simple async loop for now as checking file existence is fast enough 
-    // for typical libraries, but we should yield to UI.
-    
-    // We iterate a copy to avoid concurrent modification issues
-    final List<MediaItem> candidates = List.from(_allItems);
-    
-    for (final item in candidates) {
-      // Skip cloud items
-      bool isLocal = true;
-      if (item.filePath.startsWith('http') || 
-          item.folderPath.startsWith('onedrive:') ||
-          item.folderPath.startsWith('sftp:') || 
-          item.folderPath.startsWith('ftp:') || 
-          item.folderPath.startsWith('webdav:')) {
-        isLocal = false;
-      }
-      
-      if (isLocal) {
-        final file = File(item.filePath);
-        if (!file.existsSync()) {
-          // Double check: if filePath is relative? 
-          if (p.isAbsolute(item.filePath)) {
-             toRemove.add(item);
-          }
-        }
-      }
-      
-      // Yield to event loop every 100 items to prevent UI freeze
-      if (candidates.indexOf(item) % 100 == 0) {
-        await Future.delayed(Duration.zero);
-      }
-    }
+    final toRemove =
+        await LibraryImportExportService.findOrphanItems(_allItems);
 
     if (toRemove.isNotEmpty) {
       _allItems.removeWhere((item) => toRemove.contains(item));
-      
-      // Update filtered items (reset to all items for now to ensure consistency)
       _filteredItems = List.from(_allItems)
         ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
-        
       await saveLibrary();
-      removedCount = toRemove.length;
       notifyListeners();
     }
-    
-    return removedCount;
+
+    return toRemove.length;
   }
-}
-
-MediaType _inferTypeFromPath(MediaItem item) {
-  final fileName = p.basenameWithoutExtension(item.fileName).toLowerCase();
-  final folderName = p.basename(item.folderPath).toLowerCase();
-  final hasSeasonInFolder = RegExp(r'season[ _-]?\d{1,2}').hasMatch(folderName);
-  final hasTvPattern = RegExp(r'[Ss]\d{1,2}[Ee]\d{1,3}').hasMatch(fileName) ||
-      RegExp(r'(?:^|[\s._-])(?:ep(?:isode)?\s*)?\d{1,3}(?!\d)')
-          .hasMatch(fileName) ||
-      hasSeasonInFolder ||
-      item.season != null ||
-      item.episode != null;
-
-  if (hasTvPattern) return MediaType.tv;
-  return MediaType.movie;
-}
-
-String _seriesKey(MediaItem item) {
-  if (item.showKey != null && item.showKey!.isNotEmpty) return item.showKey!;
-  // Group by folder so all episodes in the same directory share a key.
-  return item.folderPath.toLowerCase();
-}
-
-List<MediaItem> _groupShows(Iterable<MediaItem> source) {
-  final map = <String, MediaItem>{};
-  for (final item in source) {
-    final key = _seriesKey(item);
-    final episodeEntry = EpisodeItem(
-      season: item.season ?? 1,
-      episode: item.episode,
-      filePath: item.filePath,
-    );
-
-    if (!map.containsKey(key)) {
-      map[key] = item.copyWith(
-        showKey: item.showKey ?? key,
-        episodes: [episodeEntry],
-      );
-      continue;
-    }
-
-    final existing = map[key]!;
-    final updatedEpisodes = [...existing.episodes, episodeEntry];
-    map[key] = existing.copyWith(
-      title: existing.title?.isNotEmpty == true ? existing.title : item.title,
-      posterUrl: existing.posterUrl ?? item.posterUrl,
-      backdropUrl: existing.backdropUrl ?? item.backdropUrl,
-      overview: existing.overview ?? item.overview,
-      rating: existing.rating ?? item.rating,
-      runtimeMinutes: existing.runtimeMinutes ?? item.runtimeMinutes,
-      genres: existing.genres.isNotEmpty ? existing.genres : item.genres,
-      isAnime: existing.isAnime || item.isAnime,
-      tmdbId: existing.tmdbId ?? item.tmdbId,
-      showKey: existing.showKey ?? key,
-      episodes: updatedEpisodes,
-    );
-  }
-  return map.values.toList();
-}
-
-List<TvShowGroup> _groupShowsToGroups(Iterable<MediaItem> source) {
-  final map = <String, List<MediaItem>>{};
-  for (final item in source) {
-    // One group per showKey; fallback to folder path.
-    final key = (item.showKey != null && item.showKey!.isNotEmpty)
-        ? item.showKey!
-        : item.folderPath.toLowerCase();
-    map.putIfAbsent(key, () => []);
-    map[key]!.add(item);
-  }
-
-  return map.entries.map((entry) {
-    final episodes = entry.value;
-    episodes.sort((a, b) {
-      final sa = a.season ?? 0;
-      final sb = b.season ?? 0;
-      final ea = a.episode ?? 0;
-      final eb = b.episode ?? 0;
-      return sa != sb ? sa.compareTo(sb) : ea.compareTo(eb);
-    });
-    final first = episodes.first;
-    final parsedFirst = FilenameParser.parse(first.fileName);
-    final title = parsedFirst.seriesTitle.isNotEmpty
-        ? parsedFirst.seriesTitle
-        : (first.title?.isNotEmpty == true ? first.title! : first.fileName);
-    final poster = episodes
-        .firstWhere((e) => e.posterUrl != null, orElse: () => first)
-        .posterUrl;
-    final backdrop = episodes
-        .firstWhere((e) => e.backdropUrl != null, orElse: () => first)
-        .backdropUrl;
-    final year =
-        episodes.firstWhere((e) => e.year != null, orElse: () => first).year ??
-            parsedFirst.year;
-    final isAnime = episodes.any((e) => e.isAnime);
-    return TvShowGroup(
-      title: title,
-      isAnime: isAnime,
-      showKey: entry.key,
-      episodes: episodes,
-      posterUrl: poster,
-      backdropUrl: backdrop,
-      year: year,
-    );
-  }).toList();
 }
 
 // --- Top-Level Helpers and Isolate Logic ---
