@@ -2,10 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import '../utils/platform/platform.dart';
 import 'dart:async';
-import 'dart:isolate';
 import 'package:file_picker/file_picker.dart' hide PlatformFile;
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/library_folder.dart';
@@ -19,13 +17,12 @@ import '../services/tmdb_discover_service.dart';
 import '../services/metadata_service.dart';
 import '../services/sidecar_service.dart';
 import '../services/task_queue_service.dart';
-import '../services/remote_storage_service.dart';
-import '../services/sftp_client.dart';
-import '../services/ftp_client_wrapper.dart';
-import '../services/webdav_client_wrapper.dart';
 import '../services/scan_orchestration_service.dart';
 import '../services/library_filter_service.dart';
 import '../services/library_import_export_service.dart';
+import '../services/local_scan_service.dart';
+import '../services/onedrive_scan_service.dart';
+import '../services/remote_scan_service.dart';
 
 import 'settings_provider.dart';
 import '../utils/filename_parser.dart';
@@ -668,8 +665,8 @@ class LibraryProvider extends ChangeNotifier {
       List<PlatformFile> files, MetadataService? metadata) async {
     final newItems = <MediaItem>[];
     for (final f in files) {
-      if (_isVideo(f.path)) {
-        newItems.add(_parseFile(f));
+      if (LocalScanService.isVideo(f.path)) {
+        newItems.add(LocalScanService.parseFile(f));
       }
     }
     await _ingestItems(newItems, metadata);
@@ -901,17 +898,9 @@ class LibraryProvider extends ChangeNotifier {
       );
       final token = await auth.getFreshAccessToken(account.id);
 
-      // Client-Side Scan
-      // 1. Determine Root Endpoint
-      // If folder.id looks like a Graph ID (not a timestamp/uuid we generated), use it.
-      // But typically we store our own IDs. We rely on path if id is not a Graph ID?
-      // Actually, let's just stick to Path-based lookup for simplicity unless we stored the DriveItem ID.
-      // Our LibraryFolder.id is usually a timestamp. So we use path.
-
       String requestUrl;
       final baseUrl = '${auth.graphBaseUrl}/me/drive';
 
-      // Normalize path
       String path = folder.path.trim();
       if (path.startsWith('/')) path = path.substring(1);
       if (path.endsWith('/')) path = path.substring(0, path.length - 1);
@@ -924,17 +913,51 @@ class LibraryProvider extends ChangeNotifier {
 
       _setScanStatus('Scanning cloud files in $folderLabel...');
 
-      final foundItems = <MediaItem>[];
-      await _walkOneDriveFolder(
+      // Delegate scanning to OneDriveScanService
+      final foundItems = await OneDriveScanService.walkFolder(
         token: token,
         url: requestUrl,
-        // Use proper path joining prevents double slashes
         baseFolderPath: 'onedrive:${account.id}${path.isEmpty ? '' : '/$path'}',
         accountId: account.id,
-        collectedItems: foundItems,
+        cancelRequested: () => cancelRequested,
+        onProgress: (status) => _setScanStatus(status),
+        onItemFound: (item) async {
+          // Apply folder type classification
+          final parentFolder = libraryFolders.firstWhereOrNull((f) {
+            if (f.accountId != account.id) return false;
+            final fPath = f.path.startsWith('/') ? f.path : '/${f.path}';
+            final prefix =
+                'onedrive:${f.accountId}${fPath == '/' ? '/' : fPath}';
+            return item.folderPath.startsWith(prefix);
+          });
+
+          bool initialIsAdult = item.isAdult;
+          bool initialIsAnime = item.isAnime;
+          MediaType initialType = item.type;
+
+          if (parentFolder != null) {
+            if (parentFolder.type == LibraryType.adult) {
+              initialIsAdult = true;
+              initialType = MediaType.scene;
+            }
+            if (parentFolder.type == LibraryType.anime) {
+              initialIsAnime = true;
+            }
+          }
+
+          final adjustedItem = item.copyWith(
+              isAdult: initialIsAdult,
+              isAnime: initialIsAnime,
+              type: initialType);
+
+          await _ingestItems([adjustedItem], null);
+          reportScanProgress(scanned: (_scanService.scannedCount + 1));
+          if (_scanService.scannedCount % 50 == 0) await saveLibrary();
+          notifyListeners();
+        },
       );
 
-      // Ingest & Enrich (Parallel)
+      // Final ingest for any remaining items
       await _ingestItems(foundItems, metadata);
     } catch (e) {
       error = 'Cloud scan failed: $e';
@@ -947,267 +970,7 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _walkOneDriveFolder({
-    required String token,
-    required String url,
-    required String baseFolderPath,
-    required String accountId,
-    required List<MediaItem> collectedItems,
-  }) async {
-    if (cancelRequested) return;
-
-    String? nextLink = url;
-
-    while (nextLink != null && !cancelRequested) {
-      try {
-        final uri = Uri.parse(nextLink);
-
-        final response =
-            await http.get(uri, headers: {'Authorization': 'Bearer $token'});
-        if (response.statusCode != 200) {
-          AppLogger.e('Graph Walk Error: ${response.statusCode} - ${response.body}', tag: 'LibraryProvider');
-          return;
-        }
-
-        final map = jsonDecode(response.body);
-        final List<dynamic> value = map['value'] ?? [];
-
-        for (final item in value) {
-          if (cancelRequested) break;
-
-          final name = item['name'] as String;
-          final isFolder = item['folder'] != null;
-          final isFile = item['file'] != null;
-          final id = item['id'] as String;
-
-          if (isFolder) {
-            // Recurse
-            // "children" usage? Or construct new URL?
-            // If folder, we can just append :/children to its item path or use item ID.
-            // Using item ID is safer for special chars.
-            // URL: /me/drive/items/{item-id}/children
-            String childUrl =
-                'https://graph.microsoft.com/v1.0/me/drive/items/$id/children';
-
-            await _walkOneDriveFolder(
-              token: token,
-              url: childUrl,
-              baseFolderPath: '$baseFolderPath/$name',
-              accountId: accountId,
-              collectedItems: collectedItems,
-            );
-          } else if (isFile) {
-            // Check extension
-            if (_isVideo(name)) {
-              _setScanStatus('Found: $name');
-              var newItem =
-                  _createMediaItemFromGraph(item, accountId, baseFolderPath);
-
-              // Try to read sibling NFO to lock metadata (stashid, etc.)
-              final nfoName = '${p.basenameWithoutExtension(name)}.nfo';
-              final nfoEntry = value.cast<Map<String, dynamic>?>().firstWhere(
-                    (e) => e != null && (e['name'] as String? ?? '') == nfoName,
-                    orElse: () => null,
-                  );
-              final nfoDownloadUrl = nfoEntry != null
-                  ? nfoEntry['@microsoft.graph.downloadUrl'] as String?
-                  : null;
-              if (nfoDownloadUrl != null) {
-                try {
-                  final nfoRes = await http.get(Uri.parse(nfoDownloadUrl));
-                  if (nfoRes.statusCode == 200) {
-                    final nfoData = SidecarService.parseNfo(nfoRes.body);
-                    if (nfoData != null) {
-                      newItem = newItem.copyWith(
-                        stashId: nfoData['stashId'] as String?,
-                        tmdbId: nfoData['tmdbId'] as int? ?? newItem.tmdbId,
-                        anilistId:
-                            nfoData['anilistId'] as int? ?? newItem.anilistId,
-                        title: nfoData['title'] as String? ?? newItem.title,
-                        year: nfoData['year'] as int? ?? newItem.year,
-                      );
-                      if (nfoData['stashId'] != null) {
-                        AppLogger.d('Found stashid ${nfoData['stashId']} in NFO for $name', tag: 'LibraryProvider');
-                      }
-                    }
-                  }
-                } catch (_) {
-                  // Ignore NFO fetch errors; continue without lock
-                }
-              }
-
-              // Determine if adult/anime based on folder type immediately so it shows up in filtered view
-              final parentFolder = libraryFolders.firstWhereOrNull((f) {
-                if (f.accountId != accountId) return false;
-                final fPath = f.path.startsWith('/') ? f.path : '/${f.path}';
-                final prefix =
-                    'onedrive:${f.accountId}${fPath == '/' ? '/' : fPath}';
-                return newItem.folderPath.startsWith(prefix);
-              });
-
-              bool initialIsAdult = newItem.isAdult;
-              bool initialIsAnime = newItem.isAnime;
-              MediaType initialType = newItem.type;
-
-              if (parentFolder != null) {
-                if (parentFolder.type == LibraryType.adult) {
-                  initialIsAdult = true;
-                  initialType = MediaType.scene;
-                }
-                if (parentFolder.type == LibraryType.anime)
-                  initialIsAnime = true;
-              }
-
-              final adjustedItem = newItem.copyWith(
-                  isAdult: initialIsAdult,
-                  isAnime: initialIsAnime,
-                  type: initialType);
-
-              await _ingestItems(
-                  [adjustedItem], null); // No metadata fetch here!
-              collectedItems.add(adjustedItem);
-
-              reportScanProgress(scanned: (_scanService.scannedCount + 1));
-              // Throttle saving to avoid UI jank
-              if (_scanService.scannedCount % 50 == 0) await saveLibrary();
-              notifyListeners();
-            }
-          }
-        }
-
-        nextLink = map['@odata.nextLink'];
-      } catch (e) {
-        AppLogger.e('Graph Walk Exception: $e', error: e, tag: 'LibraryProvider');
-        nextLink = null;
-      }
-    }
-  }
-
-  MediaItem _createMediaItemFromGraph(
-      Map<String, dynamic> json, String accountId, String folderPath) {
-    final id = json['id'] as String;
-    final name = json['name'] as String;
-    final size = json['size'] as int? ?? 0;
-    final lastModStr = json['lastModifiedDateTime'] as String?;
-    final lastMod =
-        lastModStr != null ? DateTime.parse(lastModStr) : DateTime.now();
-
-    final parsed = FilenameParser.parse(name);
-
-    // Construct overview with Studio if available
-    String? overview;
-    if (parsed.studio != null) {
-      overview = 'Studio: ${parsed.studio}\n';
-    }
-
-    List<CastMember> cast = [];
-    if (parsed.performers.isNotEmpty) {
-      cast = parsed.performers
-          .map<CastMember>((p) => CastMember(
-              name: p,
-              id: '',
-              character: 'Performer',
-              source: CastSource.stashDb))
-          .toList();
-    }
-    // Usually: onedrive_{accountId}_{fileId}
-    final itemId = 'onedrive_${accountId}_$id';
-
-    return MediaItem(
-      id: itemId,
-      filePath: name, // Display purpose mostly
-      fileName: name,
-      folderPath: folderPath, // e.g. onedrive:ACCOUNT/Movies/Action
-      sizeBytes: size,
-      lastModified: lastMod,
-      title: parsed.seriesTitle,
-      year: parsed.year, // Use parsed year (from date or YYYY)
-      overview: overview,
-      cast: cast,
-      isAdult:
-          parsed.studio != null, // Hint: if studio parsed, likely adult scene
-      type: parsed.studio != null ? MediaType.scene : MediaType.unknown,
-    );
-  }
-
-  bool _isVideo(String path) {
-    final ext = p.extension(path).toLowerCase();
-    return const ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v']
-        .contains(ext);
-  }
-
-  MediaItem _parseFile(PlatformFile f) {
-    final filePath = f.path;
-    final fileName = p.basename(filePath);
-    final folder = filePath.isNotEmpty ? p.dirname(filePath) : '';
-    final id = filePath.isNotEmpty
-        ? filePath.hashCode.toString()
-        : fileName.hashCode.toString();
-
-    final size = f.statSync().size;
-
-    final parsed = FilenameParser.parse(fileName);
-    final animeHint = folder.toLowerCase().contains('anime');
-
-    String? overview;
-    if (parsed.studio != null) {
-      overview = 'Studio: ${parsed.studio}\n';
-    }
-
-    List<CastMember> cast = [];
-    if (parsed.performers.isNotEmpty) {
-      cast = parsed.performers
-          .map<CastMember>((p) => CastMember(
-              name: p,
-              id: '',
-              character: 'Performer',
-              source: CastSource.stashDb))
-          .toList();
-    }
-
-    final type = parsed.studio != null ? MediaType.scene : MediaType.movie;
-
-    var item = MediaItem(
-      id: id,
-      filePath: filePath,
-      fileName: fileName,
-      folderPath: folder,
-      sizeBytes: size,
-      lastModified: f.statSync().modified,
-      title: parsed.seriesTitle,
-      year: parsed.year,
-      type: type,
-      season: parsed.season,
-      episode: parsed.episode,
-      isAnime: animeHint,
-      showKey: folder.toLowerCase(),
-      overview: overview,
-      cast: cast,
-      isAdult: parsed.studio != null,
-    );
-
-    // Read sibling NFO sidecar if present to lock identifiers/metadata
-    final nfoPath = p.setExtension(filePath, '.nfo');
-    final nfoFile = File(nfoPath);
-    if (nfoFile.existsSync()) {
-      try {
-        final nfoData = SidecarService.parseNfo(nfoFile.readAsStringSync());
-        if (nfoData != null) {
-          item = item.copyWith(
-            stashId: nfoData['stashId'] as String?,
-            tmdbId: nfoData['tmdbId'] as int? ?? item.tmdbId,
-            anilistId: nfoData['anilistId'] as int? ?? item.anilistId,
-            title: nfoData['title'] as String? ?? item.title,
-            year: nfoData['year'] as int? ?? item.year,
-          );
-        }
-      } catch (_) {
-        // Ignore malformed NFOs and continue
-      }
-    }
-
-    return item;
-  }
+  // _isVideo and _parseFile extracted → LocalScanService
 
   Future<void> clear() async {
     _allItems = [];
@@ -1296,23 +1059,13 @@ class LibraryProvider extends ChangeNotifier {
     beginScan(sourceLabel: sourceLabel);
 
     try {
-      final port = ReceivePort();
-      await Isolate.spawn(
-        _scanDirectoryInIsolate,
-        _ScanRequest(port.sendPort, path, keywords: keywords),
+      final scannedItems = await LocalScanService.scanFolder(
+        path,
+        keywords: keywords,
+        onProgress: (currentItem) {
+          reportScanProgress(sourceLabel: sourceLabel, currentItem: currentItem);
+        },
       );
-
-      final scannedItems = <MediaItem>[];
-      await for (final message in port) {
-        if (message is String) {
-          reportScanProgress(sourceLabel: sourceLabel, currentItem: message);
-        } else if (message is List<MediaItem>) {
-          scannedItems.addAll(message);
-        } else if (message == true) {
-          port.close();
-          break; // Done signal
-        }
-      }
 
       if (libraryType != null) {
         for (var i = 0; i < scannedItems.length; i++) {
@@ -1343,92 +1096,16 @@ class LibraryProvider extends ChangeNotifier {
     beginScan(sourceLabel: sourceLabel);
 
     try {
-      // Parse protocol and account ID from path
-      // Format: sftp:accountId/path or ftp:accountId/path or webdav:accountId/path
-      final pathParts = folder.path.split(':');
-      if (pathParts.length < 2) {
-        throw Exception('Invalid remote path format: ${folder.path}');
-      }
-      
-      final protocol = pathParts[0];
-      final remainder = pathParts.sublist(1).join(':');
-      final accountId = folder.accountId;
-      
-      // Extract the actual remote path (after accountId prefix)
-      String remotePath = '/';
-      if (remainder.startsWith(accountId)) {
-        remotePath = remainder.substring(accountId.length);
-        if (remotePath.isEmpty) remotePath = '/';
-      } else {
-        // Path might just be the full path after protocol:
-        remotePath = remainder.startsWith('/') ? remainder : '/$remainder';
-      }
-
-      // Get the account
-      final account = RemoteStorageService.instance.getAccount(accountId);
-      if (account == null) {
-        throw Exception('Remote account not found: $accountId');
-      }
-
-      // Get password
-      final password = await RemoteStorageService.instance.getPassword(accountId);
-      if (password == null) {
-        throw Exception('No credentials found for account');
-      }
-
-      _setScanStatus('Connecting to ${account.host}...');
+      _setScanStatus('Connecting...');
       notifyListeners();
 
-      // Convert protocol to type
-      RemoteStorageType type;
-      switch (protocol) {
-        case 'sftp':
-          type = RemoteStorageType.sftp;
-          break;
-        case 'ftp':
-          type = RemoteStorageType.ftp;
-          break;
-        case 'webdav':
-          type = RemoteStorageType.webdav;
-          break;
-        default:
-          throw Exception('Unknown protocol: $protocol');
-      }
-
-      // Scan based on protocol type
-      final scannedItems = <MediaItem>[];
-      
-      switch (type) {
-        case RemoteStorageType.sftp:
-          final client = SftpClient(account);
-          if (await client.connect(password)) {
-            await _scanSftpDirectory(client, remotePath, folder, scannedItems, sourceLabel);
-            client.disconnect();
-          } else {
-            throw Exception('Failed to connect to SFTP server');
-          }
-          break;
-          
-        case RemoteStorageType.ftp:
-          final client = FtpClientWrapper(account);
-          if (await client.connect(password)) {
-            await _scanFtpDirectory(client, remotePath, folder, scannedItems, sourceLabel);
-            await client.disconnect();
-          } else {
-            throw Exception('Failed to connect to FTP server');
-          }
-          break;
-          
-        case RemoteStorageType.webdav:
-          final client = WebDavClientWrapper(account);
-          if (await client.connect(password)) {
-            await _scanWebDavDirectory(client, remotePath, folder, scannedItems, sourceLabel);
-            client.disconnect();
-          } else {
-            throw Exception('Failed to connect to WebDAV server');
-          }
-          break;
-      }
+      final scannedItems = await RemoteScanService.scanFolder(
+        folder,
+        cancelRequested: () => cancelRequested,
+        onProgress: (status) {
+          reportScanProgress(sourceLabel: sourceLabel, currentItem: status);
+        },
+      );
 
       // Apply library type classifications
       for (var i = 0; i < scannedItems.length; i++) {
@@ -1441,7 +1118,6 @@ class LibraryProvider extends ChangeNotifier {
       }
 
       await _ingestItems(scannedItems, metadata);
-      
     } catch (e) {
       error = e.toString();
       AppLogger.e('Remote scan error: $e', error: e, tag: 'LibraryProvider');
@@ -1450,155 +1126,6 @@ class LibraryProvider extends ChangeNotifier {
       await saveLibrary();
       _configChangedController.add(null);
     }
-  }
-
-  /// Recursively scan SFTP directory
-  Future<void> _scanSftpDirectory(
-    SftpClient client,
-    String path,
-    LibraryFolder folder,
-    List<MediaItem> items,
-    String sourceLabel,
-  ) async {
-    try {
-      final files = await client.listDirectory(path);
-      
-      for (final file in files) {
-        if (cancelRequested) break;
-        
-        if (file.isDirectory) {
-          // Recursively scan subdirectories
-          await _scanSftpDirectory(client, file.path, folder, items, sourceLabel);
-        } else if (_isMediaFile(file.name)) {
-          reportScanProgress(sourceLabel: sourceLabel, currentItem: file.name);
-          
-          // Create MediaItem for this file
-          final item = _createRemoteMediaItem(file, folder);
-          items.add(item);
-        }
-      }
-    } catch (e) {
-      AppLogger.e('Error scanning SFTP directory $path: $e', error: e, tag: 'LibraryProvider');
-    }
-  }
-
-  /// Recursively scan FTP directory
-  Future<void> _scanFtpDirectory(
-    FtpClientWrapper client,
-    String path,
-    LibraryFolder folder,
-    List<MediaItem> items,
-    String sourceLabel,
-  ) async {
-    try {
-      final files = await client.listDirectory(path);
-      
-      for (final file in files) {
-        if (cancelRequested) break;
-        
-        if (file.isDirectory) {
-          await _scanFtpDirectory(client, file.path, folder, items, sourceLabel);
-        } else if (_isMediaFile(file.name)) {
-          reportScanProgress(sourceLabel: sourceLabel, currentItem: file.name);
-          
-          final item = _createRemoteMediaItem(file, folder);
-          items.add(item);
-        }
-      }
-    } catch (e) {
-      AppLogger.e('Error scanning FTP directory $path: $e', error: e, tag: 'LibraryProvider');
-    }
-  }
-
-  /// Recursively scan WebDAV directory
-  Future<void> _scanWebDavDirectory(
-    WebDavClientWrapper client,
-    String path,
-    LibraryFolder folder,
-    List<MediaItem> items,
-    String sourceLabel,
-  ) async {
-    try {
-      final files = await client.listDirectory(path);
-      
-      for (final file in files) {
-        if (cancelRequested) break;
-        
-        if (file.isDirectory) {
-          await _scanWebDavDirectory(client, file.path, folder, items, sourceLabel);
-        } else if (_isMediaFile(file.name)) {
-          reportScanProgress(sourceLabel: sourceLabel, currentItem: file.name);
-          
-          final item = _createRemoteMediaItem(file, folder);
-          items.add(item);
-        }
-      }
-    } catch (e) {
-      AppLogger.e('Error scanning WebDAV directory $path: $e', error: e, tag: 'LibraryProvider');
-    }
-  }
-
-  /// Create a MediaItem from a remote file
-  MediaItem _createRemoteMediaItem(RemoteFile file, LibraryFolder folder) {
-    // Parse title from filename
-    final parsed = FilenameParser.parse(file.name);
-    
-    // Determine media type from folder type
-    MediaType type;
-    switch (folder.type) {
-      case LibraryType.movies:
-        type = MediaType.movie;
-        break;
-      case LibraryType.tv:
-        type = MediaType.tv;
-        break;
-      case LibraryType.anime:
-        type = MediaType.tv;
-        break;
-      case LibraryType.adult:
-        type = MediaType.scene;
-        break;
-      case LibraryType.other:
-        type = MediaType.movie;
-        break;
-    }
-
-    // Create unique ID: protocol:accountId:path
-    final itemId = '${folder.path.split(':').first}:${folder.accountId}:${file.path}';
-    
-    // Extract folder path from file path
-    final folderPathFromFile = file.path.contains('/') 
-        ? file.path.substring(0, file.path.lastIndexOf('/'))
-        : '/';
-
-    // Build full filePath with protocol prefix for remote files
-    final filePath = '${folder.path.split(':').first}:${folder.accountId}:${file.path}';
-
-    return MediaItem(
-      id: itemId,
-      title: parsed.movieTitle ?? file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
-      year: parsed.year,
-      type: type,
-      filePath: filePath,
-      fileName: file.name,
-      folderPath: folderPathFromFile,
-      sizeBytes: file.size ?? 0,
-      lastModified: file.modifiedTime ?? DateTime.now(),
-      season: parsed.season,
-      episode: parsed.episode,
-      isAdult: folder.type == LibraryType.adult,
-      isAnime: folder.type == LibraryType.anime,
-    );
-  }
-
-  /// Check if a file is a media file based on extension
-  bool _isMediaFile(String filename) {
-    final ext = filename.toLowerCase().split('.').lastOrNull ?? '';
-    const videoExtensions = [
-      'mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v',
-      'mpg', 'mpeg', 'ts', 'm2ts', 'vob', 'divx', 'xvid', '3gp'
-    ];
-    return videoExtensions.contains(ext);
   }
 
   Map<String, dynamic> exportState() =>
@@ -1642,136 +1169,6 @@ class LibraryProvider extends ChangeNotifier {
   }
 }
 
-// --- Top-Level Helpers and Isolate Logic ---
-
-class _ScanRequest {
-  final SendPort sendPort;
-  final String path;
-  final List<String>? keywords;
-
-  _ScanRequest(this.sendPort, this.path, {this.keywords});
-}
-
-// Helper for manual recursion to catch errors per-directory and avoid native crash
-Future<void> _scanRecursive(
-  PlatformDirectory dir,
-  List<String>? keywords,
-  List<MediaItem> buffer,
-  SendPort sendPort,
-  int bufferSize,
-) async {
-  try {
-    // Explicitly skip system folders that often cause crashes/hangs
-    final name = p.basename(dir.path);
-    if (const {
-      '\$Recycle.Bin',
-      'System Volume Information',
-      'Windows',
-      'Program Files',
-      'Program Files (x86)'
-    }.contains(name)) {
-      return;
-    }
-
-// List non-recursively first
-    await for (final fsEntity
-        in dir.list(recursive: false, followLinks: false).handleError((e) {
-      AppLogger.w('Skip dir error: $e', error: e, tag: 'LibraryProvider');
-    })) {
-      try {
-        if (fsEntity is PlatformFile) {
-          final pathStr = fsEntity.path;
-          final ext = p.extension(pathStr).toLowerCase();
-          final isVideo = const [
-            '.mp4',
-            '.mkv',
-            '.avi',
-            '.mov',
-            '.webm',
-            '.m4v'
-          ].contains(ext);
-
-          if (isVideo) {
-            if (keywords != null && keywords.isNotEmpty) {
-              final fName = p.basename(pathStr).toLowerCase();
-              if (!keywords.any((k) => fName.contains(k))) continue;
-            }
-
-            final fileName = p.basename(pathStr);
-            // Stat might fail too
-            final stat = fsEntity.statSync();
-
-            final parsed = FilenameParser.parse(fileName);
-
-            final item = MediaItem(
-              id: pathStr.hashCode.toString(),
-              filePath: pathStr,
-              fileName: fileName,
-              folderPath: p.dirname(pathStr),
-              sizeBytes: stat.size,
-              lastModified: stat.modified,
-              title: parsed.seriesTitle,
-              year: parsed.year,
-              type: parsed.studio != null ? MediaType.scene : MediaType.movie,
-              season: parsed.season,
-              episode: parsed.episode,
-              isAnime: pathStr.toLowerCase().contains('anime'),
-              showKey: p.dirname(pathStr).toLowerCase(),
-              isAdult: parsed.studio != null,
-            );
-
-            buffer.add(item);
-
-            // Debug Log for crash tracing
-            // debugPrint('Scanned: $pathStr');
-
-            if (buffer.length >= bufferSize) {
-              sendPort.send(List<MediaItem>.from(buffer));
-              buffer.clear();
-            }
-          }
-        } else if (fsEntity is PlatformDirectory) {
-          // Recurse manually
-          await _scanRecursive(
-              fsEntity, keywords, buffer, sendPort, bufferSize);
-        }
-      } catch (innerE) {
-        // debugPrint('Skip entity error: $innerE');
-      }
-    }
-  } catch (dirE) {
-    // debugPrint('Directory access error: $dirE');
-  }
-}
-
-Future<void> _scanDirectoryInIsolate(_ScanRequest request) async {
-  final root = request.path;
-  final keywords = request.keywords;
-  final sendPort = request.sendPort;
-
-  AppLogger.d('Isolate calling manual scan on: $root', tag: 'LibraryProvider');
-
-  try {
-    final dir = PlatformDirectory(root);
-    if (!dir.existsSync()) {
-      sendPort.send(true);
-      return;
-    }
-
-    final buffer = <MediaItem>[];
-    const bufferSize = 50;
-
-    await _scanRecursive(dir, keywords, buffer, sendPort, bufferSize);
-
-    if (buffer.isNotEmpty) {
-      sendPort.send(List<MediaItem>.from(buffer));
-    }
-
-    sendPort.send(true); // DONE signal
-  } catch (e) {
-    AppLogger.critical('Isolate Fatal Error: $e', error: e, tag: 'LibraryProvider');
-    sendPort.send(true);
-  }
-}
-
-
+// Isolate scanning logic extracted → LocalScanService
+// Remote scanning logic extracted → RemoteScanService
+// OneDrive scanning logic extracted → OneDriveScanService
