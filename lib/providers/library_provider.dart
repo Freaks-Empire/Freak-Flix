@@ -1,11 +1,6 @@
-/// lib/providers/library_provider.dart
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../utils/platform/platform.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:async';
 import 'dart:isolate';
 import 'package:file_picker/file_picker.dart' hide PlatformFile;
@@ -14,7 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/library_folder.dart';
-import '../models/user_profile.dart'; // Import for UserProfile and UserMediaData
+import '../models/user_profile.dart';
 import '../models/media_item.dart';
 import '../models/discover_type.dart';
 import '../models/cast_member.dart';
@@ -28,6 +23,7 @@ import '../services/remote_storage_service.dart';
 import '../services/sftp_client.dart';
 import '../services/ftp_client_wrapper.dart';
 import '../services/webdav_client_wrapper.dart';
+import '../services/scan_orchestration_service.dart';
 
 import 'settings_provider.dart';
 import '../utils/filename_parser.dart';
@@ -40,6 +36,7 @@ class LibraryProvider extends ChangeNotifier {
   static const _libraryFoldersKey = 'library_folders_v1';
 
   final SettingsProvider settings;
+  final ScanOrchestrationService _scanService;
 
   // backing store
   List<MediaItem> _allItems = [];
@@ -165,7 +162,11 @@ class LibraryProvider extends ChangeNotifier {
   List<LibraryFolder> libraryFolders = [];
   bool isLoading = false;
   String? error;
-  String scanningStatus = '';
+
+  // Delegate scan state to ScanOrchestrationService
+  bool get isScanning => _scanService.isScanning;
+  String get scanningStatus => _scanService.scanningStatus;
+  bool get cancelRequested => _scanService.cancelRequested;
 
   final _configChangedController = StreamController<void>.broadcast();
   Stream<void> get onConfigChanged => _configChangedController.stream;
@@ -235,37 +236,11 @@ class LibraryProvider extends ChangeNotifier {
     _rebuildFilteredItems();
   }
 
-  // Scan progress state
-  bool isScanning = false;
-  int scannedCount = 0;
-  int totalToScan = 0;
-  String? currentScanSource;
-  String? currentScanItem;
-  bool _cancelScanRequested = false;
+  // ── Scan delegation ────────────────────────────────────────────────
 
   void beginScan({String? sourceLabel, int? total}) {
     isLoading = true;
-    isScanning = true;
-    _cancelScanRequested = false;
-
-    scannedCount = 0;
-    totalToScan = total ?? 0;
-    currentScanSource = sourceLabel;
-    currentScanItem = null;
-
-    if (Platform.isAndroid || Platform.isIOS) {
-      WakelockPlus.enable();
-      _requestNotificationPermission();
-    }
-
-    if (Platform.isAndroid) {
-      FlutterForegroundTask.startService(
-        notificationTitle: 'Scanning Library',
-        notificationText: 'Starting scan...',
-      );
-    }
-
-    _updateScanningStatus();
+    _scanService.beginScan(sourceLabel: sourceLabel, total: total);
     notifyListeners();
   }
 
@@ -275,193 +250,44 @@ class LibraryProvider extends ChangeNotifier {
     String? currentItem,
     String? sourceLabel,
   }) {
-    if (scanned != null) scannedCount = scanned;
-    if (total != null) totalToScan = total;
-    if (sourceLabel != null && sourceLabel.isNotEmpty) {
-      currentScanSource = sourceLabel;
-    }
-    if (currentItem != null && currentItem.isNotEmpty) {
-      currentScanItem = currentItem;
-    }
-    _updateScanningStatus();
-    notifyListeners();
+    _scanService.reportScanProgress(
+      scanned: scanned,
+      total: total,
+      currentItem: currentItem,
+      sourceLabel: sourceLabel,
+    );
   }
 
   void finishScan() {
-    isScanning = false;
     isLoading = false;
-    _cancelScanRequested = false;
-
-    scannedCount = 0;
-    totalToScan = 0;
-    currentScanSource = null;
-    currentScanItem = null;
-    scanningStatus = '';
-
-    if (Platform.isAndroid || Platform.isIOS) {
-      WakelockPlus.disable();
-    }
-
-    if (Platform.isAndroid) {
-      FlutterForegroundTask.stopService();
-    }
-
-    if (!Platform.isIOS) {
-      _showCompletionNotification();
-    }
-
+    _scanService.finishScan();
     notifyListeners();
   }
-
-  Future<void> _requestNotificationPermission() async {
-    if (Platform.isAndroid) {
-      if (await Permission.notification.isDenied) {
-        await Permission.notification.request();
-      }
-    } else if (Platform.isWeb) {
-      await _notifications
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestNotificationsPermission();
-      await _notifications
-          .resolvePlatformSpecificImplementation<
-              MacOSFlutterLocalNotificationsPlugin>()
-          ?.requestPermissions(alert: true, badge: true, sound: true);
-    }
-  }
-
-  Future<void> _showCompletionNotification() async {
-    const androidDetails = AndroidNotificationDetails(
-      'scan_complete_channel',
-      'Scan Complete',
-      channelDescription: 'Notifies when library scan is finished',
-      importance: Importance.high,
-      priority: Priority.high,
-    );
-    const linuxDetails = LinuxNotificationDetails(
-      defaultActionName: 'Open',
-    );
-    const details = NotificationDetails(
-      android: androidDetails,
-      linux: linuxDetails,
-      // Windows uses default behavior if not specified, or native implementation implies basic toast.
-    );
-    await _notifications.show(
-      0,
-      'Scan Complete',
-      'Library scan finished successfully.',
-      details,
-    );
-  }
-
-  bool get cancelRequested => _cancelScanRequested;
 
   void requestCancelScan() {
-    if (!isScanning) return;
-    _cancelScanRequested = true;
-    scanningStatus = 'Cancellingâ€¦';
-    notifyListeners();
-  }
-
-  void _updateScanningStatus() {
-    if (!isScanning) {
-      scanningStatus = '';
-      return;
-    }
-
-    final where = currentScanSource ?? '';
-    final item = currentScanItem ?? '';
-    String statusMsg = '';
-
-    if (totalToScan > 0) {
-      statusMsg =
-          'Scanning $where  ($scannedCount / $totalToScan)â€¦ ${item.isEmpty ? '' : item}';
-    } else {
-      statusMsg = 'Scanning $whereâ€¦ ${item.isEmpty ? '' : item}';
-    }
-
-    scanningStatus = statusMsg;
-
-    if (Platform.isAndroid) {
-      FlutterForegroundTask.updateService(
-        notificationTitle: 'Freak-Flix Scanning',
-        notificationText: statusMsg,
-      );
-    }
+    _scanService.requestCancelScan();
   }
 
   void _setScanStatus(String message) {
-    scanningStatus = message;
-    notifyListeners();
+    _scanService.setScanStatus(message);
   }
 
   @override
   void dispose() {
     settings.removeListener(_onSettingsChanged);
+    _scanService.removeListener(_onScanServiceChanged);
     _configChangedController.close();
     super.dispose();
   }
 
-  LibraryProvider(this.settings) {
-    if (!Platform.isIOS) {
-      // Only exclude iOS from this specific init if desired, but general init is safe
-      _initNotifications();
-    }
-    if (Platform.isAndroid) {
-      _initForegroundTask();
-    }
+  void _onScanServiceChanged() {
+    notifyListeners();
+  }
 
+  LibraryProvider(this.settings, {ScanOrchestrationService? scanService})
+      : _scanService = scanService ?? ScanOrchestrationService() {
     settings.addListener(_onSettingsChanged);
-  }
-
-  final FlutterLocalNotificationsPlugin _notifications =
-      FlutterLocalNotificationsPlugin();
-
-  Future<void> _initNotifications() async {
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings(
-      requestSoundPermission: false,
-      requestBadgePermission: false,
-      requestAlertPermission: false,
-    );
-    // Linux/Windows use default settings or specific if needed.
-    // Windows requires no specific init settings class in basic usage, but we pass generic init.
-    const initSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-      linux: LinuxInitializationSettings(defaultActionName: 'Open'),
-      macOS: iosSettings, // Reusing darwin settings
-      windows: WindowsInitializationSettings(
-          appName: 'Freak-Flix',
-          appUserModelId: 'com.freakflix.app',
-          guid: '81a3d53b-9e4b-48fb-9c9b-1e247470f7d5'),
-    );
-
-    await _notifications.initialize(initSettings);
-  }
-
-  void _initForegroundTask() {
-    FlutterForegroundTask.init(
-      androidNotificationOptions: AndroidNotificationOptions(
-        channelId: 'scanning_channel',
-        channelName: 'Library Scanning',
-        channelDescription:
-            'Shows progress when scanning library in background',
-        channelImportance: NotificationChannelImportance.LOW,
-        priority: NotificationPriority.LOW,
-      ),
-      iosNotificationOptions: const IOSNotificationOptions(
-        showNotification: false,
-        playSound: false,
-      ),
-      foregroundTaskOptions: ForegroundTaskOptions(
-        eventAction: ForegroundTaskEventAction.repeat(5000),
-        autoRunOnBoot: false,
-        allowWakeLock: true,
-        allowWifiLock: true,
-      ),
-    );
+    _scanService.addListener(_onScanServiceChanged);
   }
 
   static const _foldersFile = 'library_folders.json';
@@ -803,7 +629,7 @@ class LibraryProvider extends ChangeNotifier {
   Future<void> refetchAllMetadata(MetadataService metadata,
       {bool onlyMissing = false}) async {
     isLoading = true;
-    scanningStatus = 'Refreshing metadata...';
+    _setScanStatus('Refreshing metadata...');
     notifyListeners();
 
     try {
@@ -815,7 +641,7 @@ class LibraryProvider extends ChangeNotifier {
           : _allItems;
 
       if (itemsToProcess.isEmpty) {
-        scanningStatus = 'No missing metadata found.';
+        _setScanStatus('No missing metadata found.');
         notifyListeners();
         return;
       }
@@ -824,8 +650,8 @@ class LibraryProvider extends ChangeNotifier {
       const batchSize = 5;
       for (int i = 0; i < itemsToProcess.length; i += batchSize) {
         final batch = itemsToProcess.skip(i).take(batchSize).toList();
-        scanningStatus =
-            'Refreshing metadata (${i + 1}/${itemsToProcess.length}) ${batch.first.title ?? batch.first.fileName}';
+        _setScanStatus(
+            'Refreshing metadata (${i + 1}/${itemsToProcess.length}) ${batch.first.title ?? batch.first.fileName}');
         notifyListeners();
 
         final enrichedBatch =
@@ -847,7 +673,7 @@ class LibraryProvider extends ChangeNotifier {
       }
 
       await saveLibrary();
-      scanningStatus = 'Metadata refresh complete.';
+      _setScanStatus('Metadata refresh complete.');
       notifyListeners();
     } catch (e) {
       error = e.toString();
@@ -1097,8 +923,8 @@ class LibraryProvider extends ChangeNotifier {
     if (targetItems.isEmpty) return;
 
     isLoading = true;
-    scanningStatus =
-        'Refreshing $label metadata (${targetItems.length} items)...';
+    _setScanStatus(
+        'Refreshing $label metadata (${targetItems.length} items)...');
     notifyListeners();
 
     try {
@@ -1106,8 +932,8 @@ class LibraryProvider extends ChangeNotifier {
       const batchSize = 5;
       for (int i = 0; i < targetItems.length; i += batchSize) {
         final batch = targetItems.skip(i).take(batchSize).toList();
-        scanningStatus =
-            '[$label] (${i + 1}/${targetItems.length}) ${batch.first.title ?? batch.first.fileName} ...';
+        _setScanStatus(
+            '[$label] (${i + 1}/${targetItems.length}) ${batch.first.title ?? batch.first.fileName} ...');
         notifyListeners();
         final enrichedBatch =
             await Future.wait(batch.map((item) => metadata.enrich(item)));
@@ -1127,7 +953,7 @@ class LibraryProvider extends ChangeNotifier {
 
       await saveLibrary();
 
-      scanningStatus = 'Finished refreshing $label metadata.';
+      _setScanStatus('Finished refreshing $label metadata.');
       notifyListeners();
     } finally {
       isLoading = false;
@@ -1207,11 +1033,11 @@ class LibraryProvider extends ChangeNotifier {
     required String accountId,
     required List<MediaItem> collectedItems,
   }) async {
-    if (_cancelScanRequested) return;
+    if (cancelRequested) return;
 
     String? nextLink = url;
 
-    while (nextLink != null && !_cancelScanRequested) {
+    while (nextLink != null && !cancelRequested) {
       try {
         final uri = Uri.parse(nextLink);
 
@@ -1226,7 +1052,7 @@ class LibraryProvider extends ChangeNotifier {
         final List<dynamic> value = map['value'] ?? [];
 
         for (final item in value) {
-          if (_cancelScanRequested) break;
+          if (cancelRequested) break;
 
           final name = item['name'] as String;
           final isFolder = item['folder'] != null;
@@ -1320,9 +1146,9 @@ class LibraryProvider extends ChangeNotifier {
                   [adjustedItem], null); // No metadata fetch here!
               collectedItems.add(adjustedItem);
 
-              scannedCount++;
+              reportScanProgress(scanned: (_scanService.scannedCount + 1));
               // Throttle saving to avoid UI jank
-              if (scannedCount % 50 == 0) await saveLibrary();
+              if (_scanService.scannedCount % 50 == 0) await saveLibrary();
               notifyListeners();
             }
           }
@@ -1786,7 +1612,7 @@ class LibraryProvider extends ChangeNotifier {
       final files = await client.listDirectory(path);
       
       for (final file in files) {
-        if (_cancelScanRequested) break;
+        if (cancelRequested) break;
         
         if (file.isDirectory) {
           // Recursively scan subdirectories
@@ -1816,7 +1642,7 @@ class LibraryProvider extends ChangeNotifier {
       final files = await client.listDirectory(path);
       
       for (final file in files) {
-        if (_cancelScanRequested) break;
+        if (cancelRequested) break;
         
         if (file.isDirectory) {
           await _scanFtpDirectory(client, file.path, folder, items, sourceLabel);
@@ -1844,7 +1670,7 @@ class LibraryProvider extends ChangeNotifier {
       final files = await client.listDirectory(path);
       
       for (final file in files) {
-        if (_cancelScanRequested) break;
+        if (cancelRequested) break;
         
         if (file.isDirectory) {
           await _scanWebDavDirectory(client, file.path, folder, items, sourceLabel);
