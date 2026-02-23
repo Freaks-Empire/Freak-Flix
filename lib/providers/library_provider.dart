@@ -85,6 +85,9 @@ class LibraryProvider extends ChangeNotifier {
   bool get isScanning => _scanService.isScanning;
   String get scanningStatus => _scanService.scanningStatus;
   bool get cancelRequested => _scanService.cancelRequested;
+  int get totalToScan => _scanService.totalToScan;
+  int get scannedCount => _scanService.scannedCount;
+  String? get currentScanItem => _scanService.currentScanItem;
 
   final _configChangedController = StreamController<void>.broadcast();
   Stream<void> get onConfigChanged => _configChangedController.stream;
