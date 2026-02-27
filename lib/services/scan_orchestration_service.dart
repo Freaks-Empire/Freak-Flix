@@ -1,11 +1,25 @@
 // Extracted from LibraryProvider — manages scan progress tracking,
 // notifications, foreground tasks, and wakelock.
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+
+import '../utils/platform/platform.dart';
+
+String scanConstraintNote({
+  required bool isWeb,
+  required bool isIOS,
+}) {
+  if (isWeb) {
+    return 'Background scan service is not available on Web yet. Keep this tab open while scanning.';
+  }
+  if (isIOS) {
+    return 'Background scan notifications are limited on iOS.';
+  }
+  return '';
+}
 
 class ScanOrchestrationService extends ChangeNotifier {
   // ── Scan progress state ──────────────────────────────────────────────
@@ -15,6 +29,7 @@ class ScanOrchestrationService extends ChangeNotifier {
   String? currentScanSource;
   String? currentScanItem;
   String scanningStatus = '';
+  String _platformConstraintNote = '';
   bool _cancelScanRequested = false;
 
   bool get cancelRequested => _cancelScanRequested;
@@ -23,12 +38,17 @@ class ScanOrchestrationService extends ChangeNotifier {
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
+  bool get _supportsWakelock => Platform.isAndroid || Platform.isIOS;
+  bool get _supportsForegroundTask => Platform.isAndroid;
+  bool get _supportsCompletionNotifications =>
+      !Platform.isWeb && !Platform.isIOS;
+
   // ── Constructor ──────────────────────────────────────────────────────
   ScanOrchestrationService() {
-    if (!Platform.isIOS) {
+    if (_supportsCompletionNotifications) {
       _initNotifications();
     }
-    if (Platform.isAndroid) {
+    if (_supportsForegroundTask) {
       _initForegroundTask();
     }
   }
@@ -42,13 +62,17 @@ class ScanOrchestrationService extends ChangeNotifier {
     totalToScan = total ?? 0;
     currentScanSource = sourceLabel;
     currentScanItem = null;
+    _platformConstraintNote = scanConstraintNote(
+      isWeb: Platform.isWeb,
+      isIOS: Platform.isIOS,
+    );
 
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (_supportsWakelock) {
       WakelockPlus.enable();
       _requestNotificationPermission();
     }
 
-    if (Platform.isAndroid) {
+    if (_supportsForegroundTask) {
       FlutterForegroundTask.startService(
         notificationTitle: 'Scanning Library',
         notificationText: 'Starting scan...',
@@ -85,16 +109,17 @@ class ScanOrchestrationService extends ChangeNotifier {
     currentScanSource = null;
     currentScanItem = null;
     scanningStatus = '';
+    _platformConstraintNote = '';
 
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (_supportsWakelock) {
       WakelockPlus.disable();
     }
 
-    if (Platform.isAndroid) {
+    if (_supportsForegroundTask) {
       FlutterForegroundTask.stopService();
     }
 
-    if (!Platform.isIOS) {
+    if (_supportsCompletionNotifications) {
       _showCompletionNotification();
     }
 
@@ -104,7 +129,7 @@ class ScanOrchestrationService extends ChangeNotifier {
   void requestCancelScan() {
     if (!isScanning) return;
     _cancelScanRequested = true;
-    scanningStatus = 'Cancelling…';
+    scanningStatus = 'Cancelling...';
     notifyListeners();
   }
 
@@ -127,14 +152,18 @@ class ScanOrchestrationService extends ChangeNotifier {
 
     if (totalToScan > 0) {
       statusMsg =
-          'Scanning $where  ($scannedCount / $totalToScan)… ${item.isEmpty ? '' : item}';
+          'Scanning $where ($scannedCount / $totalToScan)... ${item.isEmpty ? '' : item}';
     } else {
-      statusMsg = 'Scanning $where… ${item.isEmpty ? '' : item}';
+      statusMsg = 'Scanning $where... ${item.isEmpty ? '' : item}';
+    }
+
+    if (_platformConstraintNote.isNotEmpty) {
+      statusMsg = '$statusMsg $_platformConstraintNote';
     }
 
     scanningStatus = statusMsg;
 
-    if (Platform.isAndroid) {
+    if (_supportsForegroundTask) {
       FlutterForegroundTask.updateService(
         notificationTitle: 'Freak-Flix Scanning',
         notificationText: statusMsg,
@@ -143,19 +172,12 @@ class ScanOrchestrationService extends ChangeNotifier {
   }
 
   Future<void> _requestNotificationPermission() async {
-    if (Platform.isAndroid) {
-      if (await Permission.notification.isDenied) {
-        await Permission.notification.request();
-      }
-    } else if (kIsWeb) {
-      await _notifications
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestNotificationsPermission();
-      await _notifications
-          .resolvePlatformSpecificImplementation<
-              MacOSFlutterLocalNotificationsPlugin>()
-          ?.requestPermissions(alert: true, badge: true, sound: true);
+    if (!Platform.isAndroid) {
+      return;
+    }
+
+    if (await Permission.notification.isDenied) {
+      await Permission.notification.request();
     }
   }
 

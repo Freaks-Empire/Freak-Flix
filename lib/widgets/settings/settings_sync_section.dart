@@ -1,10 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:provider/provider.dart';
 
 import '../../providers/library_provider.dart';
 import '../../providers/profile_provider.dart';
@@ -12,7 +10,18 @@ import '../../providers/settings_provider.dart';
 import '../../services/data_backup_service.dart';
 import '../../services/graph_auth_service.dart';
 import '../../utils/downloader/downloader.dart'; // For downloadJson on web
+import '../../utils/platform/platform.dart';
 import '../settings_widgets.dart';
+
+String? unsupportedAutoBackupMessage({
+  required bool isWindowsDesktop,
+  required String platformLabel,
+}) {
+  if (isWindowsDesktop) {
+    return null;
+  }
+  return 'Scheduled auto backup is not available on $platformLabel yet.';
+}
 
 class SettingsSyncSection extends StatefulWidget {
   const SettingsSyncSection({Key? key}) : super(key: key);
@@ -33,12 +42,15 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
     });
   }
 
-  // Check if running on Windows desktop
-  bool get _isWindowsDesktop => !kIsWeb && Platform.isWindows;
+  bool get _isWindowsDesktop => Platform.isWindows;
 
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
+    final autoBackupUnsupported = unsupportedAutoBackupMessage(
+      isWindowsDesktop: _isWindowsDesktop,
+      platformLabel: currentPlatformLabel,
+    );
     final primaryAccount = settings.primaryBackupAccountId == null
         ? null
         : _graphAuth.accounts.cast<GraphAccount?>().firstWhere(
@@ -55,7 +67,8 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
             SettingsTile(
               icon: LucideIcons.cloud,
               title: primaryAccount?.displayName ?? 'Select Backup Account',
-              subtitle: primaryAccount?.userPrincipalName ?? 'Choose a OneDrive account for backups',
+              subtitle: primaryAccount?.userPrincipalName ??
+                  'Choose a OneDrive account for backups',
               trailing: Icon(
                   primaryAccount != null
                       ? LucideIcons.check
@@ -67,7 +80,8 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
             const Divider(height: 1, color: AppColors.border),
             if (primaryAccount != null)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 color: AppColors.surface.withOpacity(0.5),
                 child: Row(children: [
                   Icon(Icons.circle, size: 8, color: Colors.blue.shade400),
@@ -89,7 +103,8 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
                     label: const Text('Restore from OneDrive'),
                     onPressed: (_isProcessing || primaryAccount == null)
                         ? null
-                        : () => _restoreFromOneDrive(context, settings, primaryAccount),
+                        : () => _restoreFromOneDrive(
+                            context, settings, primaryAccount),
                   ),
                   const SizedBox(width: 12),
                   FilledButton.icon(
@@ -106,21 +121,32 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
                     label: const Text('Backup to OneDrive'),
                     onPressed: (_isProcessing || primaryAccount == null)
                         ? null
-                        : () => _backupToOneDrive(context, settings, primaryAccount),
+                        : () => _backupToOneDrive(
+                            context, settings, primaryAccount),
                   ),
                 ],
               ),
             ),
             if (primaryAccount != null) ...[
-                const Divider(height: 1, color: AppColors.border),
-                SwitchListTile(
-                   title: const Text('Auto Backup', style: TextStyle(color: AppColors.textMain, fontWeight: FontWeight.normal, fontSize: 16)),
-                   subtitle: const Text('Backup to OneDrive every 30 mins.', style: TextStyle(color: AppColors.textSub, fontSize: 12)),
-                   tileColor: Colors.transparent, 
-                   activeColor: const Color(0xFF0078D4),
-                   value: settings.autoBackupEnabled,
-                   onChanged: (val) => settings.toggleAutoBackup(val),
+              const Divider(height: 1, color: AppColors.border),
+              SwitchListTile(
+                title: const Text('Auto Backup',
+                    style: TextStyle(
+                        color: AppColors.textMain,
+                        fontWeight: FontWeight.normal,
+                        fontSize: 16)),
+                subtitle: Text(
+                  autoBackupUnsupported ?? 'Backup to OneDrive every 30 mins.',
+                  style:
+                      const TextStyle(color: AppColors.textSub, fontSize: 12),
                 ),
+                tileColor: Colors.transparent,
+                activeColor: const Color(0xFF0078D4),
+                value: _isWindowsDesktop && settings.autoBackupEnabled,
+                onChanged: _isWindowsDesktop
+                    ? (val) => settings.toggleAutoBackup(val)
+                    : null,
+              ),
             ],
           ],
         ),
@@ -226,8 +252,6 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
     );
   }
 
-
-
   Future<void> _exportLocalData(
       BuildContext context, SettingsProvider settings) async {
     final backupService = DataBackupService(
@@ -240,7 +264,7 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
     final fileName =
         'freakflix_backup_${DateTime.now().millisecondsSinceEpoch}.json';
 
-    if (kIsWeb) {
+    if (Platform.isWeb) {
       await downloadJson(jsonStr, fileName);
     } else {
       final String? outputFile = await FilePicker.platform.saveFile(
@@ -264,7 +288,7 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
-        withData: kIsWeb,
+        withData: Platform.isWeb,
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -275,7 +299,7 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
           profiles: Provider.of<ProfileProvider>(context, listen: false),
         );
 
-        if (kIsWeb) {
+        if (Platform.isWeb) {
           if (file.bytes != null) {
             final jsonStr = utf8.decode(file.bytes!);
             await backupService.restoreBackup(jsonStr);
@@ -339,26 +363,30 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
   }
 
   /// Backup data to OneDrive (for Windows)
-  Future<void> _backupToOneDrive(BuildContext context, SettingsProvider settings, GraphAccount account) async {
+  Future<void> _backupToOneDrive(BuildContext context,
+      SettingsProvider settings, GraphAccount account) async {
     setState(() => _isProcessing = true);
     final messenger = ScaffoldMessenger.of(context);
-    
+
     try {
-      messenger.showSnackBar(const SnackBar(content: Text('Creating backup...')));
-      
+      messenger
+          .showSnackBar(const SnackBar(content: Text('Creating backup...')));
+
       final backupService = DataBackupService(
         settings: settings,
         library: Provider.of<LibraryProvider>(context, listen: false),
         profiles: Provider.of<ProfileProvider>(context, listen: false),
       );
-      
+
       messenger.clearSnackBars();
-      messenger.showSnackBar(const SnackBar(content: Text('Uploading to OneDrive...')));
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Uploading to OneDrive...')));
 
       await backupService.backupToOneDrive(account.id);
-      
+
       messenger.clearSnackBars();
-      messenger.showSnackBar(const SnackBar(content: Text('✅ Backup saved to OneDrive!')));
+      messenger.showSnackBar(
+          const SnackBar(content: Text('✅ Backup saved to OneDrive!')));
     } catch (e) {
       messenger.clearSnackBars();
       messenger.showSnackBar(SnackBar(content: Text('Backup failed: $e')));
@@ -368,56 +396,64 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
   }
 
   /// Restore data from OneDrive (for Windows)
-  Future<void> _restoreFromOneDrive(BuildContext context, SettingsProvider settings, GraphAccount account) async {
+  Future<void> _restoreFromOneDrive(BuildContext context,
+      SettingsProvider settings, GraphAccount account) async {
     setState(() => _isProcessing = true);
     final messenger = ScaffoldMessenger.of(context);
-    
+
     try {
-      messenger.showSnackBar(const SnackBar(content: Text('Finding backups on OneDrive...')));
-      
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Finding backups on OneDrive...')));
+
       // List backup files in OneDrive App folder
-      final backups = await _graphAuth.listBackupFiles(account.id, 'freakflix_backups');
-      
+      final backups =
+          await _graphAuth.listBackupFiles(account.id, 'freakflix_backups');
+
       messenger.clearSnackBars();
-      
+
       if (backups.isEmpty) {
-        messenger.showSnackBar(const SnackBar(content: Text('No backups found on OneDrive')));
+        messenger.showSnackBar(
+            const SnackBar(content: Text('No backups found on OneDrive')));
         return;
       }
-      
+
       // Show picker dialog
       final selectedBackup = await showDialog<Map<String, dynamic>>(
         context: context,
         builder: (ctx) => SimpleDialog(
           backgroundColor: AppColors.surface,
-          title: const Text('Select Backup to Restore', style: TextStyle(color: AppColors.textMain)),
+          title: const Text('Select Backup to Restore',
+              style: TextStyle(color: AppColors.textMain)),
           children: backups.map((backup) {
             final name = backup['name'] as String? ?? 'Unknown';
             final size = backup['size'] as int? ?? 0;
-            final sizeStr = size < 1024 * 1024 
+            final sizeStr = size < 1024 * 1024
                 ? '${(size / 1024).toStringAsFixed(1)} KB'
                 : '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
             return SimpleDialogOption(
               onPressed: () => Navigator.pop(ctx, backup),
               child: ListTile(
                 leading: const Icon(LucideIcons.file, color: AppColors.textSub),
-                title: Text(name, style: const TextStyle(color: AppColors.textMain)),
-                subtitle: Text(sizeStr, style: const TextStyle(color: AppColors.textSub)),
+                title: Text(name,
+                    style: const TextStyle(color: AppColors.textMain)),
+                subtitle: Text(sizeStr,
+                    style: const TextStyle(color: AppColors.textSub)),
               ),
             );
           }).toList(),
         ),
       );
-      
+
       if (selectedBackup == null) return;
-      
+
       // Download and restore
-      messenger.showSnackBar(const SnackBar(content: Text('Downloading backup...')));
-      
+      messenger
+          .showSnackBar(const SnackBar(content: Text('Downloading backup...')));
+
       final itemId = selectedBackup['id'] as String;
       final bytes = await _graphAuth.downloadFile(account.id, itemId);
       final jsonStr = utf8.decode(bytes);
-      
+
       // Restore
       final backupService = DataBackupService(
         settings: settings,
@@ -425,9 +461,10 @@ class _SettingsSyncSectionState extends State<SettingsSyncSection> {
         profiles: Provider.of<ProfileProvider>(context, listen: false),
       );
       await backupService.restoreBackup(jsonStr);
-      
+
       messenger.clearSnackBars();
-      messenger.showSnackBar(const SnackBar(content: Text('✅ Restored from OneDrive!')));
+      messenger.showSnackBar(
+          const SnackBar(content: Text('✅ Restored from OneDrive!')));
       if (mounted) setState(() {});
     } catch (e) {
       messenger.clearSnackBars();
