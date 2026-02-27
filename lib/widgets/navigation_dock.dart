@@ -1,9 +1,78 @@
 // lib/widgets/navigation_dock.dart
 
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/settings_provider.dart';
+
+class NavigationDockDestination {
+  final int branchIndex;
+  final IconData icon;
+  final String label;
+  final bool adultOnly;
+
+  const NavigationDockDestination({
+    required this.branchIndex,
+    required this.icon,
+    required this.label,
+    this.adultOnly = false,
+  });
+}
+
+const _dockDestinations = <NavigationDockDestination>[
+  NavigationDockDestination(
+    branchIndex: 0,
+    icon: Icons.home_filled,
+    label: 'Home',
+  ),
+  NavigationDockDestination(
+    branchIndex: 1,
+    icon: Icons.movie_outlined,
+    label: 'Movies',
+  ),
+  NavigationDockDestination(
+    branchIndex: 2,
+    icon: Icons.tv,
+    label: 'TV',
+  ),
+  NavigationDockDestination(
+    branchIndex: 3,
+    icon: Icons.animation,
+    label: 'Anime',
+  ),
+  NavigationDockDestination(
+    branchIndex: 4,
+    icon: Icons.lock_outline,
+    label: 'Adult',
+    adultOnly: true,
+  ),
+  NavigationDockDestination(
+    branchIndex: 5,
+    icon: Icons.search,
+    label: 'Search',
+  ),
+  NavigationDockDestination(
+    branchIndex: 6,
+    icon: Icons.settings_outlined,
+    label: 'Settings',
+  ),
+];
+
+List<NavigationDockDestination> visibleNavigationDockDestinations({
+  required bool adultEnabled,
+}) {
+  return _dockDestinations
+      .where((destination) => !destination.adultOnly || adultEnabled)
+      .toList(growable: false);
+}
+
+List<int> visibleNavigationBranchIndices({required bool adultEnabled}) {
+  return visibleNavigationDockDestinations(adultEnabled: adultEnabled)
+      .map((destination) => destination.branchIndex)
+      .toList(growable: false);
+}
 
 class NavigationDock extends StatelessWidget {
   final int index;
@@ -16,20 +85,18 @@ class NavigationDock extends StatelessWidget {
     final theme = Theme.of(context);
     final settings = context.watch<SettingsProvider>();
     final isDark = theme.brightness == Brightness.dark;
-
-    // Fixed indices to match Router branches
-    const searchIndex = 5;
-    const settingsIndex = 6;
+    final destinations = visibleNavigationDockDestinations(
+      adultEnabled: settings.enableAdultContent,
+    );
 
     return Center(
       heightFactor: 1.0,
       child: Container(
-        margin: const EdgeInsets.only(top: 16), // "Sticky" top margin
+        margin: const EdgeInsets.only(top: 16),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(30),
           child: BackdropFilter(
-            filter: ImageFilter.blur(
-                sigmaX: 10, sigmaY: 10), // Frosted glass effect
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               decoration: BoxDecoration(
@@ -51,63 +118,16 @@ class NavigationDock extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _DockItem(
-                    icon: Icons.home_filled,
-                    label: 'Home',
-                    isSelected: index == 0,
-                    onTap: () => onTap(0),
-                    theme: theme,
-                  ),
-                  const SizedBox(width: 8),
-                  _DockItem(
-                    icon: Icons.movie_outlined,
-                    label: 'Movies',
-                    isSelected: index == 1,
-                    onTap: () => onTap(1),
-                    theme: theme,
-                  ),
-                  const SizedBox(width: 8),
-                  _DockItem(
-                    icon: Icons.tv,
-                    label: 'TV',
-                    isSelected: index == 2,
-                    onTap: () => onTap(2),
-                    theme: theme,
-                  ),
-                  const SizedBox(width: 8),
-                  _DockItem(
-                    icon: Icons.animation, // or distinct icon
-                    label: 'Anime',
-                    isSelected: index == 3,
-                    onTap: () => onTap(3),
-                    theme: theme,
-                  ),
-                  const SizedBox(width: 8),
-                  if (settings.enableAdultContent) ...[
+                  for (var i = 0; i < destinations.length; i++) ...[
                     _DockItem(
-                      icon: Icons.lock_outline,
-                      label: 'Adult',
-                      isSelected: index == 4,
-                      onTap: () => onTap(4),
+                      icon: destinations[i].icon,
+                      label: destinations[i].label,
+                      isSelected: index == destinations[i].branchIndex,
+                      onTap: () => onTap(destinations[i].branchIndex),
                       theme: theme,
                     ),
-                    const SizedBox(width: 8),
+                    if (i != destinations.length - 1) const SizedBox(width: 8),
                   ],
-                  _DockItem(
-                    icon: Icons.search,
-                    label: 'Search',
-                    isSelected: index == searchIndex,
-                    onTap: () => onTap(searchIndex),
-                    theme: theme,
-                  ),
-                  const SizedBox(width: 8),
-                  _DockItem(
-                    icon: Icons.settings_outlined,
-                    label: 'Settings',
-                    isSelected: index == settingsIndex,
-                    onTap: () => onTap(settingsIndex),
-                    theme: theme,
-                  ),
                 ],
               ),
             ),
