@@ -58,7 +58,7 @@ Requirements for initial release scope. Each requirement must map to exactly one
 - [ ] **SEC-01**: User-provided inputs cannot trigger command execution or shell injection paths.
 - [ ] **SEC-02**: Local file operations reject directory traversal attempts.
 - [ ] **SEC-03**: Remote URL and connector handling prevents SSRF-style unsafe target access.
-- [ ] **SEC-04**: Secrets and credentials are stored with platform-appropriate secure handling and never committed.
+- [x] **SEC-04**: Secrets and credentials are stored with platform-appropriate secure handling and never committed.
 - [ ] **SEC-05**: Adult library remains hidden by default and requires explicit opt-in toggle.
 
 ### Platform and Performance
@@ -137,7 +137,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | SEC-01 | Phase 1 | Pending |
 | SEC-02 | Phase 1 | Pending |
 | SEC-03 | Phase 1 | Pending |
-| SEC-04 | Phase 1 | Pending |
+| SEC-04 | Phase 1 | Complete |
 | SEC-05 | Phase 1 | Pending |
 | PLAT-01 | Phase 2 | Pending |
 | PLAT-02 | Phase 2 | Pending |
