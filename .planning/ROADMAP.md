@@ -33,7 +33,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Remote connector targets block unsafe/internal SSRF-style destinations.
   4. User credentials/tokens are stored securely and never exposed in repository artifacts.
   5. Adult library is hidden by default and appears only after explicit user opt-in.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 01-01-PLAN.md - Unify typed input validation and enforce command-injection/SSRF guardrails in connector UX.
+- [ ] 01-02-PLAN.md - Add canonical path containment checks for local file operations and traversal regressions.
+- [ ] 01-03-PLAN.md - Move secrets to secure storage and remove plaintext credential persistence from settings artifacts.
+- [ ] 01-04-PLAN.md - Enforce adult-content default-off behavior with explicit opt-in and route/navigation gating tests.
 
 ### Phase 2: Cross-Platform Baseline and Releases
 **Goal**: Users can complete the core product journey on all target platforms with shippable release outputs.
@@ -118,7 +123,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Security and Privacy Guardrails | 0/TBD | Not started | - |
+| 1. Security and Privacy Guardrails | 0/4 | Not started | - |
 | 2. Cross-Platform Baseline and Releases | 0/TBD | Not started | - |
 | 3. Onboarding and Source Setup | 0/TBD | Not started | - |
 | 4. Library Ingestion and Indexing | 0/TBD | Not started | - |
