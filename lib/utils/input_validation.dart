@@ -283,6 +283,8 @@ class InputValidation {
     final dangerousPatterns = <RegExp>[
       RegExp(r'\.\./', caseSensitive: false),
       RegExp(r'\.\.\\', caseSensitive: false),
+      RegExp(r'\.{3,}[\\/]', caseSensitive: false),
+      RegExp(r'%u[0-9a-f]{4}', caseSensitive: false),
       RegExp(r'^/', caseSensitive: false),
       RegExp(r'^\\', caseSensitive: false),
       RegExp(r'[<>:"|?*]'),

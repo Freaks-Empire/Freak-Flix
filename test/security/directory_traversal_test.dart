@@ -2,7 +2,10 @@
 /// 
 /// Tests for directory traversal attack prevention
 import 'package:flutter_test/flutter_test.dart';
+import 'package:freak_flix/services/data_backup_service.dart';
 import 'package:freak_flix/utils/input_validation.dart';
+import 'package:freak_flix/utils/path_guard.dart';
+import 'package:path/path.dart' as p;
 import '../helpers/security_test_helpers.dart';
 
 void main() {
@@ -289,6 +292,40 @@ void main() {
             customMessage: 'Directory traversal technique should be blocked: $testCase',
           );
         }
+      });
+    });
+
+    group('Service-level containment guard behavior', () {
+      test('blocks encoded traversal before backup import path resolution', () {
+        expect(
+          () => DataBackupService.resolveBackupPathWithinRoot(
+            '..%2f..%2fetc/passwd',
+            allowedRoot: '/safe/exports',
+            style: p.Style.posix,
+          ),
+          throwsA(isA<PathGuardException>()),
+        );
+      });
+
+      test('blocks mixed separator traversal before backup export path resolution', () {
+        expect(
+          () => DataBackupService.resolveBackupPathWithinRoot(
+            r'C:\safe\exports\..\..\Windows/System32/config/sam',
+            allowedRoot: r'C:\safe\exports',
+            style: p.Style.windows,
+          ),
+          throwsA(isA<PathGuardException>()),
+        );
+      });
+
+      test('allows legitimate in-root backup file path', () {
+        final resolved = DataBackupService.resolveBackupPathWithinRoot(
+          r'C:\safe\exports\daily\backup.json',
+          allowedRoot: r'C:\safe\exports',
+          style: p.Style.windows,
+        );
+
+        expect(resolved, r'C:\safe\exports\daily\backup.json');
       });
     });
 
