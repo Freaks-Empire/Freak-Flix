@@ -1,13 +1,13 @@
-/// lib/services/data_backup_service.dart
+// lib/services/data_backup_service.dart
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:path/path.dart' as p;
 
 import '../providers/settings_provider.dart';
 import '../providers/library_provider.dart';
 import '../providers/profile_provider.dart';
+import '../utils/path_guard.dart';
 import '../utils/secure_logger.dart';
 import 'graph_auth_service.dart';
 
@@ -37,14 +37,41 @@ class DataBackupService {
     };
   }
 
+  @visibleForTesting
+  static String resolveBackupPathWithinRoot(
+    String candidatePath, {
+    required String allowedRoot,
+    p.Style? style,
+  }) {
+    return PathGuard.requireContainedPath(
+      candidatePath: candidatePath,
+      allowedRoot: allowedRoot,
+      style: style,
+      allowAbsoluteCandidate: true,
+      allowRootPath: false,
+      operation: 'backup file access',
+    );
+  }
+
+  String _resolveUserSelectedBackupPath(String candidatePath) {
+    final selectedRoot = p.dirname(candidatePath);
+    return resolveBackupPathWithinRoot(
+      candidatePath,
+      allowedRoot: selectedRoot,
+    );
+  }
+
   /// Exports backup to a file at [path].
   Future<void> exportBackupToFile(String path) async {
     try {
+       final guardedPath = _resolveUserSelectedBackupPath(path);
        final backupMap = await _generateBackupMap();
        final jsonStr = jsonEncode(backupMap);
-       final file = File(path);
+       final file = File(guardedPath);
        await file.writeAsString(jsonStr, flush: true);
        SecureLogger.debug('Backup saved successfully', 'DataBackupService');
+    } on PathGuardException catch (e) {
+      throw ArgumentError('Backup export blocked: ${e.message}');
     } catch (e) {
        SecureLogger.error('Export failed', e, 'DataBackupService');
       rethrow;
@@ -54,13 +81,16 @@ class DataBackupService {
   /// Imports backup from a file at [path].
   Future<void> importBackupFromFile(String path) async {
      try {
-       final file = File(path);
-       if (!await file.exists()) throw Exception('File not found');
-       final jsonStr = await file.readAsString();
-       await restoreBackup(jsonStr);
+       final guardedPath = _resolveUserSelectedBackupPath(path);
+       final file = File(guardedPath);
+        if (!await file.exists()) throw Exception('File not found');
+        final jsonStr = await file.readAsString();
+        await restoreBackup(jsonStr);
+     } on PathGuardException catch (e) {
+       throw ArgumentError('Backup import blocked: ${e.message}');
      } catch (e) {
-        SecureLogger.error('Import failed', e, 'DataBackupService');
-       rethrow;
+         SecureLogger.error('Import failed', e, 'DataBackupService');
+        rethrow;
      }
   }
 

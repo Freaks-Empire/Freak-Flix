@@ -1,11 +1,12 @@
-/// lib/services/persistence_service.dart
+// lib/services/persistence_service.dart
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 import 'package:archive/archive.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../utils/path_guard.dart';
 import '../utils/secure_logger.dart';
 
 class PersistenceService {
@@ -14,7 +15,7 @@ class PersistenceService {
   factory PersistenceService() => _instance;
   static PersistenceService get instance => _instance;
 
-  Future<dynamic> _getFile(String filename) async {
+  Future<File> _getFile(String filename) async {
     if (kIsWeb) {
       throw UnsupportedError('File access is not supported on web');
     }
@@ -23,7 +24,13 @@ class PersistenceService {
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
-    return File(p.join(dir.path, filename));
+    final safePath = PathGuard.requireContainedPath(
+      candidatePath: filename,
+      allowedRoot: dir.path,
+      allowAbsoluteCandidate: false,
+      operation: 'app data file operation',
+    );
+    return File(safePath);
   }
 
   /// Saves a string to a file.
