@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'services/monitoring/monitoring.dart';
-import 'package:provider/provider.dart';
 
 import 'providers/profile_provider.dart';
 import 'providers/settings_provider.dart';
-import 'providers/library_provider.dart';
+import 'services/monitoring/monitoring.dart';
 import 'utils/logger.dart';
 
 // Screens
@@ -30,7 +28,39 @@ import 'models/discover_type.dart';
 
 // Keys
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
-final _shellNavigatorKey = GlobalKey<NavigatorState>();
+
+String? appRedirectPath({
+  required SettingsProvider settings,
+  required ProfileProvider profiles,
+  required String path,
+}) {
+  final isSetup = settings.isSetupCompleted;
+  final isProfileSelected = profiles.activeProfile != null;
+
+  // 1. Setup Redirects
+  if (!isSetup) {
+    if (path != '/setup') return '/setup';
+    return null;
+  }
+  if (isSetup && path == '/setup') return '/discover';
+
+  // 2. Profile Redirects
+  if (!isProfileSelected) {
+    if (path != '/profiles') return '/profiles';
+    return null;
+  }
+  if (isProfileSelected && path == '/profiles') return '/discover';
+
+  // 3. Root Redirect
+  if (path == '/') return '/discover';
+
+  // 4. Adult Content Protection
+  if (!settings.enableAdultContent && path.startsWith('/adult')) {
+    return '/discover';
+  }
+
+  return null;
+}
 
 // Helper to safely parse MediaItem from extra (which might be Map if restored)
 MediaItem? _parseMediaItemExtra(Object? extra) {
@@ -39,7 +69,8 @@ MediaItem? _parseMediaItemExtra(Object? extra) {
     try {
       return MediaItem.fromJson(extra);
     } catch (e) {
-      AppLogger.e('Error parsing MediaItem from extra: $e', error: e, tag: 'Router');
+      AppLogger.e('Error parsing MediaItem from extra: $e',
+          error: e, tag: 'Router');
     }
   }
   return null;
@@ -48,43 +79,20 @@ MediaItem? _parseMediaItemExtra(Object? extra) {
 GoRouter createRouter(
   SettingsProvider settings,
   ProfileProvider profiles,
-  ) {
+) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/discover',
     refreshListenable: Listenable.merge([settings, profiles]),
     debugLogDiagnostics: true,
     observers: [MonitoringService.navigationObserver],
-
     redirect: (context, state) {
-      final isSetup = settings.isSetupCompleted;
-      final isProfileSelected = profiles.activeProfile != null;
-
-      // 1. Setup Redirects
-      if (!isSetup) {
-        if (state.uri.path != '/setup') return '/setup';
-        return null; 
-      }
-      if (isSetup && state.uri.path == '/setup') return '/discover';
-
-      // 2. Profile Redirects
-      if (!isProfileSelected) {
-        if (state.uri.path != '/profiles') return '/profiles';
-        return null;
-      }
-      if (isProfileSelected && state.uri.path == '/profiles') return '/discover';
-
-      // 3. Root Redirect
-      if (state.uri.path == '/') return '/discover';
-
-      // 4. Adult Content Protection
-      if (!settings.enableAdultContent) {
-         if (state.uri.path.startsWith('/adult')) return '/discover';
-      }
-
-      return null;
+      return appRedirectPath(
+        settings: settings,
+        profiles: profiles,
+        path: state.uri.path,
+      );
     },
-
     routes: [
       // Setup
       GoRoute(
@@ -101,88 +109,89 @@ GoRouter createRouter(
       // Shell Route for Tabs
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
-           return MainScreen(navigationShell: navigationShell);
+          return MainScreen(navigationShell: navigationShell);
         },
         branches: [
-           // 0: Discover / Home
-           StatefulShellBranch(
-             routes: [
-               GoRoute(
-                 path: '/discover',
-                 builder: (context, state) => const DiscoverScreen(type: DiscoverType.all),
-               ),
-             ],
-           ),
-           
-           // 1: Movies
-           StatefulShellBranch(
-             routes: [
-               GoRoute(
-                 path: '/movies',
-                  builder: (context, state) => const MoviesScreen(),
-                  routes: [
-                    GoRoute(
-                      path: 'details/:id',
-                      builder: (context, state) {
-                        final id = state.pathParameters['id']!;
-                        final movie = _parseMediaItemExtra(state.extra);
-                        return DetailsScreen(item: movie, itemId: id);
-                      },
-                    ),
-                  ],
-                ),
-             ],
-           ),
-           
-           // 2: TV
-           StatefulShellBranch(
-             routes: [
-               GoRoute(
-                 path: '/tv',
-                 builder: (context, state) => const TvScreen(),
-               ),
-             ],
-           ),
+          // 0: Discover / Home
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/discover',
+                builder: (context, state) =>
+                    const DiscoverScreen(type: DiscoverType.all),
+              ),
+            ],
+          ),
 
-           // 3: Anime
-           StatefulShellBranch(
-             routes: [
-               GoRoute(
-                 path: '/anime',
-                 builder: (context, state) => const AnimeScreen(),
-               ),
-             ],
-           ),
-           
-           // 4: Adult (Conditional logic handled in MainScreen nav, but route exists)
-           StatefulShellBranch(
-             routes: [
-                GoRoute(
-                  path: '/adult',
-                  builder: (context, state) => const AdultScreen(),
-                ),
-             ],
-           ),
+          // 1: Movies
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/movies',
+                builder: (context, state) => const MoviesScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'details/:id',
+                    builder: (context, state) {
+                      final id = state.pathParameters['id']!;
+                      final movie = _parseMediaItemExtra(state.extra);
+                      return DetailsScreen(item: movie, itemId: id);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
 
-           // 5: Search
-           StatefulShellBranch(
-             routes: [
-               GoRoute(
-                 path: '/search',
-                 builder: (context, state) => const SearchScreen(),
-               ),
-             ],
-           ),
-           
-           // 6: Settings
-           StatefulShellBranch(
-             routes: [
-               GoRoute(
-                 path: '/settings',
-                 builder: (context, state) => const SettingsScreen(),
-               ),
-             ],
-           ),
+          // 2: TV
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/tv',
+                builder: (context, state) => const TvScreen(),
+              ),
+            ],
+          ),
+
+          // 3: Anime
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/anime',
+                builder: (context, state) => const AnimeScreen(),
+              ),
+            ],
+          ),
+
+          // 4: Adult (Conditional logic handled in MainScreen nav, but route exists)
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/adult',
+                builder: (context, state) => const AdultScreen(),
+              ),
+            ],
+          ),
+
+          // 5: Search
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/search',
+                builder: (context, state) => const SearchScreen(),
+              ),
+            ],
+          ),
+
+          // 6: Settings
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/settings',
+                builder: (context, state) => const SettingsScreen(),
+              ),
+            ],
+          ),
         ],
       ),
 
@@ -191,11 +200,11 @@ GoRouter createRouter(
         path: '/media/:id',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
-           // URL-decode the ID to handle SFTP and other special characters
-           final rawId = state.pathParameters['id']!;
-           final id = Uri.decodeComponent(rawId);
-           final extra = _parseMediaItemExtra(state.extra);
-           return DetailsScreen(item: extra, itemId: id);
+          // URL-decode the ID to handle SFTP and other special characters
+          final rawId = state.pathParameters['id']!;
+          final id = Uri.decodeComponent(rawId);
+          final extra = _parseMediaItemExtra(state.extra);
+          return DetailsScreen(item: extra, itemId: id);
         },
       ),
 
@@ -203,15 +212,15 @@ GoRouter createRouter(
         path: '/scene/:id',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
-           final id = state.pathParameters['id']!;
-           final extra = _parseMediaItemExtra(state.extra);
-           // Ensure ID is passed as stashdb:UUID if the screen expects it, or modify screen.
-           // Screen likely expects 'stashdb:UUID' or just UUID if customized.
-           // Let's pass normalized ID: 'stashdb:$id' if it doesn't start with it, 
-           // BUT DetailsScreen logic handles 'stashdb:' prefix logic.
-           // If the URL is /scene/UUID, we pass 'stashdb:UUID' to screen for consistency with provider logic.
-           final itemId = id.startsWith('stashdb:') ? id : 'stashdb:$id';
-           return DetailsScreen(item: extra, itemId: itemId);
+          final id = state.pathParameters['id']!;
+          final extra = _parseMediaItemExtra(state.extra);
+          // Ensure ID is passed as stashdb:UUID if the screen expects it, or modify screen.
+          // Screen likely expects 'stashdb:UUID' or just UUID if customized.
+          // Let's pass normalized ID: 'stashdb:$id' if it doesn't start with it,
+          // BUT DetailsScreen logic handles 'stashdb:' prefix logic.
+          // If the URL is /scene/UUID, we pass 'stashdb:UUID' to screen for consistency with provider logic.
+          final itemId = id.startsWith('stashdb:') ? id : 'stashdb:$id';
+          return DetailsScreen(item: extra, itemId: itemId);
         },
       ),
 
@@ -219,14 +228,14 @@ GoRouter createRouter(
         path: '/anime/:id/:slug',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
-           final idStr = state.pathParameters['id']!;
-           final extra = _parseMediaItemExtra(state.extra);
-           // If we have extra, use it.
-           // If not, we might need to fetch by AniList ID if logic permits.
-           
-           // Construct a usable ID for internal logic. 
-           // DetailsScreen passes prefix logic.
-           return DetailsScreen(item: extra, itemId: 'anilist:$idStr');
+          final idStr = state.pathParameters['id']!;
+          final extra = _parseMediaItemExtra(state.extra);
+          // If we have extra, use it.
+          // If not, we might need to fetch by AniList ID if logic permits.
+
+          // Construct a usable ID for internal logic.
+          // DetailsScreen passes prefix logic.
+          return DetailsScreen(item: extra, itemId: 'anilist:$idStr');
         },
       ),
 
@@ -234,9 +243,9 @@ GoRouter createRouter(
         path: '/actor/:id',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
-           final id = state.pathParameters['id']!;
-           final extra = state.extra as CastMember?;
-           return ActorDetailsScreen(actor: extra, actorId: id);
+          final id = state.pathParameters['id']!;
+          final extra = state.extra as CastMember?;
+          return ActorDetailsScreen(actor: extra, actorId: id);
         },
       ),
     ],

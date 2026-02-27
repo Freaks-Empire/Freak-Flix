@@ -1,4 +1,4 @@
-/// lib/widgets/navigation_dock.dart
+// lib/widgets/navigation_dock.dart
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -16,7 +16,7 @@ class NavigationDock extends StatelessWidget {
     final theme = Theme.of(context);
     final settings = context.watch<SettingsProvider>();
     final isDark = theme.brightness == Brightness.dark;
-    
+
     // Fixed indices to match Router branches
     const searchIndex = 5;
     const settingsIndex = 6;
@@ -28,14 +28,16 @@ class NavigationDock extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(30),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10), // Frosted glass effect
+            filter: ImageFilter.blur(
+                sigmaX: 10, sigmaY: 10), // Frosted glass effect
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               decoration: BoxDecoration(
                 color: (isDark ? Colors.black : Colors.white).withOpacity(0.7),
                 borderRadius: BorderRadius.circular(30),
                 border: Border.all(
-                  color: (isDark ? Colors.white : Colors.black).withOpacity(0.1),
+                  color:
+                      (isDark ? Colors.white : Colors.black).withOpacity(0.1),
                   width: 1.0,
                 ),
                 boxShadow: [
