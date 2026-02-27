@@ -12,7 +12,7 @@ This roadmap sequences v1 delivery from safe, cross-platform foundations to end-
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Security and Privacy Guardrails** - Lock down unsafe input, storage, and adult-default privacy behavior.
+- [x] **Phase 1: Security and Privacy Guardrails** - Lock down unsafe input, storage, and adult-default privacy behavior.
 - [ ] **Phase 2: Cross-Platform Baseline and Releases** - Ensure core journeys and release outputs work across Windows, Android, and Web.
 - [ ] **Phase 3: Onboarding and Source Setup** - Let users complete first run and connect local/remote libraries.
 - [ ] **Phase 4: Library Ingestion and Indexing** - Build scalable scan/index workflows for mixed storage libraries.
@@ -35,10 +35,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. Adult library is hidden by default and appears only after explicit user opt-in.
 **Plans**: 4 plans
 Plans:
-- [ ] 01-01-PLAN.md - Unify typed input validation and enforce command-injection/SSRF guardrails in connector UX.
-- [ ] 01-02-PLAN.md - Add canonical path containment checks for local file operations and traversal regressions.
-- [ ] 01-03-PLAN.md - Move secrets to secure storage and remove plaintext credential persistence from settings artifacts.
-- [ ] 01-04-PLAN.md - Enforce adult-content default-off behavior with explicit opt-in and route/navigation gating tests.
+- [x] 01-01-PLAN.md - Unify typed input validation and enforce command-injection/SSRF guardrails in connector UX.
+- [x] 01-02-PLAN.md - Add canonical path containment checks for local file operations and traversal regressions.
+- [x] 01-03-PLAN.md - Move secrets to secure storage and remove plaintext credential persistence from settings artifacts.
+- [x] 01-04-PLAN.md - Enforce adult-content default-off behavior with explicit opt-in and route/navigation gating tests.
 
 ### Phase 2: Cross-Platform Baseline and Releases
 **Goal**: Users can complete the core product journey on all target platforms with shippable release outputs.
@@ -123,7 +123,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Security and Privacy Guardrails | 2/4 | In Progress|  |
+| 1. Security and Privacy Guardrails | 4/4 | Complete | 2026-02-27 |
 | 2. Cross-Platform Baseline and Releases | 0/TBD | Not started | - |
 | 3. Onboarding and Source Setup | 0/TBD | Not started | - |
 | 4. Library Ingestion and Indexing | 0/TBD | Not started | - |
