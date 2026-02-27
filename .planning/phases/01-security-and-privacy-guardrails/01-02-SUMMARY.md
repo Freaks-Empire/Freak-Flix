@@ -63,7 +63,7 @@ Each task was committed atomically:
 2. **Task 2: Enforce containment in persistence and backup service entry points** - `15fa613` (feat)
 3. **Task 3: Add traversal regression tests at utility and security-suite level** - `aa247f7` (fix)
 
-**Plan metadata:** Pending
+**Plan metadata:** `8902c6d` (docs)
 
 ## Files Created/Modified
 - `lib/utils/path_guard.dart` - Canonical decode/normalize and root-containment decision API.
