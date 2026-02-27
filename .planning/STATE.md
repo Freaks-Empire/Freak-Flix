@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-02-27T18:27:56Z"
+last_updated: "2026-02-28T01:52:48Z"
 progress:
   total_phases: 8
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  completed_phases: 2
+  total_plans: 7
+  completed_plans: 7
 ---
 
 # Project State
@@ -18,39 +18,43 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Users can connect their own local or cloud storage and immediately get a polished, metadata-rich, serverless streaming-library experience with reliable cross-platform playback.
-**Current focus:** Phase 2 - Cross-Platform Baseline and Releases
+**Current focus:** Phase 3 - Onboarding and Source Setup
 
 ## Current Position
 
-Phase: 2 of 8 (Cross-Platform Baseline and Releases)
+Phase: 3 of 8 (Onboarding and Source Setup)
 Plan: 0 of TBD in current phase
-Status: Ready for planning
-Last activity: 2026-02-27 - Captured Phase 2 cross-platform context decisions.
+Status: Ready for phase context and planning
+Last activity: 2026-02-28 - Completed Phase 2 execution and verification.
 
-Progress: [#---------] 12%
+Progress: [##--------] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 8 min
-- Total execution time: 0.5 hours
+- Total plans completed: 7
+- Average duration: 28 min
+- Total execution time: 3.2 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 4 | 31 min | 8 min |
+| 02 | 3 | 163 min | 54 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-04 (19 min), 01-03 (5 min), 01-02 (5 min), 01-01 (2 min)
-- Trend: Increased scope in final security hardening plan
+- Last 5 plans: 02-03 (54 min), 02-02 (42 min), 02-01 (67 min), 01-04 (19 min), 01-03 (5 min)
+- Trend: Higher duration due cross-platform build orchestration and release evidence generation
 
 *Updated after each plan completion*
 | Phase 01 P01 | 2 min | 3 tasks | 5 files |
 | Phase 01 P02 | 5 min | 3 tasks | 6 files |
 | Phase 01 P03 | 5 min | 3 tasks | 6 files |
 | Phase 01 P04 | 19 min | 3 tasks | 6 files |
+| Phase 02 P01 | 67 min | 3 tasks | 7 files |
+| Phase 02 P02 | 42 min | 3 tasks | 8 files |
+| Phase 02 P03 | 54 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -59,16 +63,11 @@ Progress: [#---------] 12%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Phase 1] Enforce security/privacy baseline first to prevent regressions in later connector and sync work.
-- [Phase 2] Keep explicit cross-platform baseline before deeper feature hardening.
-- [Phase 01] Use flutter_secure_storage directly and remove custom XOR encryption logic.
-- [Phase 01] Keep Stash endpoint apiKey runtime-only while excluding it from JSON serialization.
-- [Phase 01] Migrate legacy tmdbApiKey and stash apiKey values to secure storage during load/import.
-- [Phase 01] Use a shared PathGuard utility to decode, normalize, and enforce root containment before filesystem IO.
-- [Phase 01] Fail closed with actionable errors when backup paths escape allowed roots.
-- [Phase 01] Treat non-boolean imported adult-content values as false to prevent accidental opt-in.
-- [Phase 01] Require explicit setup/settings opt-in before showing adult routes and navigation surfaces.
-- [Phase 01] Keep adult route guard logic testable via extracted appRedirectPath helper.
+- [Phase 2] Use shared platform abstraction in runtime entry points and explicit unsupported-state messaging for platform-limited features.
+- [Phase 2] Validate journey parity via route-level smoke coverage plus navigation branch-mapping tests.
+- [Phase 2] Keep Android/Web runtime smoke gaps explicitly deferred with tracked IDs instead of implicit pass assumptions.
+- [Phase 2] Use deterministic release scripts that generate ledger evidence from actual build outputs.
+- [Phase 2] Stabilize Android release with retry-safe clean strategy and Gradle/Kotlin tuning.
 
 ### Pending Todos
 
@@ -78,10 +77,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- OneDrive Device Code edge cases on Web and token lifecycle behavior should be validated during planning for Phases 3 and 8.
+- Deferred runtime follow-up remains tracked for Android/Web journey smoke (D-02-001, D-02-002) before release candidate signoff.
 
 ## Session Continuity
 
-Last session: 2026-02-27T18:27:56Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-cross-platform-baseline-and-releases/02-CONTEXT.md
+Last session: 2026-02-28T01:52:48Z
+Stopped at: Completed Phase 2 execution and verification
+Resume file: .planning/ROADMAP.md

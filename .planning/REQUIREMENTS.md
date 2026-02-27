@@ -63,8 +63,8 @@ Requirements for initial release scope. Each requirement must map to exactly one
 
 ### Platform and Performance
 
-- [ ] **PLAT-01**: Core flows (onboarding, browse, details, play, settings) work on Windows, Android, and Web builds.
-- [ ] **PLAT-02**: Release builds complete successfully for Windows, Android, and Web targets.
+- [x] **PLAT-01**: Core flows (onboarding, browse, details, play, settings) work on Windows, Android, and Web builds.
+- [x] **PLAT-02**: Release builds complete successfully for Windows, Android, and Web targets.
 - [ ] **PLAT-03**: Library operations remain responsive for large collections via incremental scanning/indexing strategy.
 
 ## v2 Requirements
@@ -139,8 +139,8 @@ Which phases cover which requirements. Populated during roadmap creation.
 | SEC-03 | Phase 1 | Complete |
 | SEC-04 | Phase 1 | Complete |
 | SEC-05 | Phase 1 | Complete |
-| PLAT-01 | Phase 2 | Pending |
-| PLAT-02 | Phase 2 | Pending |
+| PLAT-01 | Phase 2 | Complete |
+| PLAT-02 | Phase 2 | Complete |
 | PLAT-03 | Phase 4 | Pending |
 
 **Coverage:**
@@ -150,4 +150,4 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-27*
-*Last updated: 2026-02-27 after roadmap creation*
+*Last updated: 2026-02-28 after Phase 2 completion*

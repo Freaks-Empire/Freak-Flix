@@ -13,7 +13,7 @@ This roadmap sequences v1 delivery from safe, cross-platform foundations to end-
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Security and Privacy Guardrails** - Lock down unsafe input, storage, and adult-default privacy behavior.
-- [ ] **Phase 2: Cross-Platform Baseline and Releases** - Ensure core journeys and release outputs work across Windows, Android, and Web.
+- [x] **Phase 2: Cross-Platform Baseline and Releases** - Ensure core journeys and release outputs work across Windows, Android, and Web.
 - [ ] **Phase 3: Onboarding and Source Setup** - Let users complete first run and connect local/remote libraries.
 - [ ] **Phase 4: Library Ingestion and Indexing** - Build scalable scan/index workflows for mixed storage libraries.
 - [ ] **Phase 5: Metadata and Offline Catalog** - Enrich library items with provider metadata and offline-ready cache.
@@ -49,9 +49,9 @@ Plans:
   2. Windows, Android, and Web release builds complete successfully from the v1 codebase.
 **Plans**: 3 plans
 Plans:
-- [ ] 02-01-PLAN.md - Harden platform guardrails and unsupported-state handling in shared runtime paths.
-- [ ] 02-02-PLAN.md - Add cross-platform core-journey smoke coverage and pass/fail defer matrix artifacts.
-- [ ] 02-03-PLAN.md - Script reproducible web/windows/android release builds with artifact ledger evidence.
+- [x] 02-01-PLAN.md - Harden platform guardrails and unsupported-state handling in shared runtime paths.
+- [x] 02-02-PLAN.md - Add cross-platform core-journey smoke coverage and pass/fail defer matrix artifacts.
+- [x] 02-03-PLAN.md - Script reproducible web/windows/android release builds with artifact ledger evidence.
 
 ### Phase 3: Onboarding and Source Setup
 **Goal**: New users can finish setup and connect at least one content source across local and remote options.
@@ -128,7 +128,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Security and Privacy Guardrails | 4/4 | Complete | 2026-02-27 |
-| 2. Cross-Platform Baseline and Releases | 0/3 | Planned | - |
+| 2. Cross-Platform Baseline and Releases | 3/3 | Complete | 2026-02-28 |
 | 3. Onboarding and Source Setup | 0/TBD | Not started | - |
 | 4. Library Ingestion and Indexing | 0/TBD | Not started | - |
 | 5. Metadata and Offline Catalog | 0/TBD | Not started | - |
