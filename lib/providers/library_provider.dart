@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import '../utils/platform/platform.dart';
 import 'dart:async';
 import 'package:file_picker/file_picker.dart' hide PlatformFile;
@@ -10,10 +9,8 @@ import '../models/library_folder.dart';
 import '../models/user_profile.dart';
 import '../models/media_item.dart';
 import '../models/discover_type.dart';
-import '../models/cast_member.dart';
 import '../services/graph_auth_service.dart' as graph_auth;
 import '../services/persistence_service.dart';
-import '../services/tmdb_discover_service.dart';
 import '../services/metadata_service.dart';
 import '../services/sidecar_service.dart';
 import '../services/task_queue_service.dart';
@@ -225,13 +222,15 @@ class LibraryProvider extends ChangeNotifier {
         libraryFolders = (jsonDecode(folderJson) as List<dynamic>)
             .map((e) => LibraryFolder.fromJson(e as Map<String, dynamic>))
             .toList();
-        AppLogger.d('Loaded ${libraryFolders.length} folders from file', tag: 'LibraryProvider');
+        AppLogger.d('Loaded ${libraryFolders.length} folders from file',
+            tag: 'LibraryProvider');
       } else {
         // Migration check
         await _migrateFoldersFromPrefs();
       }
     } catch (e) {
-      AppLogger.e('Error loading folders: $e', error: e, tag: 'LibraryProvider');
+      AppLogger.e('Error loading folders: $e',
+          error: e, tag: 'LibraryProvider');
       libraryFolders = [];
     }
 
@@ -240,11 +239,14 @@ class LibraryProvider extends ChangeNotifier {
       final itemsJson =
           await PersistenceService.instance.loadCompressed(_itemsFile);
       if (itemsJson != null) {
-        AppLogger.d('Found compressed items file. Parsing...', tag: 'LibraryProvider');
+        AppLogger.d('Found compressed items file. Parsing...',
+            tag: 'LibraryProvider');
         _allItems = MediaItem.listFromJson(itemsJson);
-        AppLogger.d('Loaded ${_allItems.length} items from file', tag: 'LibraryProvider');
+        AppLogger.d('Loaded ${_allItems.length} items from file',
+            tag: 'LibraryProvider');
       } else {
-        AppLogger.d('No items file found. Checking legacy...', tag: 'LibraryProvider');
+        AppLogger.d('No items file found. Checking legacy...',
+            tag: 'LibraryProvider');
         await _migrateItemsFromPrefs();
       }
     } catch (e) {
@@ -268,7 +270,8 @@ class LibraryProvider extends ChangeNotifier {
           .map((e) => LibraryFolder.fromJson(e as Map<String, dynamic>))
           .toList();
       await _saveLibraryFolders();
-      AppLogger.d('Migrated folders from SharedPreferences', tag: 'LibraryProvider');
+      AppLogger.d('Migrated folders from SharedPreferences',
+          tag: 'LibraryProvider');
     } catch (_) {}
   }
 
@@ -287,7 +290,8 @@ class LibraryProvider extends ChangeNotifier {
         _allItems = MediaItem.listFromJson(jsonStr);
       }
       await saveLibrary();
-      AppLogger.d('Migrated items from SharedPreferences', tag: 'LibraryProvider');
+      AppLogger.d('Migrated items from SharedPreferences',
+          tag: 'LibraryProvider');
     } catch (_) {}
   }
 
@@ -542,7 +546,8 @@ class LibraryProvider extends ChangeNotifier {
     });
 
     if (_allItems.length != before) {
-      AppLogger.d('Pruned ${before - _allItems.length} orphan items', tag: 'LibraryProvider');
+      AppLogger.d('Pruned ${before - _allItems.length} orphan items',
+          tag: 'LibraryProvider');
       notifyListeners();
     }
   }
@@ -761,10 +766,10 @@ class LibraryProvider extends ChangeNotifier {
     Future.delayed(const Duration(seconds: 3), () {
       _setScanStatus('Queued $processed items for generation.'); // Clear status
       notifyListeners();
-      
+
       Future.delayed(const Duration(seconds: 2), () {
-         _setScanStatus('');
-         notifyListeners();
+        _setScanStatus('');
+        notifyListeners();
       });
     });
   }
@@ -809,8 +814,6 @@ class LibraryProvider extends ChangeNotifier {
         );
       });
     }
-
-
   }
 
   /// Refetch metadata only for items inside a specific library folder.
@@ -1001,9 +1004,8 @@ class LibraryProvider extends ChangeNotifier {
       LibraryFilterService.filterContinueWatching(
           items, settings.enableAdultContent);
 
-  List<MediaItem> get recentlyAdded =>
-      LibraryFilterService.filterRecentlyAdded(
-          items, settings.enableAdultContent);
+  List<MediaItem> get recentlyAdded => LibraryFilterService.filterRecentlyAdded(
+      items, settings.enableAdultContent);
 
   List<MediaItem> get topRated =>
       LibraryFilterService.filterTopRated(items, settings.enableAdultContent);
@@ -1066,7 +1068,8 @@ class LibraryProvider extends ChangeNotifier {
         path,
         keywords: keywords,
         onProgress: (currentItem) {
-          reportScanProgress(sourceLabel: sourceLabel, currentItem: currentItem);
+          reportScanProgress(
+              sourceLabel: sourceLabel, currentItem: currentItem);
         },
       );
 

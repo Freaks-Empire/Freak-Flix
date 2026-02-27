@@ -1,35 +1,34 @@
-/// lib/main.dart
+// lib/main.dart
+
+import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'services/monitoring/monitoring.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart' show FileNotFoundError;
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
+
 import 'app.dart';
+import 'models/discover_filter.dart';
 import 'providers/library_provider.dart';
 import 'providers/playback_provider.dart';
-import 'providers/settings_provider.dart';
 import 'providers/profile_provider.dart';
-import 'services/analytics_service.dart';
-
-
-import 'package:flutter/foundation.dart'; // For PlatformDispatcher
-import 'utils/logger.dart';
-
-import 'package:flutter_web_plugins/url_strategy.dart';
-
-import 'services/metadata_service.dart';
-import 'services/tmdb_service.dart';
-import 'services/graph_auth_service.dart';
-import 'services/tmdb_discover_service.dart';
-import 'services/stash_db_service.dart';
+import 'providers/settings_provider.dart';
 import 'services/auto_backup_manager.dart';
+import 'services/analytics_service.dart';
+import 'services/graph_auth_service.dart';
+import 'services/metadata_service.dart';
+import 'services/monitoring/monitoring.dart';
+import 'services/stash_db_service.dart';
+import 'services/tmdb_service.dart';
+import 'services/tmdb_discover_service.dart';
+import 'utils/logger.dart';
+import 'utils/platform/platform.dart' as app_platform;
 
-import 'models/discover_filter.dart';
-
-import 'dart:async'; // Add async import
-import 'dart:io';
+bool shouldInitializeAutoBackupManager({required bool isWindowsDesktop}) {
+  return isWindowsDesktop;
+}
 
 void main() async {
   runZonedGuarded(() async {
@@ -53,11 +52,15 @@ void main() async {
 
     // Set up error handlers
     FlutterError.onError = (errorDetails) {
-      AppLogger.e('Caught Flutter Error: ${errorDetails.exception}', error: errorDetails.exception, stackTrace: errorDetails.stack, tag: 'Main');
+      AppLogger.e('Caught Flutter Error: ${errorDetails.exception}',
+          error: errorDetails.exception,
+          stackTrace: errorDetails.stack,
+          tag: 'Main');
     };
 
     PlatformDispatcher.instance.onError = (error, stack) {
-      AppLogger.e('Caught Platform Error: $error', error: error, stackTrace: stack, tag: 'Main');
+      AppLogger.e('Caught Platform Error: $error',
+          error: error, stackTrace: stack, tag: 'Main');
       return true;
     };
 
@@ -70,8 +73,6 @@ void main() async {
 
     final settingsProvider = SettingsProvider();
     await settingsProvider.load();
-
-
 
     final profileProvider = ProfileProvider();
     await profileProvider.load();
@@ -93,7 +94,8 @@ void main() async {
       if (profileProvider.activeProfile != null) {
         final history = libraryProvider.extractLegacyHistory();
         if (history.isNotEmpty) {
-          AppLogger.d('Importing ${history.length} items to Default profile', tag: 'Main');
+          AppLogger.d('Importing ${history.length} items to Default profile',
+              tag: 'Main');
           await profileProvider.importUserData(history);
         }
         await settingsProvider.setHasMigratedProfiles(true);
@@ -113,16 +115,17 @@ void main() async {
 
     final metadataService = MetadataService(settingsProvider, tmdbService);
     final playbackProvider = PlaybackProvider(libraryProvider, profileProvider);
-    
+
     // Auto Backup Manager (Windows)
-    final isWindowsDesktop = !kIsWeb && Platform.isWindows;
-    if (isWindowsDesktop) {
-       final autoBackupManager = AutoBackupManager(
-          settings: settingsProvider, 
-          library: libraryProvider, 
-          profiles: profileProvider
-       );
-       autoBackupManager.init();
+    if (shouldInitializeAutoBackupManager(
+      isWindowsDesktop: app_platform.Platform.isWindows,
+    )) {
+      final autoBackupManager = AutoBackupManager(
+        settings: settingsProvider,
+        library: libraryProvider,
+        profiles: profileProvider,
+      );
+      autoBackupManager.init();
     }
 
     runApp(
@@ -146,24 +149,3 @@ void main() async {
     MonitoringService.recordError(error, stackTrace);
   });
 }
-
-void _runErrorApp(String message) {
-  runApp(
-    MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-
