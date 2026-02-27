@@ -29,20 +29,18 @@ import 'models/discover_type.dart';
 // Keys
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
-String? appRedirectPath({
-  required SettingsProvider settings,
-  required ProfileProvider profiles,
+String? redirectPathForState({
+  required bool isSetupCompleted,
+  required bool isProfileSelected,
+  required bool isAdultContentEnabled,
   required String path,
 }) {
-  final isSetup = settings.isSetupCompleted;
-  final isProfileSelected = profiles.activeProfile != null;
-
   // 1. Setup Redirects
-  if (!isSetup) {
+  if (!isSetupCompleted) {
     if (path != '/setup') return '/setup';
     return null;
   }
-  if (isSetup && path == '/setup') return '/discover';
+  if (isSetupCompleted && path == '/setup') return '/discover';
 
   // 2. Profile Redirects
   if (!isProfileSelected) {
@@ -55,11 +53,24 @@ String? appRedirectPath({
   if (path == '/') return '/discover';
 
   // 4. Adult Content Protection
-  if (!settings.enableAdultContent && path.startsWith('/adult')) {
+  if (!isAdultContentEnabled && path.startsWith('/adult')) {
     return '/discover';
   }
 
   return null;
+}
+
+String? appRedirectPath({
+  required SettingsProvider settings,
+  required ProfileProvider profiles,
+  required String path,
+}) {
+  return redirectPathForState(
+    isSetupCompleted: settings.isSetupCompleted,
+    isProfileSelected: profiles.activeProfile != null,
+    isAdultContentEnabled: settings.enableAdultContent,
+    path: path,
+  );
 }
 
 // Helper to safely parse MediaItem from extra (which might be Map if restored)
