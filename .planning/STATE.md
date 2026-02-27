@@ -10,30 +10,31 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 ## Current Position
 
 Phase: 1 of 8 (Security and Privacy Guardrails)
-Plan: 1 of 4 in current phase
+Plan: 2 of 4 in current phase
 Status: In progress
-Last activity: 2026-02-27 - Completed 01-03 secure secret storage hardening plan.
+Last activity: 2026-02-27 - Completed 01-01 typed security validation guardrails plan.
 
-Progress: [██░░░░░░░░] 25%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 5 min
+- Total plans completed: 2
+- Average duration: 4 min
 - Total execution time: 0.1 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 1 | 5 min | 5 min |
+| 01 | 2 | 7 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-03 (5 min)
+- Last 5 plans: 01-03 (5 min), 01-01 (2 min)
 - Trend: Stable
 
 *Updated after each plan completion*
+| Phase 01-security-and-privacy-guardrails P01 | 2 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -47,6 +48,8 @@ Recent decisions affecting current work:
 - [Phase 01]: Use flutter_secure_storage directly and remove custom XOR encryption logic
 - [Phase 01]: Keep Stash endpoint apiKey runtime-only while excluding it from JSON serialization
 - [Phase 01]: Migrate legacy tmdbApiKey and stash apiKey values to secure storage during load/import
+- [Phase 01-security-and-privacy-guardrails]: Use SecurityValidationResult with ok/warning/blocking severity and required reason+fix fields.
+- [Phase 01-security-and-privacy-guardrails]: Escalate repeated blocked submit attempts after 3 tries per field per dialog session.
 
 ### Pending Todos
 
@@ -60,6 +63,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-27T17:11:58Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-02-27T17:13:25Z
+Stopped at: Completed 01-01-PLAN.md
 Resume file: None
