@@ -1,100 +1,114 @@
-/// lib/services/secure_key_service.dart
-/// Secure storage service for API keys and sensitive credentials
+// lib/services/secure_key_service.dart
+// Platform-secure storage service for API keys and sensitive credentials
 
-import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:crypto/crypto.dart';
+
 import '../utils/secure_logger.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class SecureKeyService {
-  static const _secureStorage = FlutterSecureStorage();
-  
-  // Key prefixes for different API types
-  static const String _tmdbKeyPrefix = 'api_key_tmdb_';
-  static const String _stashKeyPrefix = 'api_key_stash_';
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
-  /// Initialize API keys from environment if not already set
-  static Future<void> initializeFromEnvironment() async {
-    debugPrint('SecureKeyService: Initializing from environment...');
-    
-    // TMDB API Key
-    final tmdbEnvKey = dotenv.env['TMDB_API_KEY'] ?? 
-                      const String.fromEnvironment('TMDB_API_KEY');
-    if (tmdbEnvKey.isNotEmpty) {
-      final currentTmdbKey = await getTmdbApiKey();
-      if (currentTmdbKey.isEmpty) {
-        await setTmdbApiKey(tmdbEnvKey);
-        SecureLogger.debug('Loaded TMDB API key from environment', 'SecureKeyService');
-      }
-    }
-  }
+  static const String _tmdbKey = 'secret.tmdb';
+  static const String _stashKeyPrefix = 'secret.stash.';
 
-  /// Store TMDB API key securely
+  static String _stashKey(String endpointId) => '$_stashKeyPrefix$endpointId';
+
+  /// Store TMDB API key securely.
   static Future<void> setTmdbApiKey(String apiKey) async {
-    await _secureStorage.write(
-      key: '$_tmdbKeyPrefix${_getKeySuffix()}',
-      value: await _encryptKey(apiKey),
-    );
+    final value = apiKey.trim();
+    if (value.isEmpty) {
+      await deleteTmdbApiKey();
+      return;
+    }
+    await _secureStorage.write(key: _tmdbKey, value: value);
     SecureLogger.debug('TMDB API key stored securely', 'SecureKeyService');
   }
 
-  /// Retrieve TMDB API key
+  /// Retrieve TMDB API key.
   static Future<String> getTmdbApiKey() async {
     try {
-      final encrypted = await _secureStorage.read(
-        key: '$_tmdbKeyPrefix${_getKeySuffix()}',
-      );
-      return encrypted != null ? await _decryptKey(encrypted) : '';
+      return (await _secureStorage.read(key: _tmdbKey)) ?? '';
     } catch (e) {
       SecureLogger.error('Error retrieving TMDB key', e, 'SecureKeyService');
       return '';
     }
   }
 
-  /// Delete TMDB API key
+  /// Delete TMDB API key.
   static Future<void> deleteTmdbApiKey() async {
-    await _secureStorage.delete(key: '$_tmdbKeyPrefix${_getKeySuffix()}');
+    await _secureStorage.delete(key: _tmdbKey);
     SecureLogger.debug('TMDB API key deleted', 'SecureKeyService');
   }
 
-  /// Store StashDB API key securely
-  static Future<void> setStashApiKey(String apiKey) async {
-    await _secureStorage.write(
-      key: '$_stashKeyPrefix${_getKeySuffix()}',
-      value: await _encryptKey(apiKey),
-    );
-    SecureLogger.debug('StashDB API key stored securely', 'SecureKeyService');
+  /// Store Stash endpoint API key securely.
+  static Future<void> setStashApiKey({
+    required String endpointId,
+    required String apiKey,
+  }) async {
+    final value = apiKey.trim();
+    if (value.isEmpty) {
+      await deleteStashApiKey(endpointId: endpointId);
+      return;
+    }
+    await _secureStorage.write(key: _stashKey(endpointId), value: value);
+    SecureLogger.debug('Stash API key stored securely', 'SecureKeyService');
   }
 
-  /// Retrieve StashDB API key
-  static Future<String> getStashApiKey() async {
+  /// Retrieve Stash endpoint API key.
+  static Future<String> getStashApiKey({required String endpointId}) async {
     try {
-      final encrypted = await _secureStorage.read(
-        key: '$_stashKeyPrefix${_getKeySuffix()}',
-      );
-      return encrypted != null ? await _decryptKey(encrypted) : '';
+      return (await _secureStorage.read(key: _stashKey(endpointId))) ?? '';
     } catch (e) {
-      SecureLogger.error('Error retrieving StashDB key', e, 'SecureKeyService');
+      SecureLogger.error('Error retrieving Stash API key', e, 'SecureKeyService');
       return '';
     }
   }
 
-  /// Delete StashDB API key
-  static Future<void> deleteStashApiKey() async {
-    await _secureStorage.delete(key: '$_stashKeyPrefix${_getKeySuffix()}');
-    SecureLogger.debug('StashDB API key deleted', 'SecureKeyService');
+  /// Delete Stash endpoint API key.
+  static Future<void> deleteStashApiKey({required String endpointId}) async {
+    await _secureStorage.delete(key: _stashKey(endpointId));
+    SecureLogger.debug('Stash API key deleted', 'SecureKeyService');
   }
 
-  /// Delete all API keys (for logout/reset)
+  /// Migrate a legacy plaintext TMDB key into secure storage.
+  static Future<bool> migrateLegacyTmdbApiKey(String? legacyApiKey) async {
+    final value = legacyApiKey?.trim() ?? '';
+    if (value.isEmpty) return false;
+
+    final existing = await getTmdbApiKey();
+    if (existing.isNotEmpty) return false;
+
+    await setTmdbApiKey(value);
+    SecureLogger.debug('Migrated legacy TMDB key to secure storage', 'SecureKeyService');
+    return true;
+  }
+
+  /// Migrate a legacy plaintext Stash endpoint key into secure storage.
+  static Future<bool> migrateLegacyStashApiKey({
+    required String endpointId,
+    required String? legacyApiKey,
+  }) async {
+    final value = legacyApiKey?.trim() ?? '';
+    if (value.isEmpty) return false;
+
+    final existing = await getStashApiKey(endpointId: endpointId);
+    if (existing.isNotEmpty) return false;
+
+    await setStashApiKey(endpointId: endpointId, apiKey: value);
+    SecureLogger.debug('Migrated legacy Stash key to secure storage', 'SecureKeyService');
+    return true;
+  }
+
+  /// Delete all known secure keys managed by this service.
   static Future<void> deleteAllKeys() async {
     try {
-      await _secureStorage.deleteAll();
-    SecureLogger.debug('All API keys deleted', 'SecureKeyService');
+      final all = await _secureStorage.readAll();
+      for (final key in all.keys) {
+        if (key == _tmdbKey || key.startsWith(_stashKeyPrefix)) {
+          await _secureStorage.delete(key: key);
+        }
+      }
+      SecureLogger.debug('All managed API keys deleted', 'SecureKeyService');
     } catch (e) {
       SecureLogger.error('Error deleting all keys', e, 'SecureKeyService');
     }
@@ -138,7 +152,7 @@ class SecureKeyService {
     }
 
     // Check for quotes and backticks
-    final pattern2 = RegExp('["\'\`]', caseSensitive: false);
+    final pattern2 = RegExp('["\'`]', caseSensitive: false);
     if (pattern2.hasMatch(trimmed)) {
       return 'API key contains invalid characters';
     }
@@ -171,74 +185,6 @@ class SecureKeyService {
     return testPatterns.any((pattern) => pattern.hasMatch(apiKey));
   }
 
-  /// Generate a unique suffix for key storage (app instance)
-  static String _getKeySuffix() {
-    // Use app installation ID or device ID for uniqueness
-    // For now, using a fixed suffix, but could be device-specific
-    return 'default';
-  }
-
-  /// Generate a secure encryption key from device-specific entropy
-  static Future<String> _getEncryptionKey() async {
-    try {
-      // Combine multiple entropy sources for a unique key per installation
-      final secureStorage = FlutterSecureStorage();
-      String? deviceKey = await secureStorage.read(key: 'device_encryption_key');
-      
-      if (deviceKey == null) {
-        // Generate new key from multiple entropy sources
-        final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
-        final random = DateTime.now().microsecondsSinceEpoch.toString();
-        final entropy = 'FreakFlixSecure_${timestamp}_${random}';
-        
-        deviceKey = sha256.convert(utf8.encode(entropy)).toString();
-        await secureStorage.write(key: 'device_encryption_key', value: deviceKey);
-      }
-      
-      return deviceKey;
-    } catch (e) {
-      SecureLogger.error('Key generation error', e, 'SecureKeyService');
-      // Fallback to a less secure but deterministic key
-      return sha256.convert(utf8.encode('FreakFlixSecureFallback')).toString();
-    }
-  }
-
-  /// Secure encryption using SHA-256 based key derivation
-  static Future<String> _encryptKey(String key) async {
-    try {
-      final encryptionKey = await _getEncryptionKey();
-      final keyBytes = utf8.encode(key);
-      
-      // Use XOR with derived SHA-256 key for better security
-      final derivedKey = sha256.convert(utf8.encode(encryptionKey)).bytes;
-      final encrypted = List<int>.generate(keyBytes.length, (i) => 
-          keyBytes[i] ^ derivedKey[i % derivedKey.length]);
-      
-      return base64Encode(encrypted);
-    } catch (e) {
-      SecureLogger.error('Encryption error', e, 'SecureKeyService');
-      return key; // Fallback to unencrypted
-    }
-  }
-
-  /// Secure decryption using SHA-256 based key derivation
-  static Future<String> _decryptKey(String encryptedKey) async {
-    try {
-      final encryptionKey = await _getEncryptionKey();
-      final encrypted = base64Decode(encryptedKey);
-      
-      // Use XOR with derived SHA-256 key matching encryption
-      final derivedKey = sha256.convert(utf8.encode(encryptionKey)).bytes;
-      final decrypted = List<int>.generate(encrypted.length, (i) => 
-          encrypted[i] ^ derivedKey[i % derivedKey.length]);
-      
-      return utf8.decode(decrypted);
-    } catch (e) {
-      SecureLogger.error('Decryption error', e, 'SecureKeyService');
-      return encryptedKey; // Fallback to original
-    }
-  }
-
   /// Mask API key for display/logging
   static String maskApiKey(String apiKey) {
     if (apiKey.isEmpty) return '[empty]';
@@ -249,25 +195,32 @@ class SecureKeyService {
   /// Check if any API keys are stored
   static Future<bool> hasStoredKeys() async {
     final tmdbKey = await getTmdbApiKey();
-    final stashKey = await getStashApiKey();
+    final all = await _secureStorage.readAll();
+    final hasStashKeys = all.keys.any((key) => key.startsWith(_stashKeyPrefix));
     
-    return tmdbKey.isNotEmpty || stashKey.isNotEmpty;
+    return tmdbKey.isNotEmpty || hasStashKeys;
   }
 
   /// Get security audit info for stored keys
   static Future<Map<String, dynamic>> getSecurityAudit() async {
     final tmdbKey = await getTmdbApiKey();
-    final stashKey = await getStashApiKey();
+    final all = await _secureStorage.readAll();
+    final stashKeys = all.entries
+        .where((entry) => entry.key.startsWith(_stashKeyPrefix) && (entry.value).trim().isNotEmpty)
+        .map((entry) => entry.value)
+        .toList();
+    final firstStashKey = stashKeys.isNotEmpty ? stashKeys.first : '';
     
     return {
       'tmdb_key_stored': tmdbKey.isNotEmpty,
       'tmdb_key_length': tmdbKey.length,
       'tmdb_key_is_test': tmdbKey.isNotEmpty ? isTestKey(tmdbKey) : false,
-      'stash_key_stored': stashKey.isNotEmpty,
-      'stash_key_length': stashKey.length,
-      'stash_key_is_test': stashKey.isNotEmpty ? isTestKey(stashKey) : false,
+      'stash_key_stored': stashKeys.isNotEmpty,
+      'stash_key_count': stashKeys.length,
+      'stash_key_length': firstStashKey.length,
+      'stash_key_is_test': firstStashKey.isNotEmpty ? isTestKey(firstStashKey) : false,
       'storage_method': 'flutter_secure_storage',
-      'encryption_enabled': true,
+      'platform_managed_encryption': true,
     };
   }
 }
