@@ -179,7 +179,7 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
       SettingsProvider settings, StashEndpoint? existing) async {
     _stashNameCtrl.text = existing?.name ?? '';
     _stashUrlCtrl.text = existing?.url ?? 'https://stashdb.org/graphql';
-    _stashKeyCtrl.text = existing?.apiKey ?? '';
+    _stashKeyCtrl.clear();
     bool obscureKey = true;
     bool isTesting = false;
 
@@ -210,6 +210,9 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
                     obscureText: obscureKey,
                     decoration: InputDecoration(
                       labelText: 'API Key',
+                      helperText: existing == null
+                          ? null
+                          : 'Stored securely. Leave blank to keep current key.',
                       suffixIcon: IconButton(
                         icon: Icon(
                             obscureKey ? LucideIcons.eye : LucideIcons.eyeOff),
@@ -224,8 +227,13 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
                         ? null
                         : () async {
                             setDialogState(() => isTesting = true);
+                            final keyForTest = _stashKeyCtrl.text.trim().isNotEmpty
+                                ? _stashKeyCtrl.text.trim()
+                                : (existing?.apiKey ?? '');
                             final ok = await _stashService.testConnection(
-                                _stashKeyCtrl.text, _stashUrlCtrl.text);
+                              keyForTest,
+                              _stashUrlCtrl.text,
+                            );
                             setDialogState(() => isTesting = false);
 
                             if (context.mounted) {
@@ -258,11 +266,16 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
                   if (_stashNameCtrl.text.isEmpty || _stashUrlCtrl.text.isEmpty)
                     return;
 
+                  final submittedKey = _stashKeyCtrl.text.trim();
+                  final endpointKey = submittedKey.isNotEmpty
+                      ? submittedKey
+                      : (existing?.apiKey ?? '');
+
                   final newEp = StashEndpoint(
                     id: existing?.id,
-                    name: _stashNameCtrl.text,
-                    url: _stashUrlCtrl.text,
-                    apiKey: _stashKeyCtrl.text,
+                    name: _stashNameCtrl.text.trim(),
+                    url: _stashUrlCtrl.text.trim(),
+                    apiKey: endpointKey,
                     enabled: existing?.enabled ?? true,
                   );
 

@@ -59,17 +59,17 @@ class _SettingsMetadataSectionState extends State<SettingsMetadataSection> {
                      child: TextField(
                        controller: _tmdbController,
                        obscureText: _obscureTmdb,
-                       decoration: const InputDecoration(
+                        decoration: const InputDecoration(
                          labelText: 'TMDB API Key',
                          labelStyle: TextStyle(color: AppColors.textSub),
                          border: InputBorder.none,
                          focusedBorder: InputBorder.none,
                          contentPadding: EdgeInsets.zero,
-                       ),
-                       style: const TextStyle(color: AppColors.textMain),
-                       onChanged: (value) => settings.setTmdbApiKey(value),
-                       onSubmitted: (value) => settings.setTmdbApiKey(value),
-                     ),
+                        ),
+                        style: const TextStyle(color: AppColors.textMain),
+                        onEditingComplete: () => settings.setTmdbApiKey(_tmdbController.text),
+                        onSubmitted: (value) => settings.setTmdbApiKey(value),
+                      ),
                    ),
                    IconButton(
                      icon: Icon(_obscureTmdb ? LucideIcons.eye : LucideIcons.eyeOff, color: AppColors.textSub, size: 18),
@@ -99,6 +99,7 @@ class _SettingsMetadataSectionState extends State<SettingsMetadataSection> {
               onTap: settings.isTestingTmdbKey 
                 ? null 
                 : () async {
+                    await settings.setTmdbApiKey(_tmdbController.text);
                     await settings.testTmdbKey((_) => tmdb.validateKey());
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
