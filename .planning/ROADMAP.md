@@ -47,7 +47,11 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. User can complete onboarding, browse, details, playback, and settings flows on Windows, Android, and Web.
   2. Windows, Android, and Web release builds complete successfully from the v1 codebase.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 02-01-PLAN.md - Harden platform guardrails and unsupported-state handling in shared runtime paths.
+- [ ] 02-02-PLAN.md - Add cross-platform core-journey smoke coverage and pass/fail defer matrix artifacts.
+- [ ] 02-03-PLAN.md - Script reproducible web/windows/android release builds with artifact ledger evidence.
 
 ### Phase 3: Onboarding and Source Setup
 **Goal**: New users can finish setup and connect at least one content source across local and remote options.
@@ -124,7 +128,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Security and Privacy Guardrails | 4/4 | Complete | 2026-02-27 |
-| 2. Cross-Platform Baseline and Releases | 0/TBD | Not started | - |
+| 2. Cross-Platform Baseline and Releases | 0/3 | Planned | - |
 | 3. Onboarding and Source Setup | 0/TBD | Not started | - |
 | 4. Library Ingestion and Indexing | 0/TBD | Not started | - |
 | 5. Metadata and Offline Catalog | 0/TBD | Not started | - |
