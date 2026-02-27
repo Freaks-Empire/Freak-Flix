@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 Phase: 1 of 8 (Security and Privacy Guardrails)
 Plan: 2 of 4 in current phase
 Status: In progress
-Last activity: 2026-02-27 - Completed 01-01 typed security validation guardrails plan.
+Last activity: 2026-02-27 - Completed 01-02 canonical path containment guardrails plan.
 
 Progress: [█████░░░░░] 50%
 
@@ -35,6 +35,7 @@ Progress: [█████░░░░░] 50%
 
 *Updated after each plan completion*
 | Phase 01-security-and-privacy-guardrails P01 | 2 min | 3 tasks | 5 files |
+| Phase 01 P02 | 5 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -50,6 +51,8 @@ Recent decisions affecting current work:
 - [Phase 01]: Migrate legacy tmdbApiKey and stash apiKey values to secure storage during load/import
 - [Phase 01-security-and-privacy-guardrails]: Use SecurityValidationResult with ok/warning/blocking severity and required reason+fix fields.
 - [Phase 01-security-and-privacy-guardrails]: Escalate repeated blocked submit attempts after 3 tries per field per dialog session.
+- [Phase 01]: Use a shared PathGuard utility to decode, normalize, and enforce root containment before filesystem IO.
+- [Phase 01]: Fail closed with actionable errors when backup paths escape allowed roots.
 
 ### Pending Todos
 
@@ -63,6 +66,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-27T17:13:25Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-02-27T17:15:28Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None
