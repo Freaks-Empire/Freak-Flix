@@ -1,13 +1,16 @@
-/// lib/providers/settings_provider.dart
+// lib/providers/settings_provider.dart
+// Settings persistence with secure secret storage for API keys
+
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../services/persistence_service.dart';
-import '../models/stash_endpoint.dart';
-import '../utils/logger.dart';
-
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/stash_endpoint.dart';
+import '../services/persistence_service.dart';
+import '../services/secure_key_service.dart';
+import '../utils/logger.dart';
 
 enum TmdbKeyStatus {
   unknown,
@@ -18,6 +21,7 @@ enum TmdbKeyStatus {
 class SettingsProvider extends ChangeNotifier {
   static const _key = 'settings_v1';
   static const _tmdbStatusKey = 'tmdbKeyStatus';
+  static const _storageFile = 'settings.json';
 
   bool isDarkMode = true;
   bool preferAniListForAnime = true;
@@ -25,30 +29,23 @@ class SettingsProvider extends ChangeNotifier {
   String? lastScannedFolder;
   String tmdbApiKey = '';
   TmdbKeyStatus tmdbStatus = TmdbKeyStatus.unknown;
-  
+
   bool enableAdultContent = false;
   bool requirePerformerMatch = false;
-  String? primaryBackupAccountId; 
-  // Legacy single fields replaced by stashEndpoints
-  // String stashApiKey = '';
-  // String stashUrl = 'https://stashdb.org/graphql';
+  String? primaryBackupAccountId;
   List<StashEndpoint> stashEndpoints = [];
 
   bool _isTestingTmdbKey = false;
-
   bool get isTestingTmdbKey => _isTestingTmdbKey;
   bool get hasTmdbKey => tmdbApiKey.trim().isNotEmpty;
-  
+
   bool _hasMigratedProfiles = false;
   bool get hasMigratedProfiles => _hasMigratedProfiles;
 
-  Future<void> setHasMigratedProfiles(bool val) async {
-    _hasMigratedProfiles = val;
-    await save();
-    notifyListeners();
-  }
+  bool _isSetupCompleted = false;
+  bool get isSetupCompleted => _isSetupCompleted;
 
-  static const _storageFile = 'settings.json';
+  bool autoBackupEnabled = false;
 
   Future<void> load() async {
     AppLogger.d('Loading settings from file...', tag: 'SettingsProvider');
@@ -57,82 +54,123 @@ class SettingsProvider extends ChangeNotifier {
       if (jsonStr == null) {
         AppLogger.d('No settings file. Checking legacy prefs...', tag: 'SettingsProvider');
         await _migrateFromPrefs();
-        // Even if migration happens, we fall through to defaults if needed or return
-        // Ideally _migrateFromPrefs sets values.
-        
-        // If still defaults (i.e. first run ever), check env
+
         if (tmdbApiKey.isEmpty) {
-             tmdbApiKey = dotenv.env['TMDB_API_KEY'] ?? 
-                   const String.fromEnvironment('TMDB_API_KEY');
+          final envKey = _environmentTmdbKey();
+          if (envKey.isNotEmpty) {
+            await setTmdbApiKey(envKey);
+          }
         }
         return;
       }
 
       final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-      _loadFromMap(data);
-       AppLogger.d('Settings loaded from file', tag: 'SettingsProvider');
+      final migrated = await _loadFromMap(data);
+      if (migrated) {
+        await save();
+      }
+      AppLogger.d('Settings loaded from file', tag: 'SettingsProvider');
     } catch (e) {
       AppLogger.e('Error loading settings: $e', error: e, tag: 'SettingsProvider');
-      // basic fallback
-      tmdbApiKey = dotenv.env['TMDB_API_KEY'] ?? 
-                   const String.fromEnvironment('TMDB_API_KEY');
+      final envKey = _environmentTmdbKey();
+      if (envKey.isNotEmpty) {
+        await setTmdbApiKey(envKey);
+      }
     }
   }
 
-  void _loadFromMap(Map<String, dynamic> data) {
+  Future<bool> _loadFromMap(Map<String, dynamic> data) async {
+    var migratedLegacySecrets = false;
+
     isDarkMode = data['isDarkMode'] as bool? ?? true;
     preferAniListForAnime = data['preferAniListForAnime'] as bool? ?? true;
     autoFetchAfterScan = data['autoFetchAfterScan'] as bool? ?? true;
     lastScannedFolder = data['lastScannedFolder'] as String?;
     _hasMigratedProfiles = data['migrated_profiles'] as bool? ?? false;
     _isSetupCompleted = data['isSetupCompleted'] as bool? ?? false;
-    
-    String? savedKey = data['tmdbApiKey'] as String?;
-    if (savedKey == null || savedKey.trim().isEmpty) {
-      savedKey = dotenv.env['TMDB_API_KEY'] ?? 
-                 const String.fromEnvironment('TMDB_API_KEY');
-    }
-    tmdbApiKey = savedKey;
 
     final statusIndex = data[_tmdbStatusKey] as int?;
-    if (statusIndex != null && statusIndex >= 0 && statusIndex < TmdbKeyStatus.values.length) {
+    if (statusIndex != null &&
+        statusIndex >= 0 &&
+        statusIndex < TmdbKeyStatus.values.length) {
       tmdbStatus = TmdbKeyStatus.values[statusIndex];
     } else {
       tmdbStatus = TmdbKeyStatus.unknown;
     }
-    
+
     primaryBackupAccountId = data['primaryBackupAccountId'] as String?;
     autoBackupEnabled = data['autoBackupEnabled'] as bool? ?? false;
 
     enableAdultContent = data['enableAdultContent'] as bool? ?? false;
     requirePerformerMatch = data['requirePerformerMatch'] as bool? ?? false;
-    
-    // Load endpoints
+
+    final legacyTmdbKey = (data['tmdbApiKey'] as String?)?.trim() ?? '';
+    if (legacyTmdbKey.isNotEmpty) {
+      migratedLegacySecrets =
+          await SecureKeyService.migrateLegacyTmdbApiKey(legacyTmdbKey) ||
+              migratedLegacySecrets;
+    }
+
+    final secureTmdbKey = await SecureKeyService.getTmdbApiKey();
+    if (secureTmdbKey.isNotEmpty) {
+      tmdbApiKey = secureTmdbKey;
+    } else {
+      final envKey = _environmentTmdbKey();
+      tmdbApiKey = envKey;
+      if (envKey.isNotEmpty) {
+        await SecureKeyService.setTmdbApiKey(envKey);
+      }
+    }
+
+    stashEndpoints = _buildEndpointsFromData(data);
+
+    for (final endpoint in stashEndpoints) {
+      var secureKey = await SecureKeyService.getStashApiKey(endpointId: endpoint.id);
+      if (secureKey.isEmpty && endpoint.apiKey.trim().isNotEmpty) {
+        migratedLegacySecrets =
+            await SecureKeyService.migrateLegacyStashApiKey(
+                  endpointId: endpoint.id,
+                  legacyApiKey: endpoint.apiKey,
+                ) ||
+                migratedLegacySecrets;
+        secureKey = await SecureKeyService.getStashApiKey(endpointId: endpoint.id);
+      }
+      endpoint.apiKey = secureKey;
+    }
+
+    return migratedLegacySecrets;
+  }
+
+  List<StashEndpoint> _buildEndpointsFromData(Map<String, dynamic> data) {
     if (data['stashEndpoints'] != null) {
-      stashEndpoints = (data['stashEndpoints'] as List)
-          .map((e) => StashEndpoint.fromJson(e))
+      return (data['stashEndpoints'] as List)
+          .map((e) => StashEndpoint.fromJson(e as Map<String, dynamic>))
           .toList();
     }
-    
-    // Migration: If no endpoints but legacy data exists
-    if (stashEndpoints.isEmpty) {
-      final legacyUrl = data['stashUrl'] as String?;
-      final legacyKey = data['stashApiKey'] as String?;
-      if (legacyUrl != null && legacyUrl.isNotEmpty) {
-        stashEndpoints.add(StashEndpoint(
+
+    final legacyUrl = data['stashUrl'] as String?;
+    final legacyKey = data['stashApiKey'] as String?;
+    if (legacyUrl != null && legacyUrl.isNotEmpty) {
+      return [
+        StashEndpoint(
           name: 'Default Stash',
           url: legacyUrl,
           apiKey: legacyKey ?? '',
-        ));
-      } else {
-        // Add default StashDB.org if completely empty/fresh
-        stashEndpoints.add(StashEndpoint(
-           name: 'StashDB.org',
-           url: 'https://stashdb.org/graphql',
-           apiKey: '',
-        ));
-      }
+        ),
+      ];
     }
+
+    return [
+      StashEndpoint(
+        name: 'StashDB.org',
+        url: 'https://stashdb.org/graphql',
+        apiKey: '',
+      ),
+    ];
+  }
+
+  String _environmentTmdbKey() {
+    return (dotenv.env['TMDB_API_KEY'] ?? const String.fromEnvironment('TMDB_API_KEY')).trim();
   }
 
   Map<String, dynamic> exportState() {
@@ -143,16 +181,17 @@ class SettingsProvider extends ChangeNotifier {
       'lastScannedFolder': lastScannedFolder,
       'migrated_profiles': _hasMigratedProfiles,
       'isSetupCompleted': _isSetupCompleted,
-      'tmdbApiKey': tmdbApiKey,
+      _tmdbStatusKey: tmdbStatus.index,
       'enableAdultContent': enableAdultContent,
       'requirePerformerMatch': requirePerformerMatch,
       'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
       'primaryBackupAccountId': primaryBackupAccountId,
+      'autoBackupEnabled': autoBackupEnabled,
     };
   }
 
   Future<void> importState(Map<String, dynamic> data) async {
-    _loadFromMap(data);
+    await _loadFromMap(data);
     await save();
     notifyListeners();
   }
@@ -160,36 +199,30 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> _migrateFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
-    
+
     if (raw == null) return;
-    
+
     try {
-       final data = jsonDecode(raw) as Map<String, dynamic>;
-       _loadFromMap(data);
-       await save();
-       AppLogger.d('Migrated settings from SharedPreferences', tag: 'SettingsProvider');
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final migrated = await _loadFromMap(data);
+      await save();
+      if (migrated) {
+        AppLogger.d('Migrated legacy plaintext secrets to secure storage', tag: 'SettingsProvider');
+      }
+      AppLogger.d('Migrated settings from SharedPreferences', tag: 'SettingsProvider');
     } catch (e) {
-       AppLogger.e('Migration failed: $e', error: e, tag: 'SettingsProvider');
+      AppLogger.e('Migration failed: $e', error: e, tag: 'SettingsProvider');
     }
   }
 
   Future<void> save() async {
-    final data = {
-        'isDarkMode': isDarkMode,
-        'preferAniListForAnime': preferAniListForAnime,
-        'autoFetchAfterScan': autoFetchAfterScan,
-        'lastScannedFolder': lastScannedFolder,
-        'tmdbApiKey': tmdbApiKey,
-        _tmdbStatusKey: tmdbStatus.index,
-        'enableAdultContent': enableAdultContent,
-        'requirePerformerMatch': requirePerformerMatch,
-        'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
-        'migrated_profiles': _hasMigratedProfiles,
-        'isSetupCompleted': _isSetupCompleted,
-        'primaryBackupAccountId': primaryBackupAccountId,
-        'autoBackupEnabled': autoBackupEnabled,
-    };
-    await PersistenceService.instance.saveString(_storageFile, jsonEncode(data));
+    await PersistenceService.instance.saveString(_storageFile, jsonEncode(exportState()));
+  }
+
+  Future<void> setHasMigratedProfiles(bool val) async {
+    _hasMigratedProfiles = val;
+    await save();
+    notifyListeners();
   }
 
   Future<void> toggleDarkMode(bool value) async {
@@ -203,9 +236,6 @@ class SettingsProvider extends ChangeNotifier {
     await save();
     notifyListeners();
   }
-
-  bool _isSetupCompleted = false;
-  bool get isSetupCompleted => _isSetupCompleted;
 
   Future<void> completeSetup() async {
     _isSetupCompleted = true;
@@ -232,6 +262,8 @@ class SettingsProvider extends ChangeNotifier {
   }
 
   Future<void> addStashEndpoint(StashEndpoint endpoint) async {
+    await SecureKeyService.setStashApiKey(endpointId: endpoint.id, apiKey: endpoint.apiKey);
+    endpoint.apiKey = await SecureKeyService.getStashApiKey(endpointId: endpoint.id);
     stashEndpoints.add(endpoint);
     await save();
     notifyListeners();
@@ -239,18 +271,24 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> removeStashEndpoint(String id) async {
     stashEndpoints.removeWhere((e) => e.id == id);
+    await SecureKeyService.deleteStashApiKey(endpointId: id);
     await save();
     notifyListeners();
   }
 
   Future<void> updateStashEndpoint(StashEndpoint endpoint) async {
     final index = stashEndpoints.indexWhere((e) => e.id == endpoint.id);
-    if (index != -1) {
-      stashEndpoints[index] = endpoint;
-      await save();
-      notifyListeners();
-      notifyListeners();
+    if (index == -1) return;
+
+    final submittedKey = endpoint.apiKey.trim();
+    if (submittedKey.isNotEmpty) {
+      await SecureKeyService.setStashApiKey(endpointId: endpoint.id, apiKey: submittedKey);
     }
+    endpoint.apiKey = await SecureKeyService.getStashApiKey(endpointId: endpoint.id);
+
+    stashEndpoints[index] = endpoint;
+    await save();
+    notifyListeners();
   }
 
   Future<void> reorderStashEndpoints(int oldIndex, int newIndex) async {
@@ -270,8 +308,16 @@ class SettingsProvider extends ChangeNotifier {
   }
 
   Future<void> setTmdbApiKey(String? value) async {
-    tmdbApiKey = (value?.trim().isEmpty ?? true) ? '' : value!.trim();
+    final normalized = (value?.trim().isEmpty ?? true) ? '' : value!.trim();
+    tmdbApiKey = normalized;
     tmdbStatus = TmdbKeyStatus.unknown;
+
+    if (normalized.isEmpty) {
+      await SecureKeyService.deleteTmdbApiKey();
+    } else {
+      await SecureKeyService.setTmdbApiKey(normalized);
+    }
+
     await save();
     notifyListeners();
   }
@@ -307,16 +353,18 @@ class SettingsProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
   Map<String, dynamic> exportSettings() {
     return {
       'isDarkMode': isDarkMode,
       'preferAniListForAnime': preferAniListForAnime,
       'autoFetchAfterScan': autoFetchAfterScan,
       'lastScannedFolder': lastScannedFolder,
-      'tmdbApiKey': tmdbApiKey,
       'tmdbStatus': tmdbStatus.index,
       'enableAdultContent': enableAdultContent,
       'stashEndpoints': stashEndpoints.map((e) => e.toJson()).toList(),
+      'primaryBackupAccountId': primaryBackupAccountId,
+      'autoBackupEnabled': autoBackupEnabled,
     };
   }
 
@@ -331,7 +379,13 @@ class SettingsProvider extends ChangeNotifier {
     if (data.containsKey('lastScannedFolder')) {
       lastScannedFolder = data['lastScannedFolder'];
     }
-    if (data.containsKey('tmdbApiKey')) tmdbApiKey = data['tmdbApiKey'] ?? '';
+
+    if (data.containsKey('tmdbApiKey')) {
+      await setTmdbApiKey((data['tmdbApiKey'] as String?) ?? '');
+    } else {
+      tmdbApiKey = await SecureKeyService.getTmdbApiKey();
+    }
+
     if (data.containsKey('tmdbStatus')) {
       final idx = data['tmdbStatus'] as int;
       if (idx >= 0 && idx < TmdbKeyStatus.values.length) {
@@ -341,9 +395,21 @@ class SettingsProvider extends ChangeNotifier {
     if (data.containsKey('enableAdultContent')) {
       enableAdultContent = data['enableAdultContent'] ?? false;
     }
+    if (data.containsKey('requirePerformerMatch')) {
+      requirePerformerMatch = data['requirePerformerMatch'] ?? false;
+    }
     if (data.containsKey('stashEndpoints')) {
-       final list = data['stashEndpoints'] as List;
-       stashEndpoints = list.map((e) => StashEndpoint.fromJson(e)).toList();
+      final list = data['stashEndpoints'] as List;
+      stashEndpoints = list
+          .map((e) => StashEndpoint.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      for (final endpoint in stashEndpoints) {
+        if (endpoint.apiKey.trim().isNotEmpty) {
+          await SecureKeyService.setStashApiKey(endpointId: endpoint.id, apiKey: endpoint.apiKey);
+        }
+        endpoint.apiKey = await SecureKeyService.getStashApiKey(endpointId: endpoint.id);
+      }
     }
     if (data.containsKey('primaryBackupAccountId')) {
       primaryBackupAccountId = data['primaryBackupAccountId'];
@@ -354,8 +420,6 @@ class SettingsProvider extends ChangeNotifier {
     await save();
     notifyListeners();
   }
-
-  bool autoBackupEnabled = false;
 
   Future<void> toggleAutoBackup(bool value) async {
     autoBackupEnabled = value;

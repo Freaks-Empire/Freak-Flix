@@ -4,6 +4,7 @@ class StashEndpoint {
   final String id;
   String name;
   String url;
+  // Runtime-only secret. Persisted in secure storage via SecureKeyService.
   String apiKey;
   bool enabled;
 
@@ -30,7 +31,6 @@ class StashEndpoint {
       'id': id,
       'name': name,
       'url': url,
-      'apiKey': apiKey,
       'enabled': enabled,
     };
   }
