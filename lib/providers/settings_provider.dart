@@ -47,12 +47,18 @@ class SettingsProvider extends ChangeNotifier {
 
   bool autoBackupEnabled = false;
 
+  bool _coerceAdultOptIn(Object? rawValue) {
+    return rawValue is bool ? rawValue : false;
+  }
+
   Future<void> load() async {
     AppLogger.d('Loading settings from file...', tag: 'SettingsProvider');
     try {
-      final jsonStr = await PersistenceService.instance.loadString(_storageFile);
+      final jsonStr =
+          await PersistenceService.instance.loadString(_storageFile);
       if (jsonStr == null) {
-        AppLogger.d('No settings file. Checking legacy prefs...', tag: 'SettingsProvider');
+        AppLogger.d('No settings file. Checking legacy prefs...',
+            tag: 'SettingsProvider');
         await _migrateFromPrefs();
 
         if (tmdbApiKey.isEmpty) {
@@ -71,7 +77,8 @@ class SettingsProvider extends ChangeNotifier {
       }
       AppLogger.d('Settings loaded from file', tag: 'SettingsProvider');
     } catch (e) {
-      AppLogger.e('Error loading settings: $e', error: e, tag: 'SettingsProvider');
+      AppLogger.e('Error loading settings: $e',
+          error: e, tag: 'SettingsProvider');
       final envKey = _environmentTmdbKey();
       if (envKey.isNotEmpty) {
         await setTmdbApiKey(envKey);
@@ -101,7 +108,7 @@ class SettingsProvider extends ChangeNotifier {
     primaryBackupAccountId = data['primaryBackupAccountId'] as String?;
     autoBackupEnabled = data['autoBackupEnabled'] as bool? ?? false;
 
-    enableAdultContent = data['enableAdultContent'] as bool? ?? false;
+    enableAdultContent = _coerceAdultOptIn(data['enableAdultContent']);
     requirePerformerMatch = data['requirePerformerMatch'] as bool? ?? false;
 
     final legacyTmdbKey = (data['tmdbApiKey'] as String?)?.trim() ?? '';
@@ -125,15 +132,16 @@ class SettingsProvider extends ChangeNotifier {
     stashEndpoints = _buildEndpointsFromData(data);
 
     for (final endpoint in stashEndpoints) {
-      var secureKey = await SecureKeyService.getStashApiKey(endpointId: endpoint.id);
+      var secureKey =
+          await SecureKeyService.getStashApiKey(endpointId: endpoint.id);
       if (secureKey.isEmpty && endpoint.apiKey.trim().isNotEmpty) {
-        migratedLegacySecrets =
-            await SecureKeyService.migrateLegacyStashApiKey(
-                  endpointId: endpoint.id,
-                  legacyApiKey: endpoint.apiKey,
-                ) ||
-                migratedLegacySecrets;
-        secureKey = await SecureKeyService.getStashApiKey(endpointId: endpoint.id);
+        migratedLegacySecrets = await SecureKeyService.migrateLegacyStashApiKey(
+              endpointId: endpoint.id,
+              legacyApiKey: endpoint.apiKey,
+            ) ||
+            migratedLegacySecrets;
+        secureKey =
+            await SecureKeyService.getStashApiKey(endpointId: endpoint.id);
       }
       endpoint.apiKey = secureKey;
     }
@@ -170,7 +178,9 @@ class SettingsProvider extends ChangeNotifier {
   }
 
   String _environmentTmdbKey() {
-    return (dotenv.env['TMDB_API_KEY'] ?? const String.fromEnvironment('TMDB_API_KEY')).trim();
+    return (dotenv.env['TMDB_API_KEY'] ??
+            const String.fromEnvironment('TMDB_API_KEY'))
+        .trim();
   }
 
   Map<String, dynamic> exportState() {
@@ -207,16 +217,19 @@ class SettingsProvider extends ChangeNotifier {
       final migrated = await _loadFromMap(data);
       await save();
       if (migrated) {
-        AppLogger.d('Migrated legacy plaintext secrets to secure storage', tag: 'SettingsProvider');
+        AppLogger.d('Migrated legacy plaintext secrets to secure storage',
+            tag: 'SettingsProvider');
       }
-      AppLogger.d('Migrated settings from SharedPreferences', tag: 'SettingsProvider');
+      AppLogger.d('Migrated settings from SharedPreferences',
+          tag: 'SettingsProvider');
     } catch (e) {
       AppLogger.e('Migration failed: $e', error: e, tag: 'SettingsProvider');
     }
   }
 
   Future<void> save() async {
-    await PersistenceService.instance.saveString(_storageFile, jsonEncode(exportState()));
+    await PersistenceService.instance
+        .saveString(_storageFile, jsonEncode(exportState()));
   }
 
   Future<void> setHasMigratedProfiles(bool val) async {
@@ -262,8 +275,10 @@ class SettingsProvider extends ChangeNotifier {
   }
 
   Future<void> addStashEndpoint(StashEndpoint endpoint) async {
-    await SecureKeyService.setStashApiKey(endpointId: endpoint.id, apiKey: endpoint.apiKey);
-    endpoint.apiKey = await SecureKeyService.getStashApiKey(endpointId: endpoint.id);
+    await SecureKeyService.setStashApiKey(
+        endpointId: endpoint.id, apiKey: endpoint.apiKey);
+    endpoint.apiKey =
+        await SecureKeyService.getStashApiKey(endpointId: endpoint.id);
     stashEndpoints.add(endpoint);
     await save();
     notifyListeners();
@@ -282,9 +297,11 @@ class SettingsProvider extends ChangeNotifier {
 
     final submittedKey = endpoint.apiKey.trim();
     if (submittedKey.isNotEmpty) {
-      await SecureKeyService.setStashApiKey(endpointId: endpoint.id, apiKey: submittedKey);
+      await SecureKeyService.setStashApiKey(
+          endpointId: endpoint.id, apiKey: submittedKey);
     }
-    endpoint.apiKey = await SecureKeyService.getStashApiKey(endpointId: endpoint.id);
+    endpoint.apiKey =
+        await SecureKeyService.getStashApiKey(endpointId: endpoint.id);
 
     stashEndpoints[index] = endpoint;
     await save();
@@ -393,7 +410,7 @@ class SettingsProvider extends ChangeNotifier {
       }
     }
     if (data.containsKey('enableAdultContent')) {
-      enableAdultContent = data['enableAdultContent'] ?? false;
+      enableAdultContent = _coerceAdultOptIn(data['enableAdultContent']);
     }
     if (data.containsKey('requirePerformerMatch')) {
       requirePerformerMatch = data['requirePerformerMatch'] ?? false;
@@ -406,9 +423,11 @@ class SettingsProvider extends ChangeNotifier {
 
       for (final endpoint in stashEndpoints) {
         if (endpoint.apiKey.trim().isNotEmpty) {
-          await SecureKeyService.setStashApiKey(endpointId: endpoint.id, apiKey: endpoint.apiKey);
+          await SecureKeyService.setStashApiKey(
+              endpointId: endpoint.id, apiKey: endpoint.apiKey);
         }
-        endpoint.apiKey = await SecureKeyService.getStashApiKey(endpointId: endpoint.id);
+        endpoint.apiKey =
+            await SecureKeyService.getStashApiKey(endpointId: endpoint.id);
       }
     }
     if (data.containsKey('primaryBackupAccountId')) {

@@ -1,10 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:http/http.dart' as http;
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 
 import '../../providers/settings_provider.dart';
 import '../../services/stash_db_service.dart';
@@ -71,8 +72,9 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
           children: [
             SettingsTile(
               icon: LucideIcons.lock,
-              title: 'Enable Adult Content',
-              subtitle: 'Unlocks StashDB integration & adult libraries',
+              title: 'Show Adult Library (Opt-In)',
+              subtitle:
+                  'Off by default. Enable only when you want adult routes and tabs visible.',
               trailing: Switch.adaptive(
                 value: settings.enableAdultContent,
                 activeColor: AppColors.accent,
@@ -227,9 +229,10 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
                         ? null
                         : () async {
                             setDialogState(() => isTesting = true);
-                            final keyForTest = _stashKeyCtrl.text.trim().isNotEmpty
-                                ? _stashKeyCtrl.text.trim()
-                                : (existing?.apiKey ?? '');
+                            final keyForTest =
+                                _stashKeyCtrl.text.trim().isNotEmpty
+                                    ? _stashKeyCtrl.text.trim()
+                                    : (existing?.apiKey ?? '');
                             final ok = await _stashService.testConnection(
                               keyForTest,
                               _stashUrlCtrl.text,
@@ -301,13 +304,16 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
       // Get current app version
       final info = await PackageInfo.fromPlatform();
       final currentBuild = int.tryParse(info.buildNumber) ?? 0;
-      
+
       // Show loading indicator
       messenger.showSnackBar(
         const SnackBar(
           content: Row(
             children: [
-              SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+              SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2)),
               SizedBox(width: 12),
               Text('Checking for updates...'),
             ],
@@ -315,30 +321,32 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
           duration: Duration(seconds: 2),
         ),
       );
-      
+
       // Fetch latest release from GitHub API
       final res = await http.get(
         Uri.parse(_githubApiUrl),
         headers: {'Accept': 'application/vnd.github.v3+json'},
       );
-      
+
       if (res.statusCode != 200) {
         messenger.showSnackBar(const SnackBar(
           content: Text('Update check failed. Please try again later.'),
         ));
         return;
       }
-      
+
       final data = jsonDecode(res.body);
       final tagName = data['tag_name'] as String? ?? '';
       final releaseName = data['name'] as String? ?? 'Unknown';
-      final releaseBody = data['body'] as String? ?? 'No release notes available.';
-      final htmlUrl = data['html_url'] as String? ?? 'https://github.com/Freaks-Empire/Freak-Flix/releases';
-      
+      final releaseBody =
+          data['body'] as String? ?? 'No release notes available.';
+      final htmlUrl = data['html_url'] as String? ??
+          'https://github.com/Freaks-Empire/Freak-Flix/releases';
+
       // Extract build number from tag (e.g., "build-123" -> 123)
       final buildMatch = RegExp(r'build-(\d+)').firstMatch(tagName);
       final remoteBuild = int.tryParse(buildMatch?.group(1) ?? '0') ?? 0;
-      
+
       if (remoteBuild > currentBuild) {
         // New version available
         final confirmed = await showDialog<bool>(
@@ -350,7 +358,9 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
               children: [
                 const Icon(LucideIcons.downloadCloud, color: AppColors.accent),
                 const SizedBox(width: 8),
-                Expanded(child: Text('Update Available', style: TextStyle(fontSize: 18))),
+                Expanded(
+                    child: Text('Update Available',
+                        style: TextStyle(fontSize: 18))),
               ],
             ),
             content: SingleChildScrollView(
@@ -360,7 +370,8 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
                 children: [
                   Text(
                     'A new version is available!',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textMain),
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, color: AppColors.textMain),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -369,7 +380,8 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
                   ),
                   Text(
                     'Latest: $releaseName',
-                    style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                        color: AppColors.accent, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 16),
                   Container(
@@ -384,14 +396,18 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
                       children: [
                         Text(
                           'Release Notes:',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textMain, fontSize: 12),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textMain,
+                              fontSize: 12),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          releaseBody.length > 500 
-                            ? '${releaseBody.substring(0, 500)}...' 
-                            : releaseBody,
-                          style: TextStyle(color: AppColors.textSub, fontSize: 11),
+                          releaseBody.length > 500
+                              ? '${releaseBody.substring(0, 500)}...'
+                              : releaseBody,
+                          style:
+                              TextStyle(color: AppColors.textSub, fontSize: 11),
                         ),
                       ],
                     ),
@@ -412,7 +428,7 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
             ],
           ),
         );
-        
+
         if (confirmed == true) {
           // Open browser to releases page
           final uri = Uri.parse(htmlUrl);
@@ -420,7 +436,8 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
             await launchUrl(uri, mode: LaunchMode.externalApplication);
           } else {
             messenger.showSnackBar(const SnackBar(
-              content: Text('Could not open browser. Please visit GitHub manually.'),
+              content:
+                  Text('Could not open browser. Please visit GitHub manually.'),
             ));
           }
         }

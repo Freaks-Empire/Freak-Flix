@@ -1,12 +1,13 @@
-/// lib/screens/setup_screen.dart
+// lib/screens/setup_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../providers/settings_provider.dart';
-import '../providers/profile_provider.dart';
-import '../models/user_profile.dart';
-import '../models/stash_endpoint.dart';
 import 'package:uuid/uuid.dart';
+
+import '../models/stash_endpoint.dart';
+import '../providers/profile_provider.dart';
+import '../providers/settings_provider.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -22,12 +23,13 @@ class _SetupScreenState extends State<SetupScreen> {
   // Step 1: APIs
   final TextEditingController _tmdbKeyController = TextEditingController();
   final TextEditingController _stashKeyController = TextEditingController();
+  bool _enableAdultContentOptIn = false;
 
   // Step 2: Profile
   final TextEditingController _profileNameController = TextEditingController();
   final TextEditingController _pinController = TextEditingController();
   int _selectedColorValue = 0xFF2196F3;
-  
+
   // Available profile colors
   final List<int> _colors = [
     0xFF2196F3, // Blue
@@ -65,6 +67,14 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Future<void> _completeSetup() async {
+    final name = _profileNameController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Profile name is required')));
+      return;
+    }
+
     final settings = context.read<SettingsProvider>();
     final profiles = context.read<ProfileProvider>();
 
@@ -72,38 +82,30 @@ class _SetupScreenState extends State<SetupScreen> {
       await settings.setTmdbApiKey(_tmdbKeyController.text);
     }
     if (_stashKeyController.text.isNotEmpty) {
-       // Create a default endpoint
-       final ep = StashEndpoint(
-          id: const Uuid().v4(), 
-          name: 'StashDB', 
-          url: 'https://stashdb.org/graphql', 
-          apiKey: _stashKeyController.text, 
-          enabled: true
-       );
-       settings.addStashEndpoint(ep);
+      // Create a default endpoint
+      final ep = StashEndpoint(
+        id: const Uuid().v4(),
+        name: 'StashDB',
+        url: 'https://stashdb.org/graphql',
+        apiKey: _stashKeyController.text,
+        enabled: true,
+      );
+      await settings.addStashEndpoint(ep);
     }
 
-    final name = _profileNameController.text.trim();
-    if (name.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile name is required')));
-        return;
-    }
+    await settings.toggleAdultContent(_enableAdultContentOptIn);
 
     final pin = _pinController.text.trim();
-    
+
     // Create Admin Profile
-    await profiles.addProfile(
-        name, 
-      'assets/logo.png', 
-        _selectedColorValue, 
-        pin: pin.isNotEmpty && pin.length == 4 ? pin : null
-    );
+    await profiles.addProfile(name, 'assets/logo.png', _selectedColorValue,
+        pin: pin.isNotEmpty && pin.length == 4 ? pin : null);
 
     await settings.completeSetup();
-    
+
     // Select the new profile automatically
     if (profiles.profiles.isNotEmpty) {
-        await profiles.selectProfile(profiles.profiles.first.id);
+      await profiles.selectProfile(profiles.profiles.first.id);
     }
   }
 
@@ -183,10 +185,22 @@ class _SetupScreenState extends State<SetupScreen> {
             controller: _stashKeyController,
             decoration: const InputDecoration(
               labelText: 'Stash API Key (Optional)',
-              helperText: 'For adult content integration',
+              helperText: 'Optional StashDB credential',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.lock),
             ),
+          ),
+          const SizedBox(height: 16),
+          SwitchListTile.adaptive(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            title: const Text('Show Adult Library (Explicit Opt-In)'),
+            subtitle: const Text(
+              'Off by default. Enable only if you want adult routes and tabs visible.',
+            ),
+            value: _enableAdultContentOptIn,
+            onChanged: (value) {
+              setState(() => _enableAdultContentOptIn = value);
+            },
           ),
         ],
       ),
@@ -206,60 +220,62 @@ class _SetupScreenState extends State<SetupScreen> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
-           Center(
-             child: Container(
-               width: 100,
-               height: 100,
-               decoration: BoxDecoration(
-                 color: Color(_selectedColorValue),
-                 shape: BoxShape.circle,
-               ),
-               child: const Icon(Icons.person, size: 50, color: Colors.white),
-             ),
-           ),
-           const SizedBox(height: 24),
-           Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              alignment: WrapAlignment.center,
-              children: _colors.map((c) => GestureDetector(
-                onTap: () => setState(() => _selectedColorValue = c),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Color(c),
-                    shape: BoxShape.circle,
-                    border: _selectedColorValue == c 
-                        ? Border.all(color: Colors.white, width: 3) 
-                        : null,
-                  ),
-                ),
-              )).toList(),
-            ),
-            const SizedBox(height: 32),
-            TextField(
-              controller: _profileNameController,
-              decoration: const InputDecoration(
-                labelText: 'Profile Name',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person_outline),
+          Center(
+            child: Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: Color(_selectedColorValue),
+                shape: BoxShape.circle,
               ),
+              child: const Icon(Icons.person, size: 50, color: Colors.white),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _pinController,
-              keyboardType: TextInputType.number,
-              maxLength: 4,
-              obscureText: true,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(
-                labelText: 'PIN (Optional)',
-                helperText: '4-digit lock code',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.lock_outline),
-              ),
+          ),
+          const SizedBox(height: 24),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            alignment: WrapAlignment.center,
+            children: _colors
+                .map((c) => GestureDetector(
+                      onTap: () => setState(() => _selectedColorValue = c),
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Color(c),
+                          shape: BoxShape.circle,
+                          border: _selectedColorValue == c
+                              ? Border.all(color: Colors.white, width: 3)
+                              : null,
+                        ),
+                      ),
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 32),
+          TextField(
+            controller: _profileNameController,
+            decoration: const InputDecoration(
+              labelText: 'Profile Name',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.person_outline),
             ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _pinController,
+            keyboardType: TextInputType.number,
+            maxLength: 4,
+            obscureText: true,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(
+              labelText: 'PIN (Optional)',
+              helperText: '4-digit lock code',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.lock_outline),
+            ),
+          ),
         ],
       ),
     );
@@ -278,7 +294,6 @@ class _SetupScreenState extends State<SetupScreen> {
             )
           else
             const SizedBox.shrink(),
-
           if (_currentPage < 2)
             FilledButton(
               onPressed: _nextPage,
