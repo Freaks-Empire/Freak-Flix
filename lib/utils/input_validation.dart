@@ -1,294 +1,243 @@
-/// lib/utils/input_validation.dart
-/// Utilities for validating user input to prevent security issues
+// lib/utils/input_validation.dart
+// Utilities for validating user input to prevent security issues.
+
+import 'dart:io';
+
+import 'security_policies.dart';
+import 'security_validation_result.dart';
 
 class InputValidation {
-  // Private networks to prevent SSRF attacks
-  static final List<String> _privateNetworks = [
-    '10.',
-    '172.16.',
-    '172.17.',
-    '172.18.',
-    '172.19.',
-    '172.20.',
-    '172.21.',
-    '172.22.',
-    '172.23.',
-    '172.24.',
-    '172.25.',
-    '172.26.',
-    '172.27.',
-    '172.28.',
-    '172.29.',
-    '172.30.',
-    '172.31.',
-    '192.168.',
-    '127.',
-    '169.254.',
-    '100.64.', // RFC 6598 CGNAT
-    '100.65.',
-    '100.66.',
-    '100.67.',
-    '100.68.',
-    '100.69.',
-    '100.70.',
-    '100.71.',
-    '100.72.',
-    '100.73.',
-    '100.74.',
-    '100.75.',
-    '100.76.',
-    '100.77.',
-    '100.78.',
-    '100.79.',
-    '100.80.',
-    '100.81.',
-    '100.82.',
-    '100.83.',
-    '100.84.',
-    '100.85.',
-    '100.86.',
-    '100.87.',
-    '100.88.',
-    '100.89.',
-    '100.90.',
-    '100.91.',
-    '100.92.',
-    '100.93.',
-    '100.94.',
-    '100.95.',
-    '100.96.',
-    '100.97.',
-    '100.98.',
-    '100.99.',
-    '100.100.',
-    '100.101.',
-    '100.102.',
-    '100.103.',
-    '100.104.',
-    '100.105.',
-    '100.106.',
-    '100.107.',
-    '100.108.',
-    '100.109.',
-    '100.110.',
-    '100.111.',
-    '100.112.',
-    '100.113.',
-    '100.114.',
-    '100.115.',
-    '100.116.',
-    '100.117.',
-    '100.118.',
-    '100.119.',
-    '100.120.',
-    '100.121.',
-    '100.122.',
-    '100.123.',
-    '100.124.',
-    '100.125.',
-    '100.126.',
-    '100.127.',
-    '198.18.', // RFC 2544 Benchmark testing
-    '198.19.',
-    '203.0.113.', // RFC 5737 TEST-NET-3
-    '224.', // Multicast
-    '225.',
-    '226.',
-    '227.',
-    '228.',
-    '229.',
-    '230.',
-    '231.',
-    '232.',
-    '233.',
-    '234.',
-    '235.',
-    '236.',
-    '237.',
-    '238.',
-    '239.',
-    '240.', // Reserved
-    '241.',
-    '242.',
-    '243.',
-    '244.',
-    '245.',
-    '246.',
-    '247.',
-    '248.',
-    '249.',
-    '250.',
-    '251.',
-    '252.',
-    '253.',
-    '254.',
-    '255.',
-  ];
+  static final RegExp _shellMetacharacters = RegExp(r'[;&|`$()<>]');
+  static final RegExp _containsControlChars = RegExp(r'[\x00-\x1F\x7F]');
+  static final RegExp _usernameAllowedChars = RegExp(r'^[a-zA-Z0-9._-]+$');
+  static final RegExp _hostnamePattern = RegExp(
+    r'^(?=.{1,253}$)(?!-)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*\.?$',
+  );
 
-  // Special hostnames to block
-  static final List<String> _blockedHostnames = [
-    'localhost',
-    '127.0.0.1',
-    '0.0.0.0',
-    '::1',
-    'local',
-    'internal',
-    'gateway',
-    'router',
-    'modem',
-    'dhcp',
-    'broadcasthost',
-  ];
-
-  // File path patterns to prevent directory traversal
-  static final List<RegExp> _dangerousPatterns = [
-    RegExp(r'\.\./', caseSensitive: false), // Directory traversal
-    RegExp(r'\.\\', caseSensitive: false), // Windows traversal
-    RegExp(r'^/', caseSensitive: false), // Absolute path
-    RegExp(r'^\\', caseSensitive: false), // Windows UNC path
-    RegExp(r'[<>:"|?*]'), // Invalid filename characters
-    RegExp(r'[\x00-\x1F]'), // Control characters
-  ];
-
-  /// Validates hostname for SSRF protection
   static String? validateHostname(String? hostname) {
-    if (hostname == null || hostname.trim().isEmpty) {
-      return 'Host is required';
-    }
-
-    final trimmed = hostname.trim();
-
-    // Length validation
-    if (trimmed.length > 253) {
-      return 'Hostname too long (max 253 characters)';
-    }
-
-    // Check for blocked hostnames
-    for (final blocked in _blockedHostnames) {
-      if (trimmed.toLowerCase().contains(blocked)) {
-        return 'Local/internal hostnames not allowed';
-      }
-    }
-
-    // Note: Private IP ranges are now allowed - validation moved to warning system
-    // Users can connect to private IPs but will see a security warning
-
-    // Basic hostname format validation
-    if (!RegExp(r'^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$').hasMatch(trimmed)) {
-      if (!RegExp(r'^\d+\.\d+\.\d+\.\d+$').hasMatch(trimmed)) {
-        return 'Invalid hostname format';
-      }
-    }
-
-    // Prevent URL injection
-    if (trimmed.contains('http://') || trimmed.contains('https://') || 
-        trimmed.contains('ftp://') || trimmed.contains('sftp://') ||
-        trimmed.contains('://')) {
-      return 'Protocol prefixes not allowed in hostname';
-    }
-
-    // Prevent path injection in hostname
-    if (trimmed.contains('/') || trimmed.contains('\\')) {
-      return 'Hostname cannot contain paths';
-    }
-
-    return null;
+    return strictValidateHostname(hostname).formError;
   }
 
-  /// Checks if hostname is a private/local IP address (for warnings only)
-  /// Returns a warning message if it's a private IP, null otherwise
-  static String? getPrivateIpWarning(String? hostname) {
+  static SecurityValidationResult strictValidateHostname(String? hostname) {
+    if (hostname == null || hostname.trim().isEmpty) {
+      return const SecurityValidationResult.blocking(
+        reason: 'Enter a server host.',
+        fixExample: 'Try media.example.com',
+        safeDefault: 'media.example.com',
+      );
+    }
+
+    final canonicalInput = _canonicalize(hostname);
+    final host = _extractHost(canonicalInput);
+    if (host.isEmpty) {
+      return const SecurityValidationResult.blocking(
+        reason: 'Host format is not valid.',
+        fixExample: 'Use a host such as media.example.com',
+      );
+    }
+
+    final normalizedHost = host.toLowerCase();
+    if (_containsBlockedHostToken(normalizedHost)) {
+      return const SecurityValidationResult.blocking(
+        reason: 'Local or internal targets are blocked for safety.',
+        fixExample: 'Use a public host like media.example.com',
+        safeDefault: 'media.example.com',
+      );
+    }
+
+    if (_looksLikeBypassNotation(normalizedHost)) {
+      return const SecurityValidationResult.blocking(
+        reason: 'Encoded or alternate IP notations are blocked for safety.',
+        fixExample: 'Use a normal public hostname like media.example.com',
+        safeDefault: 'media.example.com',
+      );
+    }
+
+    final ip = InternetAddress.tryParse(normalizedHost);
+    if (ip != null && _isBlockedIp(ip)) {
+      return const SecurityValidationResult.blocking(
+        reason: 'Private, loopback, or metadata network targets are blocked.',
+        fixExample: 'Use a public endpoint instead of an internal IP',
+        safeDefault: 'media.example.com',
+      );
+    }
+
+    if (normalizedHost == '169.254.169.254' ||
+        normalizedHost.contains('metadata.google.internal')) {
+      return const SecurityValidationResult.blocking(
+        reason: 'Cloud metadata endpoints are blocked for safety.',
+        fixExample: 'Use your storage service host instead',
+        safeDefault: 'media.example.com',
+      );
+    }
+
+    if (ip == null && !_hostnamePattern.hasMatch(normalizedHost)) {
+      return const SecurityValidationResult.blocking(
+        reason: 'Host format is not valid.',
+        fixExample: 'Use letters, numbers, dots, and hyphens only',
+      );
+    }
+
+    if (hostname.trim() != host) {
+      return SecurityValidationResult.warning(
+        reason: 'Host was normalized to remove extra formatting.',
+        fixExample: 'Use $host',
+        safeDefault: host,
+      );
+    }
+
+    return const SecurityValidationResult.ok();
+  }
+
+  static SecurityValidationResult? getTypingHostWarning(String? hostname) {
     if (hostname == null || hostname.trim().isEmpty) {
       return null;
     }
 
-    final trimmed = hostname.trim();
-
-    // Check for localhost and loopback
-    final localHostnames = [
-      'localhost',
-      '127.0.0.1',
-      '::1',
-      '0.0.0.0',
-    ];
-    
-    for (final local in localHostnames) {
-      if (trimmed.toLowerCase() == local) {
-        return 'Warning: Connecting to localhost/loopback address';
-      }
+    final strict = strictValidateHostname(hostname);
+    if (strict.isBlocking) {
+      return SecurityValidationResult.warning(
+        reason: strict.reason,
+        fixExample: strict.fixExample,
+        safeDefault: strict.safeDefault,
+      );
     }
-
-    // Check for private IP ranges
-    for (final network in _privateNetworks) {
-      if (trimmed.startsWith(network)) {
-        return 'Warning: Private IP addresses may not be accessible from all networks';
-      }
+    if (strict.isWarning) {
+      return strict;
     }
-
     return null;
   }
 
-  /// Validates port number
+  static String? getPrivateIpWarning(String? hostname) {
+    final warning = getTypingHostWarning(hostname);
+    return warning?.reason;
+  }
+
   static String? validatePort(String? port) {
+    return strictValidatePort(port).formError;
+  }
+
+  static SecurityValidationResult strictValidatePort(String? port) {
     if (port == null || port.trim().isEmpty) {
-      return 'Port is required';
+      return const SecurityValidationResult.blocking(
+        reason: 'Enter a port number.',
+        fixExample: 'Use 22 for SFTP, 21 for FTP, or 443 for WebDAV',
+        safeDefault: '22',
+      );
     }
 
-    final portNum = int.tryParse(port.trim());
-    if (portNum == null) {
-      return 'Invalid port number';
+    final parsed = int.tryParse(port.trim());
+    if (parsed == null) {
+      return const SecurityValidationResult.blocking(
+        reason: 'Port must be a number.',
+        fixExample: 'Enter a numeric port like 22',
+        safeDefault: '22',
+      );
     }
 
-    if (portNum < 1 || portNum > 65535) {
-      return 'Port must be between 1 and 65535';
+    if (parsed < 1 || parsed > 65535) {
+      return const SecurityValidationResult.blocking(
+        reason: 'Port must be between 1 and 65535.',
+        fixExample: 'Use a valid port such as 22',
+        safeDefault: '22',
+      );
     }
 
-    // Block common administrative ports (except for specific protocols)
-    // Note: Port 22 (SSH/SFTP) is allowed for remote storage connections
-    final blockedPorts = {23, 25, 53, 135, 139, 445, 993, 995};
-    if (blockedPorts.contains(portNum)) {
-      return 'Port $portNum is not allowed for security reasons';
+    if (SecurityPolicies.blockedPorts.contains(parsed)) {
+      return SecurityValidationResult.blocking(
+        reason: 'Port $parsed is blocked for security reasons.',
+        fixExample: 'Choose a service port like 22, 21, or 443',
+        safeDefault: '22',
+      );
     }
 
-    return null;
+    if (port.trim() != port) {
+      return SecurityValidationResult.warning(
+        reason: 'Port was normalized by trimming spaces.',
+        fixExample: 'Use ${port.trim()}',
+        safeDefault: port.trim(),
+      );
+    }
+
+    return const SecurityValidationResult.ok();
   }
 
-  /// Validates username
   static String? validateUsername(String? username) {
-    if (username == null || username.trim().isEmpty) {
-      return 'Username is required';
-    }
-
-    final trimmed = username.trim();
-
-    // Length validation
-    if (trimmed.length < 1) {
-      return 'Username cannot be empty';
-    }
-    if (trimmed.length > 255) {
-      return 'Username too long (max 255 characters)';
-    }
-
-    // Prevent command injection
-    if (RegExp(r'[;&|`$()]').hasMatch(trimmed)) {
-      return 'Username contains invalid characters';
-    }
-
-    // Prevent path traversal
-    if (trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains('..')) {
-      return 'Username cannot contain paths';
-    }
-
-    return null;
+    return strictValidateUsername(username).formError;
   }
 
-  /// Validates password
+  static SecurityValidationResult strictValidateUsername(String? username) {
+    if (username == null || username.trim().isEmpty) {
+      return const SecurityValidationResult.blocking(
+        reason: 'Enter a username.',
+        fixExample: 'Try media_user',
+        safeDefault: 'media_user',
+      );
+    }
+
+    final canonical = _canonicalize(username);
+    final trimmed = canonical.trim();
+
+    if (trimmed.length > 255) {
+      return const SecurityValidationResult.blocking(
+        reason: 'Username is too long.',
+        fixExample: 'Use 255 characters or fewer',
+      );
+    }
+
+    if (_containsControlChars.hasMatch(canonical)) {
+      return const SecurityValidationResult.blocking(
+        reason: 'Control characters are not allowed in usernames.',
+        fixExample: 'Use letters, numbers, dots, dashes, or underscores only',
+        safeDefault: 'media_user',
+      );
+    }
+
+    if (_containsInjectionPayload(canonical)) {
+      return const SecurityValidationResult.blocking(
+        reason: 'This username includes unsafe command characters.',
+        fixExample: 'Use a simple username like media_user',
+        safeDefault: 'media_user',
+      );
+    }
+
+    if (trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains('..')) {
+      return const SecurityValidationResult.blocking(
+        reason: 'Path-style values are not allowed in usernames.',
+        fixExample: 'Use only the account name, for example media_user',
+        safeDefault: 'media_user',
+      );
+    }
+
+    if (!_usernameAllowedChars.hasMatch(trimmed)) {
+      return SecurityValidationResult.warning(
+        reason: 'Username contains unusual characters and may fail.',
+        fixExample: 'Use letters, numbers, dots, dashes, or underscores',
+        safeDefault: _suggestSafeUsername(trimmed),
+      );
+    }
+
+    if (username != trimmed) {
+      return SecurityValidationResult.warning(
+        reason: 'Username was normalized by trimming spaces.',
+        fixExample: 'Use $trimmed',
+        safeDefault: trimmed,
+      );
+    }
+
+    return const SecurityValidationResult.ok();
+  }
+
+  static String _suggestSafeUsername(String input) {
+    final cleaned = input.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    return cleaned.isEmpty ? 'media_user' : cleaned;
+  }
+
   static String? validatePassword(String? password) {
     if (password == null || password.isEmpty) {
       return 'Password is required';
     }
 
-    // Length validation (reasonable minimum)
     if (password.length < 4) {
       return 'Password too short (minimum 4 characters)';
     }
@@ -296,30 +245,34 @@ class InputValidation {
       return 'Password too long (max 1000 characters)';
     }
 
-    // Prevent control characters
-    if (RegExp(r'[\x00-\x1F\x7F]').hasMatch(password)) {
+    if (_containsControlChars.hasMatch(password)) {
       return 'Password contains invalid characters';
     }
 
     return null;
   }
 
-  /// Validates file path for directory traversal
   static String? validateFilePath(String? path) {
     if (path == null || path.trim().isEmpty) {
       return 'Path is required';
     }
 
     final trimmed = path.trim();
+    final dangerousPatterns = <RegExp>[
+      RegExp(r'\.\./', caseSensitive: false),
+      RegExp(r'\.\.\\', caseSensitive: false),
+      RegExp(r'^/', caseSensitive: false),
+      RegExp(r'^\\', caseSensitive: false),
+      RegExp(r'[<>:"|?*]'),
+      RegExp(r'[\x00-\x1F]'),
+    ];
 
-    // Check for dangerous patterns
-    for (final pattern in _dangerousPatterns) {
+    for (final pattern in dangerousPatterns) {
       if (pattern.hasMatch(trimmed)) {
         return 'Path contains invalid characters or patterns';
       }
     }
 
-    // Prevent extremely long paths
     if (trimmed.isEmpty || trimmed.length > 4096) {
       return 'Path too long';
     }
@@ -327,68 +280,237 @@ class InputValidation {
     return null;
   }
 
-  /// Validates WebDAV URL format
   static String? validateWebDavUrl(String? url) {
-    if (url == null || url.trim().isEmpty) {
-      return 'URL is required';
-    }
-
-    final trimmed = url.trim();
-
-    // Basic URL format validation
-    if (!RegExp(r'^https://', caseSensitive: false).hasMatch(trimmed)) {
-      return 'WebDAV URL must use HTTPS for security. URL must start with https://';
-    }
-
-    // Prevent localhost in URLs
-    if (RegExp(r'https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|::1)', caseSensitive: false).hasMatch(trimmed)) {
-      return 'Local URLs not allowed';
-    }
-
-    // Check for private IP in URL
-    final uri = Uri.tryParse(trimmed);
-    if (uri != null && uri.host.isNotEmpty) {
-      final hostnameValidation = validateHostname(uri.host);
-      if (hostnameValidation != null) {
-        return 'Invalid URL: $hostnameValidation';
-      }
-    }
-
-    return null;
+    return strictValidateWebDavUrl(url).formError;
   }
 
-  /// Sanitizes input for safe logging
+  static SecurityValidationResult strictValidateWebDavUrl(String? url) {
+    if (url == null || url.trim().isEmpty) {
+      return const SecurityValidationResult.blocking(
+        reason: 'Enter a WebDAV URL.',
+        fixExample: 'Use https://cloud.example.com/remote.php/dav',
+      );
+    }
+
+    final normalized = _canonicalize(url).trim();
+    final uri = Uri.tryParse(normalized);
+    if (uri == null || uri.host.isEmpty) {
+      return const SecurityValidationResult.blocking(
+        reason: 'URL format is not valid.',
+        fixExample: 'Use https://cloud.example.com/remote.php/dav',
+      );
+    }
+
+    if (uri.scheme.toLowerCase() != 'https') {
+      return const SecurityValidationResult.blocking(
+        reason: 'WebDAV must use HTTPS.',
+        fixExample: 'Use a URL that starts with https://',
+      );
+    }
+
+    final hostValidation = strictValidateHostname(uri.host);
+    if (hostValidation.isBlocking) {
+      return SecurityValidationResult.blocking(
+        reason: hostValidation.reason,
+        fixExample: hostValidation.fixExample,
+      );
+    }
+
+    if (url != normalized) {
+      return SecurityValidationResult.warning(
+        reason: 'URL was normalized by decoding and trimming.',
+        fixExample: 'Use $normalized',
+        safeDefault: normalized,
+      );
+    }
+
+    return const SecurityValidationResult.ok();
+  }
+
   static String sanitizeForLogging(String input) {
     if (input.isEmpty) return '[empty]';
-    
-    // Remove sensitive patterns
-    String sanitized = input;
-    sanitized = sanitized.replaceAll(RegExp(r'password=.+$', caseSensitive: false), 'password=[REDACTED]');
-    sanitized = sanitized.replaceAll(RegExp(r'token=.+$', caseSensitive: false), 'token=[REDACTED]');
-    sanitized = sanitized.replaceAll(RegExp(r'key=.+$', caseSensitive: false), 'key=[REDACTED]');
-    
-    // Limit length for logging
+
+    var sanitized = input;
+    sanitized = sanitized.replaceAll(
+      RegExp(r'password=.+$', caseSensitive: false),
+      'password=[REDACTED]',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(r'token=.+$', caseSensitive: false),
+      'token=[REDACTED]',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(r'key=.+$', caseSensitive: false),
+      'key=[REDACTED]',
+    );
+
     if (sanitized.length > 100) {
       sanitized = '${sanitized.substring(0, 100)}...[TRUNCATED]';
     }
-    
+
     return sanitized;
   }
 
-  /// Validates display name
   static String? validateDisplayName(String? displayName) {
     if (displayName != null && displayName.trim().isNotEmpty) {
       final trimmed = displayName.trim();
-      
+
       if (trimmed.length > 100) {
         return 'Display name too long (max 100 characters)';
       }
-      
-      // Prevent HTML/script injection
+
       if (RegExp(r'<[^>]*>', caseSensitive: false).hasMatch(trimmed)) {
         return 'Display name contains invalid characters';
       }
     }
     return null;
+  }
+
+  static bool _containsInjectionPayload(String input) {
+    final lowered = input.toLowerCase();
+    if (_shellMetacharacters.hasMatch(lowered)) {
+      return true;
+    }
+    if (lowered.contains('&&') || lowered.contains('||')) {
+      return true;
+    }
+    if (lowered.contains(r'${') || lowered.contains(r'$(')) {
+      return true;
+    }
+    return false;
+  }
+
+  static String _canonicalize(String input) {
+    var output = input.trim();
+    for (var i = 0; i < 2; i++) {
+      output = _decodeUriSafely(output);
+    }
+    output = _decodeHtmlEntities(output);
+    return output;
+  }
+
+  static String _decodeUriSafely(String value) {
+    try {
+      return Uri.decodeFull(value);
+    } catch (_) {
+      return value;
+    }
+  }
+
+  static String _decodeHtmlEntities(String value) {
+    return value
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'");
+  }
+
+  static String _extractHost(String input) {
+    var candidate = input.trim();
+    if (candidate.isEmpty) {
+      return '';
+    }
+
+    final parsedUri = Uri.tryParse(candidate);
+    if (parsedUri != null && parsedUri.host.isNotEmpty) {
+      return parsedUri.host.trim().toLowerCase();
+    }
+
+    candidate = candidate.split(RegExp(r'[/?#]')).first;
+    if (candidate.contains('@')) {
+      candidate = candidate.split('@').last;
+    }
+
+    final colonCount = ':'.allMatches(candidate).length;
+    if (!candidate.startsWith('[') && colonCount == 1) {
+      candidate = candidate.split(':').first;
+    }
+
+    if (candidate.startsWith('[') && candidate.endsWith(']')) {
+      candidate = candidate.substring(1, candidate.length - 1);
+    }
+
+    return candidate.trim().toLowerCase();
+  }
+
+  static bool _containsBlockedHostToken(String host) {
+    if (SecurityPolicies.blockedExactHosts.contains(host) ||
+        SecurityPolicies.blockedMetadataHosts.contains(host)) {
+      return true;
+    }
+
+    for (final token in SecurityPolicies.blockedHostTokens) {
+      if (host == token || host.contains(token)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static bool _looksLikeBypassNotation(String host) {
+    if (host.contains('%')) {
+      return true;
+    }
+    if (RegExp(r'^\d{8,10}$').hasMatch(host)) {
+      return true;
+    }
+    if (RegExp(r'^0x[0-9a-f]+$').hasMatch(host)) {
+      return true;
+    }
+    if (RegExp(r'^0[0-7]{7,}$').hasMatch(host)) {
+      return true;
+    }
+    return false;
+  }
+
+  static bool _isBlockedIp(InternetAddress ip) {
+    if (ip.isLoopback || ip.isLinkLocal || ip.isMulticast) {
+      return true;
+    }
+
+    if (ip.type == InternetAddressType.IPv4) {
+      final parts = ip.address.split('.').map(int.parse).toList();
+
+      final isPrivate = parts[0] == 10 ||
+          (parts[0] == 172 && parts[1] >= 16 && parts[1] <= 31) ||
+          (parts[0] == 192 && parts[1] == 168) ||
+          (parts[0] == 127) ||
+          (parts[0] == 169 && parts[1] == 254);
+      if (isPrivate) {
+        return true;
+      }
+
+      final isCarrierGradeNat = parts[0] == 100 && parts[1] >= 64 && parts[1] <= 127;
+      if (isCarrierGradeNat) {
+        return true;
+      }
+
+      final isBenchmark = parts[0] == 198 && (parts[1] == 18 || parts[1] == 19);
+      if (isBenchmark) {
+        return true;
+      }
+
+      if (parts[0] >= 224) {
+        return true;
+      }
+    }
+
+    if (ip.type == InternetAddressType.IPv6) {
+      final addr = ip.address.toLowerCase();
+      if (addr.startsWith('fc') || addr.startsWith('fd')) {
+        return true;
+      }
+      if (addr.startsWith('fe8') || addr.startsWith('fe9') ||
+          addr.startsWith('fea') || addr.startsWith('feb')) {
+        return true;
+      }
+      if (addr == '::1' || addr.startsWith('::ffff:127.')) {
+        return true;
+      }
+    }
+
+    return false;
   }
 }
