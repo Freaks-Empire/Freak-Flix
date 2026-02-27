@@ -1,10 +1,24 @@
 /// test/helpers/security_test_helpers.dart
 /// 
 /// Helper utilities for security testing
-import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:freak_flix/utils/security_validation_result.dart';
 
 class SecurityTestHelpers {
+  static bool _isBlockedResult(dynamic result) {
+    if (result is SecurityValidationResult) {
+      return result.isBlocking;
+    }
+    return result != null;
+  }
+
+  static bool _isAllowedResult(dynamic result) {
+    if (result is SecurityValidationResult) {
+      return !result.isBlocking;
+    }
+    return result == null;
+  }
+
   /// Helper to check if string contains potential security vulnerabilities
   static bool containsSecurityRisks(String input) {
     final dangerousPatterns = [
@@ -198,8 +212,8 @@ class SecurityTestHelpers {
   }) {
     final result = validator(input);
     expect(
-      result,
-      isNull,
+      _isBlockedResult(result),
+      isTrue,
       reason: customMessage ?? 'Security validation should block: $input'
     );
   }
@@ -212,8 +226,8 @@ class SecurityTestHelpers {
   }) {
     final result = validator(input);
     expect(
-      result,
-      isNotNull,
+      _isAllowedResult(result),
+      isTrue,
       reason: customMessage ?? 'Security validation should allow: $input'
     );
   }

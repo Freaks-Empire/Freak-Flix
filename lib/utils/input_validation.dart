@@ -3,6 +3,9 @@
 
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
+import 'path_guard.dart';
 import 'security_policies.dart';
 import 'security_validation_result.dart';
 
@@ -258,6 +261,25 @@ class InputValidation {
     }
 
     final trimmed = path.trim();
+    final canonical = _canonicalize(trimmed);
+
+    final posixDecision = PathGuard.evaluateContainedPath(
+      candidatePath: canonical,
+      allowedRoot: '/allowed-root',
+      style: p.Style.posix,
+      allowAbsoluteCandidate: false,
+    );
+    final windowsDecision = PathGuard.evaluateContainedPath(
+      candidatePath: canonical,
+      allowedRoot: r'C:\allowed-root',
+      style: p.Style.windows,
+      allowAbsoluteCandidate: false,
+    );
+
+    if (!posixDecision.isAllowed || !windowsDecision.isAllowed) {
+      return 'Path contains invalid characters or patterns';
+    }
+
     final dangerousPatterns = <RegExp>[
       RegExp(r'\.\./', caseSensitive: false),
       RegExp(r'\.\.\\', caseSensitive: false),
@@ -435,15 +457,29 @@ class InputValidation {
   }
 
   static bool _containsBlockedHostToken(String host) {
-    if (SecurityPolicies.blockedExactHosts.contains(host) ||
-        SecurityPolicies.blockedMetadataHosts.contains(host)) {
-      return true;
+    for (final exact in SecurityPolicies.blockedExactHosts) {
+      if (host == exact || host.contains(exact)) {
+        return true;
+      }
+    }
+
+    for (final metadataHost in SecurityPolicies.blockedMetadataHosts) {
+      if (host == metadataHost || host.contains(metadataHost)) {
+        return true;
+      }
     }
 
     for (final token in SecurityPolicies.blockedHostTokens) {
       if (host == token || host.contains(token)) {
         return true;
       }
+    }
+
+    if (RegExp(r'(^|\.)127-0-0-1(\.|$)').hasMatch(host)) {
+      return true;
+    }
+    if (RegExp(r'(^|\.)0{8}(\.|$)').hasMatch(host)) {
+      return true;
     }
 
     return false;
@@ -472,33 +508,26 @@ class InputValidation {
 
     if (ip.type == InternetAddressType.IPv4) {
       final parts = ip.address.split('.').map(int.parse).toList();
-
-      final isPrivate = parts[0] == 10 ||
-          (parts[0] == 172 && parts[1] >= 16 && parts[1] <= 31) ||
-          (parts[0] == 192 && parts[1] == 168) ||
-          (parts[0] == 127) ||
-          (parts[0] == 169 && parts[1] == 254);
-      if (isPrivate) {
-        return true;
-      }
-
-      final isCarrierGradeNat = parts[0] == 100 && parts[1] >= 64 && parts[1] <= 127;
-      if (isCarrierGradeNat) {
-        return true;
-      }
-
-      final isBenchmark = parts[0] == 198 && (parts[1] == 18 || parts[1] == 19);
-      if (isBenchmark) {
-        return true;
-      }
-
-      if (parts[0] >= 224) {
+      if (_isBlockedIpv4Octets(parts)) {
         return true;
       }
     }
 
     if (ip.type == InternetAddressType.IPv6) {
       final addr = ip.address.toLowerCase();
+      final raw = ip.rawAddress;
+
+      final isIpv4Mapped = raw.length == 16 &&
+          raw.sublist(0, 10).every((byte) => byte == 0) &&
+          raw[10] == 0xff &&
+          raw[11] == 0xff;
+      if (isIpv4Mapped) {
+        final mapped = raw.sublist(12, 16);
+        if (_isBlockedIpv4Octets(mapped)) {
+          return true;
+        }
+      }
+
       if (addr.startsWith('fc') || addr.startsWith('fd')) {
         return true;
       }
@@ -509,6 +538,37 @@ class InputValidation {
       if (addr == '::1' || addr.startsWith('::ffff:127.')) {
         return true;
       }
+    }
+
+    return false;
+  }
+
+  static bool _isBlockedIpv4Octets(List<int> parts) {
+    if (parts[0] == 0 && parts[1] == 0 && parts[2] == 0 && parts[3] == 0) {
+      return true;
+    }
+
+    final isPrivate = parts[0] == 10 ||
+        (parts[0] == 172 && parts[1] >= 16 && parts[1] <= 31) ||
+        (parts[0] == 192 && parts[1] == 168) ||
+        (parts[0] == 127) ||
+        (parts[0] == 169 && parts[1] == 254);
+    if (isPrivate) {
+      return true;
+    }
+
+    final isCarrierGradeNat = parts[0] == 100 && parts[1] >= 64 && parts[1] <= 127;
+    if (isCarrierGradeNat) {
+      return true;
+    }
+
+    final isBenchmark = parts[0] == 198 && (parts[1] == 18 || parts[1] == 19);
+    if (isBenchmark) {
+      return true;
+    }
+
+    if (parts[0] >= 224) {
+      return true;
     }
 
     return false;
