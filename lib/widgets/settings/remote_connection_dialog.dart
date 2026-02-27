@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../services/remote_storage_service.dart';
@@ -11,6 +12,8 @@ import '../../services/ftp_client_wrapper.dart';
 import '../../services/webdav_client_wrapper.dart';
 import '../settings_widgets.dart';
 import '../../utils/input_validation.dart';
+import '../../utils/security_policies.dart';
+import '../../utils/security_validation_result.dart';
 
 class RemoteConnectionDialog extends StatefulWidget {
   final RemoteStorageType type;
@@ -37,19 +40,24 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
   bool _obscurePassword = true;
   String? _testResult;
   bool _testSuccess = false;
-  String? _privateIpWarning;
+  SecurityValidationResult? _hostTypingWarning;
+  SecurityValidationResult? _submitValidationResult;
+  String? _submitValidationField;
+  final Map<String, int> _blockedSubmitAttempts = {};
 
   @override
   void initState() {
     super.initState();
     _portController.text = RemoteStorageAccount.defaultPort(widget.type).toString();
     
-    // Listen for private IP warnings
+    // Lightweight typing-time validation (strict checks happen on submit).
     _hostController.addListener(() {
-      final warning = InputValidation.getPrivateIpWarning(_hostController.text);
-      if (warning != _privateIpWarning) {
+      final warning = widget.type == RemoteStorageType.webdav
+          ? null
+          : InputValidation.getTypingHostWarning(_hostController.text);
+      if (warning?.reason != _hostTypingWarning?.reason) {
         setState(() {
-          _privateIpWarning = warning;
+          _hostTypingWarning = warning;
         });
       }
     });
@@ -100,6 +108,9 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
 
   Future<void> _testConnection() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final strictValidation = _validateStrictFields(isSubmit: false);
+    if (!strictValidation) return;
     
     setState(() {
       _testing = true;
@@ -110,27 +121,6 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
     final port = int.tryParse(_portController.text) ?? RemoteStorageAccount.defaultPort(widget.type);
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
-
-    // Additional validation for test connection
-    if (widget.type == RemoteStorageType.webdav) {
-      final urlValidation = InputValidation.validateWebDavUrl(host);
-      if (urlValidation != null) {
-        setState(() {
-          _testing = false;
-          _testResult = 'Invalid URL: $urlValidation';
-        });
-        return;
-      }
-    } else {
-      final hostValidation = InputValidation.validateHostname(host);
-      if (hostValidation != null) {
-        setState(() {
-          _testing = false;
-          _testResult = 'Invalid host: $hostValidation';
-        });
-        return;
-      }
-    }
 
     bool success = false;
     
@@ -174,42 +164,9 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    
-    // Additional validation before saving
-    final host = _hostController.text.trim();
-    final port = int.tryParse(_portController.text) ?? RemoteStorageAccount.defaultPort(widget.type);
-    
-    if (widget.type == RemoteStorageType.webdav) {
-      final urlValidation = InputValidation.validateWebDavUrl(host);
-      if (urlValidation != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Invalid URL: $urlValidation')),
-          );
-        }
-        return;
-      }
-    } else {
-      final hostValidation = InputValidation.validateHostname(host);
-      if (hostValidation != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Invalid host: $hostValidation')),
-          );
-        }
-        return;
-      }
-    }
-    
-    final portValidation = InputValidation.validatePort(_portController.text);
-    if (portValidation != null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Invalid port: $portValidation')),
-        );
-      }
-      return;
-    }
+
+    final strictValidation = _validateStrictFields(isSubmit: true);
+    if (!strictValidation) return;
     
     // Show security warning for FTP
     if (widget.type == RemoteStorageType.ftp) {
@@ -240,6 +197,86 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
     if (mounted) {
       Navigator.of(context).pop(account);
     }
+  }
+
+  bool _validateStrictFields({required bool isSubmit}) {
+    final hostField = widget.type == RemoteStorageType.webdav ? 'url' : 'host';
+    final hostResult = widget.type == RemoteStorageType.webdav
+        ? InputValidation.strictValidateWebDavUrl(_hostController.text)
+        : InputValidation.strictValidateHostname(_hostController.text);
+    if (hostResult.isBlocking) {
+      _registerBlockingResult(hostField, hostResult, isSubmit: isSubmit);
+      return false;
+    }
+
+    final portResult = InputValidation.strictValidatePort(_portController.text);
+    if (portResult.isBlocking) {
+      _registerBlockingResult('port', portResult, isSubmit: isSubmit);
+      return false;
+    }
+
+    final usernameResult = InputValidation.strictValidateUsername(_usernameController.text);
+    if (usernameResult.isBlocking) {
+      _registerBlockingResult('username', usernameResult, isSubmit: isSubmit);
+      return false;
+    }
+
+    setState(() {
+      _submitValidationResult = null;
+      _submitValidationField = null;
+    });
+    return true;
+  }
+
+  void _registerBlockingResult(
+    String field,
+    SecurityValidationResult result, {
+    required bool isSubmit,
+  }) {
+    if (isSubmit) {
+      _blockedSubmitAttempts[field] = (_blockedSubmitAttempts[field] ?? 0) + 1;
+    }
+
+    setState(() {
+      _submitValidationField = field;
+      _submitValidationResult = result;
+      _testSuccess = false;
+      _testResult = result.reason;
+    });
+  }
+
+  bool _showEscalatedGuidance() {
+    final field = _submitValidationField;
+    if (field == null) return false;
+    return (_blockedSubmitAttempts[field] ?? 0) >= 3;
+  }
+
+  void _applySafeDefault() {
+    final safeDefault = _submitValidationResult?.safeDefault;
+    if (safeDefault == null) return;
+
+    switch (_submitValidationField) {
+      case 'host':
+      case 'url':
+        _hostController.text = safeDefault;
+        break;
+      case 'port':
+        _portController.text = safeDefault;
+        break;
+      case 'username':
+        _usernameController.text = safeDefault;
+        break;
+    }
+
+    setState(() {
+      _submitValidationResult = null;
+      _submitValidationField = null;
+    });
+  }
+
+  Future<void> _openSecurityHelp() async {
+    final uri = Uri.parse(SecurityPolicies.securityHelpUrl);
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   Future<bool> _showFtpSecurityWarning() async {
@@ -422,8 +459,8 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                   validator: InputValidation.validateDisplayName,
                 ),
 
-                // Security warning for private/local IP addresses
-                if (_privateIpWarning != null) ...[
+                // Lightweight typing-time warning.
+                if (_hostTypingWarning != null) ...[
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -450,9 +487,82 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _privateIpWarning!,
+                          _hostTypingWarning!.reason,
                           style: const TextStyle(fontSize: 12),
                         ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _hostTypingWarning!.fixExample,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                if (_submitValidationResult != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.withOpacity(0.25)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'We blocked this entry to protect your connection settings.',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.red,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(_submitValidationResult!.reason),
+                        const SizedBox(height: 4),
+                        Text('Try this: ${_submitValidationResult!.fixExample}'),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: _submitValidationResult!.safeDefault == null
+                                    ? null
+                                    : _applySafeDefault,
+                                child: const Text('Use safe default'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _submitValidationResult = null;
+                                  });
+                                },
+                                child: const Text('Edit manually'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_showEscalatedGuidance()) ...[
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Need help? We noticed repeated blocked attempts. Open security guidance for examples and allowed formats.',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: _openSecurityHelp,
+                              icon: const Icon(Icons.help_outline, size: 16),
+                              label: const Text('Open security help'),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
