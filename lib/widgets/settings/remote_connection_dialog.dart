@@ -1,5 +1,5 @@
-/// lib/widgets/settings/remote_connection_dialog.dart
-/// Dialog for adding SFTP/FTP/WebDAV connections
+// lib/widgets/settings/remote_connection_dialog.dart
+// Dialog for adding SFTP/FTP/WebDAV connections
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -10,6 +10,7 @@ import '../../services/remote_storage_service.dart';
 import '../../services/sftp_client.dart';
 import '../../services/ftp_client_wrapper.dart';
 import '../../services/webdav_client_wrapper.dart';
+import '../../services/onboarding_source_connection_service.dart';
 import '../settings_widgets.dart';
 import '../../utils/input_validation.dart';
 import '../../utils/security_policies.dart';
@@ -17,10 +18,12 @@ import '../../utils/security_validation_result.dart';
 
 class RemoteConnectionDialog extends StatefulWidget {
   final RemoteStorageType type;
+  final bool returnOutcome;
   
   const RemoteConnectionDialog({
     super.key,
     required this.type,
+    this.returnOutcome = false,
   });
 
   @override
@@ -28,6 +31,8 @@ class RemoteConnectionDialog extends StatefulWidget {
 }
 
 class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
+  static const int _escalationThreshold = 3;
+
   final _formKey = GlobalKey<FormState>();
   final _hostController = TextEditingController();
   final _portController = TextEditingController();
@@ -40,6 +45,8 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
   bool _obscurePassword = true;
   String? _testResult;
   bool _testSuccess = false;
+  String? _connectionErrorField;
+  int _connectionFailureCount = 0;
   SecurityValidationResult? _hostTypingWarning;
   SecurityValidationResult? _submitValidationResult;
   String? _submitValidationField;
@@ -122,9 +129,98 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
 
-    bool success = false;
+    final attempt = await _attemptConnection(
+      host: host,
+      port: port,
+      username: username,
+      password: password,
+    );
+
+    if (attempt.success) {
+      setState(() {
+        _testing = false;
+        _testSuccess = true;
+        _testResult = 'Connection successful!';
+        _connectionErrorField = null;
+      });
+    } else {
+      setState(() {
+        _testing = false;
+      });
+      _registerConnectionFailure(attempt.error ?? 'Connection failed.');
+    }
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final strictValidation = _validateStrictFields(isSubmit: true);
+    if (!strictValidation) return;
     
+    // Show security warning for FTP
+    if (widget.type == RemoteStorageType.ftp) {
+      final confirmed = await _showFtpSecurityWarning();
+      if (!confirmed) return;
+    }
+
+    setState(() => _saving = true);
+
+    final attempt = await _attemptConnection(
+      host: _hostController.text.trim(),
+      port: int.tryParse(_portController.text) ??
+          RemoteStorageAccount.defaultPort(widget.type),
+      username: _usernameController.text.trim(),
+      password: _passwordController.text,
+    );
+    if (!attempt.success) {
+      setState(() => _saving = false);
+      _registerConnectionFailure(
+        attempt.error ?? 'Connection failed during validation.',
+      );
+      return;
+    }
+
+    final account = RemoteStorageAccount(
+      id: const Uuid().v4(),
+      type: widget.type,
+      host: _hostController.text.trim(),
+      port: int.tryParse(_portController.text) ?? RemoteStorageAccount.defaultPort(widget.type),
+      username: _usernameController.text.trim(),
+      displayName: _displayNameController.text.trim().isNotEmpty 
+          ? _displayNameController.text.trim()
+          : '${_usernameController.text}@${_hostController.text}',
+    );
+
+    await RemoteStorageService.instance.addAccount(
+      account,
+      _passwordController.text,
+    );
+
+    setState(() => _saving = false);
+    
+    if (mounted) {
+      if (widget.returnOutcome) {
+        Navigator.of(context).pop(
+          OnboardingRemoteConnectResult(
+            outcome: OnboardingRemoteOutcome.connected,
+            account: account,
+            message: '${account.displayName} connected successfully.',
+          ),
+        );
+      } else {
+        Navigator.of(context).pop(account);
+      }
+    }
+  }
+
+  Future<({bool success, String? error})> _attemptConnection({
+    required String host,
+    required int port,
+    required String username,
+    required String password,
+  }) async {
     try {
+      bool success;
       switch (widget.type) {
         case RemoteStorageType.sftp:
           success = await SftpClient.testConnection(
@@ -151,51 +247,12 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
           );
           break;
       }
-    } catch (e) {
-      success = false;
-    }
-
-    setState(() {
-      _testing = false;
-      _testSuccess = success;
-      _testResult = success ? 'Connection successful!' : 'Connection failed. Check your credentials.';
-    });
-  }
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    final strictValidation = _validateStrictFields(isSubmit: true);
-    if (!strictValidation) return;
-    
-    // Show security warning for FTP
-    if (widget.type == RemoteStorageType.ftp) {
-      final confirmed = await _showFtpSecurityWarning();
-      if (!confirmed) return;
-    }
-    
-    setState(() => _saving = true);
-
-    final account = RemoteStorageAccount(
-      id: const Uuid().v4(),
-      type: widget.type,
-      host: _hostController.text.trim(),
-      port: int.tryParse(_portController.text) ?? RemoteStorageAccount.defaultPort(widget.type),
-      username: _usernameController.text.trim(),
-      displayName: _displayNameController.text.trim().isNotEmpty 
-          ? _displayNameController.text.trim()
-          : '${_usernameController.text}@${_hostController.text}',
-    );
-
-    await RemoteStorageService.instance.addAccount(
-      account,
-      _passwordController.text,
-    );
-
-    setState(() => _saving = false);
-    
-    if (mounted) {
-      Navigator.of(context).pop(account);
+      return (
+        success: success,
+        error: success ? null : 'Unable to establish a $_protocolName session.',
+      );
+    } catch (error) {
+      return (success: false, error: error.toString());
     }
   }
 
@@ -245,10 +302,66 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
     });
   }
 
+  void _registerConnectionFailure(String errorMessage) {
+    setState(() {
+      _connectionFailureCount += 1;
+      _testSuccess = false;
+      _testResult = errorMessage;
+      _connectionErrorField = _classifyConnectionErrorField(errorMessage);
+    });
+  }
+
+  String? _classifyConnectionErrorField(String errorMessage) {
+    final normalized = errorMessage.toLowerCase();
+    if (normalized.contains('auth') ||
+        normalized.contains('credential') ||
+        normalized.contains('password') ||
+        normalized.contains('forbidden') ||
+        normalized.contains('unauthorized')) {
+      return 'password';
+    }
+    if (normalized.contains('port') || normalized.contains('refused')) {
+      return 'port';
+    }
+    if (normalized.contains('user') || normalized.contains('login')) {
+      return 'username';
+    }
+    return 'host';
+  }
+
   bool _showEscalatedGuidance() {
     final field = _submitValidationField;
     if (field == null) return false;
     return (_blockedSubmitAttempts[field] ?? 0) >= 3;
+  }
+
+  bool _showEscalatedConnectionGuidance() {
+    return _connectionFailureCount >= _escalationThreshold;
+  }
+
+  Future<void> _handleCancel() async {
+    if (!mounted) return;
+    if (!widget.returnOutcome) {
+      Navigator.pop(context);
+      return;
+    }
+
+    if (_connectionFailureCount > 0) {
+      Navigator.of(context).pop(
+        OnboardingRemoteConnectResult(
+          outcome: OnboardingRemoteOutcome.failed,
+          message: _testResult ?? 'Remote setup was closed after connection errors.',
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context).pop(
+      const OnboardingRemoteConnectResult(
+        outcome: OnboardingRemoteOutcome.cancelled,
+        message: 'Remote setup cancelled before finishing.',
+      ),
+    );
   }
 
   void _applySafeDefault() {
@@ -390,7 +503,7 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                     IconButton(
                       icon: const Icon(LucideIcons.x, size: 20),
                       color: AppColors.textSub,
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: _handleCancel,
                     ),
                   ],
                 ),
@@ -407,6 +520,9 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                   validator: widget.type == RemoteStorageType.webdav
                       ? InputValidation.validateWebDavUrl
                       : InputValidation.validateHostname,
+                  errorText: _connectionErrorField == 'host'
+                      ? _testResult
+                      : null,
                 ),
                 const SizedBox(height: 12),
 
@@ -418,6 +534,9 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                   icon: LucideIcons.hash,
                   keyboardType: TextInputType.number,
                   validator: InputValidation.validatePort,
+                  errorText: _connectionErrorField == 'port'
+                      ? _testResult
+                      : null,
                 ),
                 const SizedBox(height: 12),
 
@@ -428,6 +547,9 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                   hint: 'username',
                   icon: LucideIcons.user,
                   validator: InputValidation.validateUsername,
+                  errorText: _connectionErrorField == 'username'
+                      ? _testResult
+                      : null,
                 ),
                 const SizedBox(height: 12),
 
@@ -447,6 +569,9 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                     color: AppColors.textSub,
                     onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                   ),
+                  errorText: _connectionErrorField == 'password'
+                      ? _testResult
+                      : null,
                 ),
                 const SizedBox(height: 12),
 
@@ -458,6 +583,71 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
                   icon: LucideIcons.tag,
                   validator: InputValidation.validateDisplayName,
                 ),
+
+                if (_connectionFailureCount > 0) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Troubleshooting before retry',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text('1. Confirm host, port, and protocol match your server configuration.', style: TextStyle(fontSize: 12)),
+                        const Text('2. Verify username/password are valid for this protocol.', style: TextStyle(fontSize: 12)),
+                        const Text('3. Retry "Test Connection" before saving the profile.', style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                ],
+
+                if (_showEscalatedConnectionGuidance()) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.withOpacity(0.25)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Repeated failures checklist',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: Colors.red,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text('- Try connecting from the same network using another client to confirm server availability.', style: TextStyle(fontSize: 12)),
+                        const Text('- Confirm firewall rules allow inbound traffic on this protocol port.', style: TextStyle(fontSize: 12)),
+                        const Text('- Prefer SFTP/WebDAV over FTP for secure credentials and transport.', style: TextStyle(fontSize: 12)),
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: _openSecurityHelp,
+                            icon: const Icon(Icons.open_in_new, size: 16),
+                            label: const Text('Open security and network docs'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
 
                 // Lightweight typing-time warning.
                 if (_hostTypingWarning != null) ...[
@@ -704,6 +894,7 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
     TextInputType? keyboardType,
     String? Function(String?)? validator,
     Widget? suffix,
+    String? errorText,
   }) {
     return TextFormField(
       controller: controller,
@@ -718,6 +909,7 @@ class _RemoteConnectionDialogState extends State<RemoteConnectionDialog> {
         hintStyle: TextStyle(color: AppColors.textSub.withOpacity(0.5), fontSize: 14),
         prefixIcon: Icon(icon, size: 18, color: AppColors.textSub),
         suffixIcon: suffix,
+        errorText: errorText,
         filled: true,
         fillColor: AppColors.bg,
         border: OutlineInputBorder(
