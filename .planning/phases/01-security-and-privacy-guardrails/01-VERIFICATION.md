@@ -1,85 +1,92 @@
 ---
 phase: 01-security-and-privacy-guardrails
-verified: 2026-02-27T18:08:00Z
+verified: 2026-03-01T10:09:31Z
 status: passed
 score: 5/5 must-haves verified
 ---
 
 # Phase 1: Security and Privacy Guardrails Verification Report
 
-**Phase Goal:** Users can trust that library connectors and settings remain safe by default, with adult content hidden unless explicitly enabled.  
-**Verified:** 2026-02-27T18:08:00Z  
+**Phase Goal:** Users can trust that library connectors and settings remain safe by default, with adult content hidden unless explicitly enabled.
+**Verified:** 2026-03-01T10:09:31Z
 **Status:** passed
+**Re-verification:** No - initial verification
 
 ## Goal Achievement
 
 ### Observable Truths
 
 | # | Truth | Status | Evidence |
-|---|-------|--------|----------|
-| 1 | User input in source/settings flows cannot be used to execute shell commands. | ✓ VERIFIED | `01-01-SUMMARY.md` records SEC-01 completion and command-injection protections in `lib/utils/input_validation.dart` with security tests. |
-| 2 | User cannot access files outside allowed roots via traversal patterns. | ✓ VERIFIED | `01-02-SUMMARY.md` documents `PathGuard` + containment enforcement in persistence/backup services with traversal tests. |
-| 3 | Remote connector targets block unsafe/internal SSRF-style destinations. | ✓ VERIFIED | `01-01-SUMMARY.md` records SEC-03 completion and SSRF guardrails in connector validation flow. |
-| 4 | User credentials/tokens are stored securely and never exposed in repository artifacts. | ✓ VERIFIED | `01-03-SUMMARY.md` + `test/security/secret_storage_test.dart` verify secret redaction and secure-storage migration boundary. |
-| 5 | Adult library is hidden by default and appears only after explicit user opt-in. | ✓ VERIFIED | `01-04-SUMMARY.md` + `test/security/adult_privacy_test.dart` validate default-off, route/nav gating, opt-in, and opt-out regressions. |
+| --- | --- | --- | --- |
+| 1 | User input in source/settings flows cannot be used to execute shell commands. | ✓ VERIFIED | `lib/utils/input_validation.dart` hard-blocks injection metacharacters and payload patterns in strict validators; submit flow uses strict validation in `lib/widgets/settings/remote_connection_dialog.dart`; `flutter test test/security/command_injection_test.dart` passed. |
+| 2 | User cannot access files outside allowed roots via traversal patterns. | ✓ VERIFIED | `lib/utils/path_guard.dart` canonicalizes/decodes candidate paths and enforces containment; `lib/services/persistence_service.dart` and `lib/services/data_backup_service.dart` call `PathGuard.requireContainedPath` before IO; traversal suites passed (`test/security/path_guard_test.dart`, `test/security/directory_traversal_test.dart`). |
+| 3 | Remote connector targets block unsafe/internal SSRF-style destinations. | ✓ VERIFIED | `lib/utils/input_validation.dart` blocks internal tokens, private/loopback/link-local IPs, metadata endpoints, and encoded notation; remote dialog strict host/URL checks are wired; `flutter test test/security/ssrf_test.dart` passed. |
+| 4 | User credentials/tokens are stored securely and never exposed in repository artifacts. | ✓ VERIFIED | `lib/services/secure_key_service.dart` uses `FlutterSecureStorage`; `lib/providers/settings_provider.dart` migrates legacy plaintext and persists secrets via `SecureKeyService`; `lib/models/stash_endpoint.dart` omits `apiKey` in `toJson`; `test/security/secret_storage_test.dart` passed. |
+| 5 | Adult library is hidden by default and appears only after explicit user opt-in. | ✓ VERIFIED | `lib/providers/settings_provider.dart` defaults/coerces `enableAdultContent=false`; explicit setup opt-in wired in `lib/screens/setup_screen.dart`; route gating in `lib/router.dart`; tab visibility gating in `lib/widgets/navigation_dock.dart`; `test/security/adult_privacy_test.dart` passed. |
 
 **Score:** 5/5 truths verified
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
-|----------|----------|--------|---------|
-| `lib/utils/security_policies.dart` | Central security policy validation coverage | ✓ EXISTS + SUBSTANTIVE | Created during 01-01 and used by security validation flows. |
-| `lib/utils/path_guard.dart` | Canonical path containment utility | ✓ EXISTS + SUBSTANTIVE | Created during 01-02 and wired into persistence/backup entry points. |
-| `lib/services/secure_key_service.dart` | Platform secure secret boundary | ✓ EXISTS + SUBSTANTIVE | Hardened during 01-03; legacy plaintext migration and secure retrieval implemented. |
-| `lib/providers/settings_provider.dart` | Privacy-first defaults and opt-in persistence | ✓ EXISTS + SUBSTANTIVE | Includes strict adult opt-in coercion, secure secret loading, and explicit toggle persistence. |
-| `lib/router.dart` | Adult route redirect protection | ✓ EXISTS + SUBSTANTIVE | Redirect helper enforces `/adult` redirect when `enableAdultContent` is false. |
-| `test/security/adult_privacy_test.dart` | SEC-05 regression coverage | ✓ EXISTS + SUBSTANTIVE | Covers default-off, explicit toggle transitions, route gating, and nav visibility. |
-
-**Artifacts:** 6/6 verified
+| --- | --- | --- | --- |
+| `lib/utils/security_validation_result.dart` | Typed security validation outcomes | ✓ VERIFIED | Defines `ok/warning/blocking` model used by validators and dialog UX. |
+| `lib/utils/security_policies.dart` | Centralized SSRF/security policy constants | ✓ VERIFIED | Host/port block lists consumed by input validation. |
+| `lib/utils/input_validation.dart` | Canonical strict validation for command-injection/SSRF/path safety | ✓ VERIFIED | Substantive strict methods; wired into settings connector dialog and tests. |
+| `lib/widgets/settings/remote_connection_dialog.dart` | Submit-time strict blocking + warning UX + escalation | ✓ VERIFIED | Calls strict validators; tracks blocked attempts and shows help guidance. |
+| `lib/utils/path_guard.dart` | Canonical containment enforcement utility | ✓ VERIFIED | Decodes/normalizes and rejects root escapes; throws contextual exceptions. |
+| `lib/services/persistence_service.dart` | Root-constrained app file IO | ✓ VERIFIED | All file access routes through guarded `_getFile`. |
+| `lib/services/data_backup_service.dart` | Guarded import/export file path resolution | ✓ VERIFIED | Uses containment guard before read/write backup file operations. |
+| `lib/services/secure_key_service.dart` | Secure storage boundary for TMDB/Stash keys | ✓ VERIFIED | Read/write/delete/migration APIs implemented on `flutter_secure_storage`. |
+| `lib/providers/settings_provider.dart` | Secure-secret integration + adult privacy defaults | ✓ VERIFIED | Migrates legacy plaintext keys, persists non-secret settings only, coerces adult opt-in to bool false-by-default. |
+| `lib/models/stash_endpoint.dart` | Endpoint serialization without secret leakage | ✓ VERIFIED | `toJson()` excludes `apiKey`; runtime key stays in secure storage. |
+| `lib/router.dart` | Adult route redirect protection | ✓ VERIFIED | `appRedirectPath` blocks `/adult` when opt-in disabled. |
+| `lib/widgets/navigation_dock.dart` | Adult navigation visibility gating | ✓ VERIFIED | Adult tab hidden unless `settings.enableAdultContent` is true. |
+| `test/security/*.dart` phase suites | Security/privacy regression coverage | ✓ VERIFIED | All 6 phase security test files passed in this verification run. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
-|------|----|-----|--------|---------|
-| `SettingsProvider.enableAdultContent` | `router` redirect | `appRedirectPath` | ✓ WIRED | `lib/router.dart` redirects `/adult` to `/discover` when opt-in is disabled. |
-| `SettingsProvider.enableAdultContent` | `NavigationDock` Adult tab | conditional render | ✓ WIRED | `lib/widgets/navigation_dock.dart` only renders Adult tab when opt-in is true. |
-| `setup_screen` explicit opt-in | persisted settings state | `toggleAdultContent` on completion | ✓ WIRED | Setup flow now saves explicit opt-in choice instead of implicit behavior. |
+| --- | --- | --- | --- | --- |
+| `lib/widgets/settings/remote_connection_dialog.dart` | `lib/utils/input_validation.dart` | Strict and typing-time validation pipeline | ✓ WIRED | Dialog calls `strictValidateHostname/WebDavUrl/Port/Username` and typing warnings. |
+| `lib/utils/input_validation.dart` | `lib/utils/security_policies.dart` | Shared host/IP/port block policy checks | ✓ WIRED | Validator reads `blockedExactHosts`, `blockedMetadataHosts`, `blockedHostTokens`, `blockedPorts`. |
+| `test/helpers/security_test_helpers.dart` | `test/security/command_injection_test.dart` | Block/allow assertion contract | ✓ WIRED | Tests use `expectSecurityBlocked/Allowed` across payload sets. |
+| `lib/services/data_backup_service.dart` | `lib/utils/path_guard.dart` | Canonicalize/validate backup file paths before IO | ✓ WIRED | `resolveBackupPathWithinRoot` calls `PathGuard.requireContainedPath`. |
+| `lib/services/persistence_service.dart` | `lib/utils/path_guard.dart` | Constrain app data file operations to app support root | ✓ WIRED | `_getFile` guards every filename before creating `File`. |
+| `lib/providers/settings_provider.dart` | `lib/services/secure_key_service.dart` | Secret load/save/migration | ✓ WIRED | Provider uses secure read/write/delete + legacy migration helpers for TMDB/Stash keys. |
+| `lib/widgets/settings/settings_metadata_section.dart` | `lib/providers/settings_provider.dart` | TMDB key update flow | ✓ WIRED | UI writes key via `settings.setTmdbApiKey(...)` on submit/test actions. |
+| `lib/widgets/settings/settings_advanced_section.dart` | `lib/providers/settings_provider.dart` | Stash endpoint add/update key flow | ✓ WIRED | UI calls `addStashEndpoint`/`updateStashEndpoint`; provider persists secrets securely. |
+| `lib/providers/settings_provider.dart` | `lib/router.dart` | `enableAdultContent` drives `/adult` redirect | ✓ WIRED | Router redirect function consumes `settings.enableAdultContent`. |
+| `lib/providers/settings_provider.dart` | `lib/widgets/navigation_dock.dart` | Conditional Adult tab rendering | ✓ WIRED | Dock visibility helpers and widget state use `settings.enableAdultContent`. |
 
-**Wiring:** 3/3 connections verified
+### Requirements Coverage
 
-## Requirements Coverage
+| Requirement | Source Plan | Description | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| SEC-01 | `01-01-PLAN.md` | User-provided inputs cannot trigger command execution or shell injection paths. | ✓ SATISFIED | Strict username/host validators block shell payloads in `lib/utils/input_validation.dart`; enforced in connector dialog; `test/security/command_injection_test.dart` passed. |
+| SEC-02 | `01-02-PLAN.md` | Local file operations reject directory traversal attempts. | ✓ SATISFIED | `PathGuard` containment + pre-IO enforcement in persistence/backup services; `test/security/path_guard_test.dart` and `test/security/directory_traversal_test.dart` passed. |
+| SEC-03 | `01-01-PLAN.md` | Remote URL and connector handling prevents SSRF-style unsafe target access. | ✓ SATISFIED | Host/IP/metadata and encoded bypass blocking in strict host/WebDAV validation; `test/security/ssrf_test.dart` passed. |
+| SEC-04 | `01-03-PLAN.md` | Secrets/credentials are securely stored and never committed in plaintext artifacts. | ✓ SATISFIED | `SecureKeyService` + provider migration/indirection + `StashEndpoint.toJson()` redaction; `test/security/secret_storage_test.dart` passed. |
+| SEC-05 | `01-04-PLAN.md` | Adult library hidden by default and only available through explicit opt-in. | ✓ SATISFIED | Default false + coercion in provider, explicit setup/settings toggles, route and nav gating, regression tests in `test/security/adult_privacy_test.dart`. |
 
-| Requirement | Status | Blocking Issue |
-|-------------|--------|----------------|
-| SEC-01 | ✓ SATISFIED | - |
-| SEC-02 | ✓ SATISFIED | - |
-| SEC-03 | ✓ SATISFIED | - |
-| SEC-04 | ✓ SATISFIED | - |
-| SEC-05 | ✓ SATISFIED | - |
+Orphaned requirements for Phase 1 in `REQUIREMENTS.md`: none.
 
-**Coverage:** 5/5 requirements satisfied
+### Anti-Patterns Found
 
-## Anti-Patterns Found
+No blocker anti-patterns found in phase artifacts.
 
-None blocking phase-goal completion. Informational lint debt remains in older UI files (deprecated APIs and const suggestions), but does not violate phase security/privacy outcomes.
+Notable non-blocking observation:
+- `test/security/adult_privacy_test.dart` logs plugin-channel errors for `flutter_secure_storage`/`path_provider` in unit context, but assertions pass and behavior under test remains verified.
 
-## Human Verification Required
+### Human Verification Required
 
-None - all phase must-haves are covered by implemented controls and automated security regressions.
+None. All must-haves and requirement-linked behaviors are programmatically verified by code inspection and passing phase security tests.
 
-## Gaps Summary
+### Gaps Summary
 
-**No gaps found.** Phase goal achieved. Ready to proceed.
-
-## Verification Metadata
-
-**Verification approach:** Goal-backward from ROADMAP Phase 1 success criteria  
-**Must-haves source:** Phase 1 roadmap criteria + plan-level `must_haves` in `01-04-PLAN.md`  
-**Automated checks:** `flutter test test/security/adult_privacy_test.dart` passed; previous phase security suites recorded in summaries  
-**Human checks required:** 0  
-**Total verification time:** 5 min
+No gaps found. Phase goal achieved.
 
 ---
-*Verified: 2026-02-27T18:08:00Z*  
-*Verifier: Codex (workflow execution)*
+
+_Verified: 2026-03-01T10:09:31Z_
+_Verifier: Claude (gsd-verifier)_
