@@ -48,6 +48,24 @@ void main() {
       await settings.toggleAdultContent(false);
       expect(settings.enableAdultContent, isFalse);
     });
+
+    test('import without adult key falls back to privacy-safe default off',
+        () async {
+      final settings = _TestSettingsProvider();
+      await settings.toggleAdultContent(true);
+
+      await settings.importSettings({'isDarkMode': false});
+
+      expect(settings.enableAdultContent, isFalse);
+    });
+
+    test('import ignores non-boolean adult values', () async {
+      final settings = _TestSettingsProvider();
+
+      await settings.importSettings({'enableAdultContent': 'true'});
+
+      expect(settings.enableAdultContent, isFalse);
+    });
   });
 
   group('Router adult gating', () {
@@ -95,9 +113,32 @@ void main() {
 
       expect(redirect, '/discover');
     });
+
+    test('does not overmatch non-adult-prefixed routes', () async {
+      final settings = _TestSettingsProvider();
+      final profiles = await _configuredProfiles();
+      await settings.completeSetup();
+
+      final redirect = appRedirectPath(
+        settings: settings,
+        profiles: profiles,
+        path: '/adult-library',
+      );
+
+      expect(redirect, isNull);
+    });
   });
 
   group('Navigation adult tab visibility', () {
+    test('resolved index maps hidden adult branch to first visible tab', () {
+      final index = resolvedNavigationDockIndex(
+        adultEnabled: false,
+        currentIndex: 4,
+      );
+
+      expect(index, 0);
+    });
+
     testWidgets('adult tab is shown only when opted in', (tester) async {
       final settings = _TestSettingsProvider();
 
