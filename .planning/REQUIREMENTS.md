@@ -9,7 +9,7 @@ Requirements for initial release scope. Each requirement must map to exactly one
 
 ### Onboarding
 
-- [ ] **ONB-01**: User can complete first-run setup and select enabled library types (Movies, TV, Anime, Adult opt-in).
+- [x] **ONB-01**: User can complete first-run setup and select enabled library types (Movies, TV, Anime, Adult opt-in).
 - [ ] **ONB-02**: User can add at least one local folder source from onboarding.
 - [ ] **ONB-03**: User can connect OneDrive using Device Code Flow on supported platforms.
 - [ ] **ONB-04**: User can add a remote source profile for SFTP, FTP, or WebDAV from onboarding/settings.
@@ -106,7 +106,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ONB-01 | Phase 3 | Pending |
+| ONB-01 | Phase 3 | Complete |
 | ONB-02 | Phase 3 | Pending |
 | ONB-03 | Phase 3 | Pending |
 | ONB-04 | Phase 3 | Pending |

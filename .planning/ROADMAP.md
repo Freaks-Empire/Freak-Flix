@@ -64,7 +64,7 @@ Plans:
   4. User can create and save SFTP, FTP, or WebDAV source profiles from onboarding or settings.
 **Plans**: 3 plans
 Plans:
-- [ ] 03-01-PLAN.md - Create resumable onboarding state machine with checklist progress, no-default type cards, and required final review gate.
+- [x] 03-01-PLAN.md - Create resumable onboarding state machine with checklist progress, no-default type cards, and required final review gate.
 - [ ] 03-02-PLAN.md - Implement local/OneDrive/remote onboarding source cards with timeout/incomplete handling and guided troubleshooting.
 - [ ] 03-03-PLAN.md - Wire linear wizard into setup routing/startup and lock in onboarding flow regressions.
 
@@ -133,7 +133,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 |-------|----------------|--------|-----------|
 | 1. Security and Privacy Guardrails | 4/4 | Complete | 2026-02-27 |
 | 2. Cross-Platform Baseline and Releases | 3/3 | Complete | 2026-02-28 |
-| 3. Onboarding and Source Setup | 0/TBD | Not started | - |
+| 3. Onboarding and Source Setup | 1/3 | In Progress | - |
 | 4. Library Ingestion and Indexing | 0/TBD | Not started | - |
 | 5. Metadata and Offline Catalog | 0/TBD | Not started | - |
 | 6. Discovery and Adult-Aware Browsing | 0/TBD | Not started | - |
