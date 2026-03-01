@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-02-28T01:52:48Z"
+last_updated: "2026-03-01T10:03:49Z"
 progress:
   total_phases: 8
   completed_phases: 2
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 Phase: 3 of 8 (Onboarding and Source Setup)
 Plan: 0 of TBD in current phase
 Status: Ready for phase context and planning
-Last activity: 2026-02-28 - Completed Phase 2 execution and verification.
+Last activity: 2026-03-01 - Re-executed Phase 01 Plan 04 SEC-05 privacy hardening and regression suite.
 
 Progress: [##--------] 25%
 
@@ -55,6 +55,7 @@ Progress: [##--------] 25%
 | Phase 02 P01 | 67 min | 3 tasks | 7 files |
 | Phase 02 P02 | 42 min | 3 tasks | 8 files |
 | Phase 02 P03 | 54 min | 3 tasks | 8 files |
+| Phase 01 P04 | 3 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,9 @@ Recent decisions affecting current work:
 - [Phase 2] Keep Android/Web runtime smoke gaps explicitly deferred with tracked IDs instead of implicit pass assumptions.
 - [Phase 2] Use deterministic release scripts that generate ledger evidence from actual build outputs.
 - [Phase 2] Stabilize Android release with retry-safe clean strategy and Gradle/Kotlin tuning.
+- [Phase 01]: Treat imports without enableAdultContent as false to preserve privacy-first defaults.
+- [Phase 01]: Match only canonical /adult route segments to prevent overmatching unrelated paths.
+- [Phase 01]: Resolve hidden adult-tab selections to visible navigation branches after opt-out.
 
 ### Pending Todos
 
@@ -81,6 +85,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-28T01:52:48Z
-Stopped at: Completed Phase 2 execution and verification
-Resume file: .planning/ROADMAP.md
+Last session: 2026-03-01T10:03:49Z
+Stopped at: Completed 01-04-PLAN.md
+Resume file: None
