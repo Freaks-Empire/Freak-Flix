@@ -62,7 +62,11 @@ Plans:
   2. User can add at least one local folder source during onboarding.
   3. User can connect OneDrive via Device Code Flow on supported platforms.
   4. User can create and save SFTP, FTP, or WebDAV source profiles from onboarding or settings.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 03-01-PLAN.md - Create resumable onboarding state machine with checklist progress, no-default type cards, and required final review gate.
+- [ ] 03-02-PLAN.md - Implement local/OneDrive/remote onboarding source cards with timeout/incomplete handling and guided troubleshooting.
+- [ ] 03-03-PLAN.md - Wire linear wizard into setup routing/startup and lock in onboarding flow regressions.
 
 ### Phase 4: Library Ingestion and Indexing
 **Goal**: Users can ingest and maintain large mixed-source libraries with responsive incremental scans.
