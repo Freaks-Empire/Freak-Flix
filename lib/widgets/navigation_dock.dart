@@ -74,6 +74,18 @@ List<int> visibleNavigationBranchIndices({required bool adultEnabled}) {
       .toList(growable: false);
 }
 
+int resolvedNavigationDockIndex({
+  required bool adultEnabled,
+  required int currentIndex,
+}) {
+  final visibleIndices =
+      visibleNavigationBranchIndices(adultEnabled: adultEnabled);
+  if (visibleIndices.contains(currentIndex)) {
+    return currentIndex;
+  }
+  return visibleIndices.first;
+}
+
 class NavigationDock extends StatelessWidget {
   final int index;
   final ValueChanged<int> onTap;
@@ -85,6 +97,10 @@ class NavigationDock extends StatelessWidget {
     final theme = Theme.of(context);
     final settings = context.watch<SettingsProvider>();
     final isDark = theme.brightness == Brightness.dark;
+    final selectedIndex = resolvedNavigationDockIndex(
+      adultEnabled: settings.enableAdultContent,
+      currentIndex: index,
+    );
     final destinations = visibleNavigationDockDestinations(
       adultEnabled: settings.enableAdultContent,
     );
@@ -122,7 +138,7 @@ class NavigationDock extends StatelessWidget {
                     _DockItem(
                       icon: destinations[i].icon,
                       label: destinations[i].label,
-                      isSelected: index == destinations[i].branchIndex,
+                      isSelected: selectedIndex == destinations[i].branchIndex,
                       onTap: () => onTap(destinations[i].branchIndex),
                       theme: theme,
                     ),

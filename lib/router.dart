@@ -53,11 +53,15 @@ String? redirectPathForState({
   if (path == '/') return '/discover';
 
   // 4. Adult Content Protection
-  if (!isAdultContentEnabled && path.startsWith('/adult')) {
+  if (!isAdultContentEnabled && _isAdultRoutePath(path)) {
     return '/discover';
   }
 
   return null;
+}
+
+bool _isAdultRoutePath(String path) {
+  return path == '/adult' || path.startsWith('/adult/');
 }
 
 String? appRedirectPath({
