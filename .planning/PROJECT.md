@@ -15,6 +15,7 @@ Users can connect their own local or cloud storage and immediately get a polishe
 - ✓ Cross-platform Flutter app foundation for Windows, Android, and Web exists in repository — existing
 - ✓ Core media library + playback architecture with Provider/GoRouter/Media Kit is already established — existing
 - ✓ Multi-backend direction (Local, OneDrive, SFTP, FTP, WebDAV) and security-testing culture are already established — existing
+- ✓ Security and privacy guardrails baseline is hardened (typed validation, traversal/SSRF defenses, secure secret storage, adult default-off gating) — Phase 1
 
 ### Active
 
@@ -56,6 +57,10 @@ Users can connect their own local or cloud storage and immediately get a polishe
 | Use Device Code Flow as OneDrive auth baseline | Works consistently across Windows/Android/Web and avoids brittle popup auth flows | — Pending |
 | Keep Adult library optional and hidden by default | Supports opt-in use case while preserving privacy-first default UX and safer baseline behavior | — Pending |
 | Prioritize reliability/security/performance hardening before major delight features | vNext quality and trust determine adoption more than adding surface-area features early | — Pending |
+| Use typed security validation outcomes (ok/warning/blocking) in connector UX | Enforces consistent risk handling with calm, actionable guidance and clear recovery paths | ✓ Good |
+| Enforce canonical path containment before local file IO | Prevents traversal bypasses across encoded and mixed-path payloads | ✓ Good |
+| Keep secrets out of settings JSON via secure storage boundary | Reduces credential leakage risk in persisted/exported artifacts | ✓ Good |
+| Treat adult visibility as explicit opt-in with fail-closed defaults and strict route/nav gating | Preserves privacy-first behavior across setup, imports, and runtime transitions | ✓ Good |
 
 ---
-*Last updated: 2026-02-27 after initialization*
+*Last updated: 2026-03-01 after Phase 1 completion*
