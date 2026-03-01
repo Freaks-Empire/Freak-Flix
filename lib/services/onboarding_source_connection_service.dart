@@ -77,14 +77,30 @@ class OnboardingSourceConnectionService {
   }
 
   Future<OnboardingSourceStatusEvent> connectLocal({
-    required LibraryProvider library,
+    LibraryProvider? library,
     MetadataService? metadata,
     LibraryType? forcedType,
+    Future<void> Function()? runPickAndScan,
+    String? Function()? readError,
+    Set<String> Function()? folderSnapshot,
   }) async {
-    final before = _folderFingerprints(library);
+    if (library == null &&
+        (runPickAndScan == null || readError == null || folderSnapshot == null)) {
+      throw ArgumentError(
+        'connectLocal requires either a library instance or all local callback overrides.',
+      );
+    }
+
+    final pickAndScan = runPickAndScan ??
+        () async =>
+            library!.pickAndScan(metadata: metadata, forcedType: forcedType);
+    final getError = readError ?? () => library?.error;
+    final fingerprints = folderSnapshot ?? () => _folderFingerprints(library!);
+
+    final before = fingerprints();
 
     try {
-      await library.pickAndScan(metadata: metadata, forcedType: forcedType);
+      await pickAndScan();
     } catch (error) {
       markFailure(OnboardingSourceType.local);
       return _event(
@@ -94,16 +110,17 @@ class OnboardingSourceConnectionService {
       );
     }
 
-    if (library.error != null && library.error!.isNotEmpty) {
+    final localError = getError();
+    if (localError != null && localError.isNotEmpty) {
       markFailure(OnboardingSourceType.local);
       return _event(
         source: OnboardingSourceType.local,
         status: OnboardingSourceStatus.failed,
-        message: library.error!,
+        message: localError,
       );
     }
 
-    final after = _folderFingerprints(library);
+    final after = fingerprints();
     final connected = after.length > before.length;
 
     if (connected) {
