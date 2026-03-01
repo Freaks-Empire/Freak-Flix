@@ -67,7 +67,7 @@ Each task was committed atomically:
 2. **Task 2: Enforce route and navigation gating for adult content surfaces** - `7c96585` (fix)
 3. **Task 3: Add SEC-05 regression tests for default privacy behavior** - `6fff910` (test)
 
-**Plan metadata:** `PENDING` (docs)
+**Plan metadata:** `d1c7015` (docs)
 
 ## Files Created/Modified
 - `lib/providers/settings_provider.dart` - Added fail-closed adult import/load coercion and deterministic performer-match reset on adult opt-out.
