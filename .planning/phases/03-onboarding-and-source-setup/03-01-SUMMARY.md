@@ -81,7 +81,20 @@ Each task was committed atomically:
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+### Auto-fixed Issues
+
+**1. [Rule 3 - Blocking] Planning CLI state-advance parsing failed on legacy STATE format**
+- **Found during:** Post-task state update
+- **Issue:** `state advance-plan`, `state update-progress`, and `state record-session` could not parse current STATE sections.
+- **Fix:** Applied equivalent STATE/ROADMAP position updates manually and completed metadata commit with direct git commands.
+- **Files modified:** `.planning/STATE.md`, `.planning/ROADMAP.md`
+- **Verification:** Confirmed updated position/progress entries and committed metadata files successfully.
+- **Committed in:** `50b3592` (plan metadata commit)
+
+---
+
+**Total deviations:** 1 auto-fixed (1 blocking)
+**Impact on plan:** No scope creep; deviation only affected planning-metadata automation path.
 
 ## Issues Encountered
 None.
