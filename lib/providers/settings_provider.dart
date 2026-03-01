@@ -110,6 +110,9 @@ class SettingsProvider extends ChangeNotifier {
 
     enableAdultContent = _coerceAdultOptIn(data['enableAdultContent']);
     requirePerformerMatch = data['requirePerformerMatch'] as bool? ?? false;
+    if (!enableAdultContent) {
+      requirePerformerMatch = false;
+    }
 
     final legacyTmdbKey = (data['tmdbApiKey'] as String?)?.trim() ?? '';
     if (legacyTmdbKey.isNotEmpty) {
@@ -264,6 +267,9 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> toggleAdultContent(bool value) async {
     enableAdultContent = value;
+    if (!value) {
+      requirePerformerMatch = false;
+    }
     await save();
     notifyListeners();
   }
@@ -409,11 +415,14 @@ class SettingsProvider extends ChangeNotifier {
         tmdbStatus = TmdbKeyStatus.values[idx];
       }
     }
-    if (data.containsKey('enableAdultContent')) {
-      enableAdultContent = _coerceAdultOptIn(data['enableAdultContent']);
-    }
+    enableAdultContent = data.containsKey('enableAdultContent')
+        ? _coerceAdultOptIn(data['enableAdultContent'])
+        : false;
     if (data.containsKey('requirePerformerMatch')) {
       requirePerformerMatch = data['requirePerformerMatch'] ?? false;
+    }
+    if (!enableAdultContent) {
+      requirePerformerMatch = false;
     }
     if (data.containsKey('stashEndpoints')) {
       final list = data['stashEndpoints'] as List;

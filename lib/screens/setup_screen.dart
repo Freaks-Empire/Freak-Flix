@@ -195,7 +195,7 @@ class _SetupScreenState extends State<SetupScreen> {
             contentPadding: const EdgeInsets.symmetric(horizontal: 12),
             title: const Text('Show Adult Library (Explicit Opt-In)'),
             subtitle: const Text(
-              'Off by default. Enable only if you want adult routes and tabs visible.',
+              'Off by default. Turn on only if you explicitly want adult routes and tabs. You can change this later in Settings.',
             ),
             value: _enableAdultContentOptIn,
             onChanged: (value) {

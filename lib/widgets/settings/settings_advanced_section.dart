@@ -74,7 +74,7 @@ class _SettingsAdvancedSectionState extends State<SettingsAdvancedSection> {
               icon: LucideIcons.lock,
               title: 'Show Adult Library (Opt-In)',
               subtitle:
-                  'Off by default. Enable only when you want adult routes and tabs visible.',
+                  'Off by default. Enable only when you explicitly want adult routes and tabs visible.',
               trailing: Switch.adaptive(
                 value: settings.enableAdultContent,
                 activeColor: AppColors.accent,
