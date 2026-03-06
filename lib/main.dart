@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'app.dart';
 import 'models/discover_filter.dart';
 import 'providers/library_provider.dart';
+import 'providers/onboarding_provider.dart';
 import 'providers/playback_provider.dart';
 import 'providers/profile_provider.dart';
 import 'providers/settings_provider.dart';
@@ -82,6 +83,9 @@ void main() async {
     final libraryProvider = LibraryProvider(settingsProvider);
     await libraryProvider.loadLibrary();
 
+    final onboardingProvider = OnboardingProvider();
+    await onboardingProvider.resumeDraft();
+
     // One-time Migration: Import legacy history to Default profile
     if (!settingsProvider.hasMigratedProfiles) {
       AppLogger.d('Performing one-time profile migration...', tag: 'Main');
@@ -134,6 +138,7 @@ void main() async {
           ChangeNotifierProvider(create: (_) => settingsProvider),
           ChangeNotifierProvider(create: (_) => profileProvider),
           ChangeNotifierProvider(create: (_) => libraryProvider),
+          ChangeNotifierProvider(create: (_) => onboardingProvider),
           ChangeNotifierProvider(create: (_) => playbackProvider),
           ChangeNotifierProvider(create: (_) => DiscoverFilterNotifier()),
           Provider<TmdbService>.value(value: tmdbService),
