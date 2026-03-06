@@ -78,7 +78,11 @@ Plans:
   3. Scanner correctly recognizes common movie and TV/anime naming patterns.
   4. Indexed items preserve unified local/remote source references for later access.
   5. Re-scan updates changed content incrementally while remaining responsive on large libraries.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 04-01-PLAN.md - Build unified scan engine with progress tracking and job queue.
+- [ ] 04-02-PLAN.md - Implement library management and filename parsing for movie/TV/anime.
+- [ ] 04-03-PLAN.md - Implement incremental scanning with delta detection and index storage.
 
 ### Phase 5: Metadata and Offline Catalog
 **Goal**: Users get rich, source-appropriate metadata and artwork that remains available offline after initial fetch.
@@ -134,7 +138,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 1. Security and Privacy Guardrails | 4/4 | Complete | 2026-02-27 |
 | 2. Cross-Platform Baseline and Releases | 3/3 | Complete | 2026-02-28 |
 | 3. Onboarding and Source Setup | 3/3 | Complete | 2026-03-06 |
-| 4. Library Ingestion and Indexing | 0/TBD | Not started | - |
+| 4. Library Ingestion and Indexing | 0/3 | Not started | - |
 | 5. Metadata and Offline Catalog | 0/TBD | Not started | - |
 | 6. Discovery and Adult-Aware Browsing | 0/TBD | Not started | - |
 | 7. Playback and Progress Continuity | 0/TBD | Not started | - |
