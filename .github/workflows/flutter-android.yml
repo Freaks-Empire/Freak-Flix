@@ -35,6 +35,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Run tests
+        run: flutter test
+
       - name: Create .env file
         run: |
           echo "GRAPH_CLIENT_ID=${{ secrets.GRAPH_CLIENT_ID }}" > .env

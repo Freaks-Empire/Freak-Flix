@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/profile_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/trakt_service.dart';
 import '../widgets/settings_widgets.dart';
 
 class UserPanelScreen extends StatelessWidget {
@@ -214,9 +215,10 @@ class UserPanelScreen extends StatelessWidget {
 
   /// Builds the Integration Health Dashboard section
   Widget _buildIntegrationDashboard(BuildContext context, SettingsProvider settings) {
-    final hasStash = settings.stashEndpoints.any((e) => e.apiKey.isNotEmpty);
-    const hasTrakt = false;
-    const hasAniList = false;
+    // Determine connection statuses
+    final hasTrakt = TraktService().hasKey;
+    const hasAniList = true; // AniList uses the public GraphQL API.
+    final hasStash = _hasStashConnection(settings);
 
     return SliverToBoxAdapter(
       child: Padding(
@@ -236,33 +238,33 @@ class UserPanelScreen extends StatelessWidget {
                 ),
               ),
             ),
-            Card(
-              color: AppColors.surface,
-              shape: RoundedRectangleBorder(
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(12),
-                side: const BorderSide(color: AppColors.border),
+                border: Border.all(color: AppColors.border),
               ),
               child: Column(
                 children: [
                   _ServiceStatusTile(
-                    serviceName: 'Trakt',
-                    icon: Icons.tv_outlined,
-                    isConnected: hasTrakt,
-                    onAction: () => context.go('/settings'),
-                  ),
-                  const Divider(height: 1, color: AppColors.border),
-                  _ServiceStatusTile(
                     serviceName: 'AniList',
                     icon: Icons.animation_outlined,
                     isConnected: hasAniList,
-                    onAction: () => context.go('/settings'),
+                    onAction: () => _handleIntegrationAction(context, 'AniList', hasAniList),
+                  ),
+                  const Divider(height: 1, color: AppColors.border),
+                  _ServiceStatusTile(
+                    serviceName: 'Trakt',
+                    icon: Icons.tv_outlined,
+                    isConnected: hasTrakt,
+                    onAction: () => _handleIntegrationAction(context, 'Trakt', hasTrakt),
                   ),
                   const Divider(height: 1, color: AppColors.border),
                   _ServiceStatusTile(
                     serviceName: 'Stash',
-                    icon: Icons.movie_outlined,
+                    icon: Icons.storage_outlined,
                     isConnected: hasStash,
-                    onAction: () => context.go('/settings'),
+                    onAction: () => _handleIntegrationAction(context, 'Stash', hasStash),
                     isLast: true,
                   ),
                 ],
@@ -276,57 +278,35 @@ class UserPanelScreen extends StatelessWidget {
 
   /// Builds the Settings Navigation List
   Widget _buildSettingsList(BuildContext context) {
-    return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      sliver: SliverList(
-        delegate: SliverChildListDelegate(
-          [
-            const Padding(
-              padding: EdgeInsets.only(left: 4, bottom: 12),
-              child: Text(
-                'SETTINGS',
-                style: TextStyle(
-                  color: AppColors.textSub,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.1,
-                ),
-              ),
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        child: SettingsGroup(
+          title: 'Settings',
+          children: [
+            SettingsTile(
+              icon: Icons.settings_outlined,
+              title: 'General Settings',
+              subtitle: 'Theme, Player, Preferences',
+              trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
+              onTap: () => context.go('/settings'),
             ),
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                children: [
-                  SettingsTile(
-                    icon: Icons.settings_outlined,
-                    title: 'General Settings',
-                    subtitle: 'Theme, Player, Preferences',
-                    trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
-                    onTap: () => context.go('/settings'),
-                  ),
-                  const Divider(height: 1, color: AppColors.border),
-                  SettingsTile(
-                    icon: Icons.folder_outlined,
-                    title: 'Source Manager',
-                    subtitle: 'OneDrive, Local Folders',
-                    trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
-                    onTap: () => context.go('/settings'),
-                  ),
-                  const Divider(height: 1, color: AppColors.border),
-                  SettingsTile(
-                    icon: Icons.people_outline,
-                    title: 'Profile Management',
-                    subtitle: 'Switch Profile, Edit Profile',
-                    trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
-                    onTap: () => context.go('/profiles'),
-                    isLast: true,
-                  ),
-                ],
-              ),
+            const Divider(height: 1, color: AppColors.border),
+            SettingsTile(
+              icon: Icons.folder_outlined,
+              title: 'Source Manager',
+              subtitle: 'OneDrive, Local Folders',
+              trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
+              onTap: () => context.go('/settings'),
+            ),
+            const Divider(height: 1, color: AppColors.border),
+            SettingsTile(
+              icon: Icons.people_outline,
+              title: 'Profile Management',
+              subtitle: 'Switch Profile, Edit Profile',
+              trailing: const Icon(Icons.chevron_right, color: AppColors.textSub),
+              onTap: () => context.go('/profiles'),
+              isLast: true,
             ),
           ],
         ),
@@ -411,6 +391,20 @@ class UserPanelScreen extends StatelessWidget {
       ),
     );
   }
+
+  bool _hasStashConnection(SettingsProvider settings) {
+    return settings.stashEndpoints.any((endpoint) => endpoint.apiKey.trim().isNotEmpty);
+  }
+
+  void _handleIntegrationAction(BuildContext context, String serviceName, bool isConnected) {
+    if (isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Syncing $serviceName...')),
+      );
+      return;
+    }
+    context.go('/settings');
+  }
 }
 
 /// Quick Action Card Widget
@@ -484,10 +478,6 @@ class _ServiceStatusTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isConnected ? Colors.green : Colors.grey;
-    final label = isConnected ? 'Sync Now' : 'Connect';
-    final iconData = isConnected ? Icons.check_circle : Icons.cancel;
-
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -517,19 +507,24 @@ class _ServiceStatusTile extends StatelessWidget {
                 ),
               ),
               // Status Indicator
-              TextButton.icon(
-                onPressed: onAction,
-                style: TextButton.styleFrom(
-                  foregroundColor: color,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                  backgroundColor: color.withAlpha((0.12 * 255).round()),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+              Container(
+                child: OutlinedButton.icon(
+                  onPressed: onAction,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: isConnected ? Colors.green : Colors.grey,
+                    side: BorderSide(color: isConnected ? Colors.green : Colors.grey),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    textStyle: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
+                  icon: Icon(
+                    isConnected ? Icons.check_circle : Icons.cancel,
+                    size: 16,
+                  ),
+                  label: Text(isConnected ? 'Sync Now' : 'Connect'),
                 ),
-                icon: Icon(iconData, size: 14),
-                label: Text(label),
               ),
             ],
           ),
