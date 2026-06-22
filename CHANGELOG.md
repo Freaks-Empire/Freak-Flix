@@ -5,21 +5,27 @@ All notable changes to Freak-Flix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0] - 2026-06-22
 
 ### Added
 - Device Code Flow authentication for web OneDrive integration
+- User panel screen with profile management
 - Android APK releases to GitHub releases
 - Windows ZIP package releases
+- CI pipeline improvements: test steps for all platform builds
 
 ### Changed
 - Web authentication now uses Device Code Flow instead of popup OAuth
 - Updated release workflow to include all platforms
+- MSIX packaging config updated for v1.2.0
 
 ### Fixed
 - Fixed AADSTS9002327 CORS error for web OneDrive authentication
 - Fixed AADSTS50011 redirect URI mismatch error
 - Fixed release workflow to upload ZIP files alongside EXE
+
+### Security
+- Android ProGuard rules enabled for release builds
 
 ## [1.1.0] - 2025-02-17
 

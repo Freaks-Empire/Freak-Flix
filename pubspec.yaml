@@ -1,7 +1,7 @@
 name: freak_flix
 description: "Freak-Flix: local-only Netflix-style media library"
 publish_to: "none"
-version: 1.1.0+1
+version: 1.2.0+1
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -69,5 +69,5 @@ msix_config:
   display_name: Freak-Flix [6484d20]
   identity_name: FreaksEmpire.FreakFlix
   publisher: CN=MNDL
-  msix_version: 1.0.397.0
+  msix_version: 1.2.0.0
   store: false
